@@ -5,11 +5,11 @@ const { sendCaptchaLog } = require('../utils/captchaLogger');
 // Générer une question mathématique aléatoire
 function generateMathQuestion() {
     const config = CAPTCHA_CONFIG.MATH_QUESTIONS;
-    
+
     // Sélectionner une opération aléatoire basée sur les poids
     const operations = config.OPERATIONS;
     const weights = config.OPERATION_WEIGHTS;
-    
+
     // Créer un tableau pondéré
     const weightedOperations = [];
     for (const op of operations) {
@@ -18,48 +18,48 @@ function generateMathQuestion() {
             weightedOperations.push(op);
         }
     }
-    
+
     // Sélectionner une opération aléatoire
     const operator = weightedOperations[Math.floor(Math.random() * weightedOperations.length)];
-    
+
     // Générer deux nombres aléatoires
     let num1, num2, answer;
-    
+
     switch (operator) {
         case '+':
             num1 = Math.floor(Math.random() * (config.MAX_NUMBER - config.MIN_NUMBER + 1)) + config.MIN_NUMBER;
             num2 = Math.floor(Math.random() * (config.MAX_NUMBER - config.MIN_NUMBER + 1)) + config.MIN_NUMBER;
             answer = num1 + num2;
             break;
-            
+
         case '-':
             num1 = Math.floor(Math.random() * (config.MAX_NUMBER - config.MIN_NUMBER + 1)) + config.MIN_NUMBER;
             num2 = Math.floor(Math.random() * (num1 - config.MIN_NUMBER + 1)) + config.MIN_NUMBER; // S'assurer que num2 <= num1
             answer = num1 - num2;
             break;
-            
+
         case '*':
             num1 = Math.floor(Math.random() * (Math.min(config.MAX_NUMBER, 10) - config.MIN_NUMBER + 1)) + config.MIN_NUMBER;
             num2 = Math.floor(Math.random() * (Math.min(config.MAX_NUMBER, 10) - config.MIN_NUMBER + 1)) + config.MIN_NUMBER;
             answer = num1 * num2;
             break;
-            
+
         default:
             num1 = Math.floor(Math.random() * (config.MAX_NUMBER - config.MIN_NUMBER + 1)) + config.MIN_NUMBER;
             num2 = Math.floor(Math.random() * (config.MAX_NUMBER - config.MIN_NUMBER + 1)) + config.MIN_NUMBER;
             answer = num1 + num2;
     }
-    
+
     // Convertir les nombres en français
     const num1Str = numberToFrench(num1);
     const num2Str = numberToFrench(num2);
-    
+
     // Formater la question
     const question = CAPTCHA_CONFIG.MESSAGES.CAPTCHA_QUESTION
         .replace('{num1}', num1Str)
         .replace('{operator}', operator)
         .replace('{num2}', num2Str);
-    
+
     return {
         question,
         answer: answer.toString(),
@@ -83,7 +83,7 @@ function numberToFrench(num) {
 // Créer un canal de captcha si nécessaire
 async function getOrCreateCaptchaChannel(guild) {
     const config = await getCaptchaConfig(guild.id);
-    
+
     // Si un canal est configuré, l'utiliser
     if (config && config.channel_id) {
         try {
@@ -93,7 +93,7 @@ async function getOrCreateCaptchaChannel(guild) {
             console.error('❌ Impossible de récupérer le canal captcha configuré:', error);
         }
     }
-    
+
     // Sinon, vérifier si CAPTCHA_CONFIG a un ID
     if (CAPTCHA_CONFIG.CAPTCHA_CHANNEL_ID) {
         try {
@@ -103,7 +103,7 @@ async function getOrCreateCaptchaChannel(guild) {
             console.error('❌ Impossible de récupérer le canal captcha par défaut:', error);
         }
     }
-    
+
     // Créer un nouveau canal
     try {
         const channel = await guild.channels.create({
@@ -121,7 +121,7 @@ async function getOrCreateCaptchaChannel(guild) {
                 }
             ]
         });
-        
+
         console.log(`✅ Canal captcha créé: ${channel.name} (${channel.id})`);
         return channel;
     } catch (error) {
@@ -195,7 +195,7 @@ async function createUserCaptchaChannel(member) {
 
 module.exports = {
     name: 'guildMemberAdd',
-    
+
     async execute(member) {
         //return false; //To deactivate
         // Vérifier si le système de captcha est activé
@@ -203,29 +203,41 @@ module.exports = {
             console.log(`ℹ️ Captcha désactivé - ${member.user.tag} rejoint sans vérification`);
             return;
         }
-        
+
         // Ignorer les bots
         if (member.user.bot) {
             console.log(`ℹ️ Bot détecté - ${member.user.tag} ignoré`);
             return;
         }
-        
+
         try {
             // Vérifier si l'utilisateur est déjà vérifié
             const alreadyVerified = await isUserVerified(member.id, member.guild.id);
-            
+
             if (alreadyVerified) {
                 await sendCaptchaLog(member.guild, 'Déjà vérifié', `**${member.user.tag}** est déjà vérifié`);
+                // Donner le rôle vérifié
+                try {
+                    const verifiedRole = await getVerifiedRole(member.guild);
+                    if (verifiedRole) {
+                        await member.roles.add(verifiedRole.id);
+                        await sendCaptchaLog(member.guild, 'Succès captcha', `**${member.user.tag}** a validé le captcha - Rôle vérifié donné`, '#e6d9e7');
+                    } else {
+                        console.error('❌ Rôle vérifié introuvable. Le captcha est validé mais aucun rôle attribué.');
+                    }
+                } catch (error) {
+                    console.error('❌ Erreur lors de l\'ajout du rôle vérifié:', error);
+                }
                 return;
             }
-            
+
             // Obtenir ou créer le canal captcha
             //const captchaChannel = await getOrCreateCaptchaChannel(member.guild);
             const captchaChannel = await createUserCaptchaChannel(member);
-            
+
             // Générer une question mathématique
             const mathQuestion = generateMathQuestion();
-            
+
             // Créer le captcha dans la base de données
             await createCaptcha(
                 member.id,
@@ -236,17 +248,17 @@ module.exports = {
                 captchaChannel.id,
                 CAPTCHA_CONFIG.CAPTCHA_TIMEOUT
             );
-            
+
             // Envoyer le message de bienvenue avec le captcha
             const welcomeMessage = CAPTCHA_CONFIG.MESSAGES.WELCOME_MESSAGE;
             const instructions = CAPTCHA_CONFIG.MESSAGES.INSTRUCTIONS;
-            
+
             const message = `${member.user}, ${welcomeMessage}
 
 **${mathQuestion.question}**
 
 ${instructions}`;
-            
+
             // Donner les permissions au membre pour voir et écrire dans le canal
             try {
                 await captchaChannel.permissionOverwrites.create(member.id, {
@@ -257,7 +269,7 @@ ${instructions}`;
             } catch (error) {
                 console.error('❌ Erreur lors de l\'ajout des permissions:', error);
             }
-            
+
             // Envoyer le message
             const sentMessage = await captchaChannel.send({
                 content: message,
@@ -267,9 +279,9 @@ ${instructions}`;
                     footer: { text: 'Réponds avec le nombre en chiffres uniquement' }
                 }]
             });
-            
+
             await sendCaptchaLog(member.guild, 'Captcha envoyé', `Captcha envoyé à **${member.user.tag}** (ID: ${member.id}) - Question: ${mathQuestion.question}`);
-            
+
             // Démarrer un timeout pour supprimer le captcha après expiration
             const timeoutMinutes = CAPTCHA_CONFIG.CAPTCHA_TIMEOUT;
             setTimeout(async () => {
@@ -278,12 +290,12 @@ ${instructions}`;
                     if (currentCaptcha && !currentCaptcha.is_verified) {
                         // Marquer comme expiré (sans incrémenter les tentatives)
                         await require('../database').expireCaptcha(member.id, member.guild.id, false);
-                        
+
                         // Envoyer un message d'expiration
                         await captchaChannel.send({
                             content: `${member.user}, ${CAPTCHA_CONFIG.MESSAGES.TIMEOUT_MESSAGE}`
                         });
-                        
+
                         // Kicker immédiatement après le premier timeout
                         try {
                             await member.kick('Captcha non validé à temps');
@@ -291,7 +303,7 @@ ${instructions}`;
                         } catch (error) {
                             console.error('❌ Erreur kick timeout:', error);
                         }
-                        
+
                         // Supprimer le canal après un délai pour laisser le temps de lire le message
                         setTimeout(async () => {
                             try {
@@ -306,7 +318,7 @@ ${instructions}`;
                     console.error('❌ Erreur lors du timeout du captcha:', error);
                 }
             }, timeoutMinutes * 60 * 1000);
-            
+
         } catch (error) {
             console.error(`❌ Erreur lors de la création du captcha pour ${member.user.tag}:`, error);
         }

@@ -5,27 +5,31 @@ services:
     container_name: discord_bot
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     volumes:
-      # Persistence de la base de donnees SQLite
+      # Persistance de la base de donnees SQLite
       - ./data:/app/data
+    env_file:
+      - path: .env
+        required: false
     environment:
       # Configuration Discord
-      DISCORD_TOKEN: "votre_token_discord_ici"
-      CLIENT_ID: "votre_client_id_ici"
-      GUILD_ID: "votre_guild_id_ici"
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-${BOT_TOKEN}}
+      BOT_TOKEN: ${BOT_TOKEN:-${DISCORD_TOKEN}}
+      CLIENT_ID: ${CLIENT_ID}
+      GUILD_ID: ${GUILD_ID}
 
       # Configuration Serveur Express & Base de Donnees SQLite
-      PORT: 3000
-      NODE_ENV: production
+      PORT: ${PORT:-3000}
+      NODE_ENV: ${NODE_ENV:-production}
       DB_PATH: "/app/data/bot.db"
 
       # Configuration OpenAI API
-      OPENAI_API_KEY: "votre_cle_openai_ici"
-      OPENAI_MODEL: "gpt-4o-mini"
-      OPENAI_MAX_TOKENS: 500
-      OPENAI_TEMPERATURE: 0.7
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-500}
+      OPENAI_TEMPERATURE: ${OPENAI_TEMPERATURE:-0.7}
 
       # Configuration OpenRouter
-      OPENROUTER_API_KEY: "votre_cle_openrouter_ici"
-      OPENROUTER_MODEL: "openai/gpt-oss-20b:free"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-20b:free}

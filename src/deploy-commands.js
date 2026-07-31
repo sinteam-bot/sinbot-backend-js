@@ -3,7 +3,7 @@ const path = require('path');
 // ⭐ IMPORTANT : Remonter d'un niveau pour trouver .env
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const { REST, Routes } = require('discord.js');
-const OpenAI = require('./utils/openai');
+const OpenAI = require('./utils/openrouter');
 const fs = require('fs');
 
 
@@ -17,7 +17,7 @@ console.log('📦 Chargement des commandes pour déploiement...\n');
 for (const file of commandFiles) {
     const filePath = path.join(commandsPath, file);
     const command = require(filePath);
-    
+
     if ('data' in command && 'execute' in command) {
         commands.push(command.data.toJSON());
         console.log(`✅ ${command.data.name} - ${command.data.description}`);

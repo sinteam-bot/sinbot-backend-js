@@ -36,13 +36,13 @@ console.log('📂 Chargement des événements...');
 for (const file of eventFiles) {
     const filePath = path.join(eventsPath, file);
     const event = require(filePath);
-    
+
     if (event.once) {
         client.once(event.name, (...args) => event.execute(...args));
     } else {
         client.on(event.name, (...args) => event.execute(...args));
     }
-    
+
     console.log(`✅ Événement chargé: ${event.name}`);
 }
 
@@ -58,37 +58,37 @@ app.use(express.json());
 // Endpoint pour envoyer un message depuis n8n
 app.post('/webhook/send-message', async (req, res) => {
     const { channelId, message, embed } = req.body;
-    
+
     try {
         const channel = await client.channels.fetch(channelId);
-        
+
         if (embed) {
             const { EmbedBuilder } = require('discord.js');
             const embedMessage = new EmbedBuilder()
                 .setColor(embed.color || '#0099ff')
                 .setTitle(embed.title || 'Message automatique')
                 .setDescription(embed.description || message);
-            
+
             await channel.send({ embeds: [embedMessage] });
         } else {
             await channel.send(message);
         }
-        
-        res.json({ 
-            success: true, 
+
+        res.json({
+            success: true,
             message: 'Message envoyé avec succès',
             timestamp: new Date().toISOString()
         });
     } catch (error) {
         console.error('Erreur webhook:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });
 
-/*
+
 // Endpoint pour récupérer des statistiques
 app.get('/api/stats', async (req, res) => {
     try {
@@ -99,9 +99,9 @@ app.get('/api/stats', async (req, res) => {
             timestamp: new Date().toISOString()
         });
     } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });
@@ -116,16 +116,16 @@ app.get('/api/user/:userId/events', async (req, res) => {
             count: events.length
         });
     } catch (error) {
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });
 
 // Health check
 app.get('/health', (req, res) => {
-    res.json({ 
+    res.json({
         status: 'ok',
         bot: client.user?.tag || 'non connecté',
         uptime: process.uptime(),
@@ -133,7 +133,7 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString()
     });
 });
-*/
+
 // Démarrer le serveur Express
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
