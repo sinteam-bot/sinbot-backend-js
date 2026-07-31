@@ -15,7 +15,7 @@ function addHours(date, hours) {
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
-const CHANNEL_ID = '1348741823237062781';
+const CHANNEL_ID = '1348741823237062781'; // #bot
 const CAPTCHA_CONFIG = require('../config/captcha-config');
 
 // Vérifier si un message est une réponse au captcha
@@ -152,7 +152,7 @@ module.exports = {
     async execute(message) {
         // Ignorer les messages du bot lui-même
         if (message.author.bot) {
-            if (message.author.id == '302050872383242240') {
+            if (message.author.id == '302050872383242240') { // Disboard Bot
                 if (message.embeds.length === 0) return;
                 const chaineRecherchee = "Bump effectué !"
                 for (const embed of message.embeds) {
@@ -161,11 +161,15 @@ module.exports = {
                         const guild = await message.guild;
                         //const channel = await guild.channels.fetch(CHANNEL_ID);
 
-                        const deuxHeures = 2 * 60 * 60 * 1000;
-
+                        const date = new Date();
+                        date.setHours(date.getHours() + 2);
+                        const heureParis = date.toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+                        await console.log(`[BUMP] Bump effectué, Prochain Bump à : ${heureParis}`)
                         setTimeout(async () => {
-                            await message.channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** :Obsydemoncouverture:`); // 1488145689916473544
-                        }, deuxHeures);
+                            await message.channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544>`); // 1488145689916473544
+                            const heureParis = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+                            await console.log(`[BUMP] 2 heures se sont écoulées, le rappel a été envoyé à ${heureParis}!`)
+                        }, 2 * 60 * 60 * 1000); // Deux heures
                     }
                 }
             }

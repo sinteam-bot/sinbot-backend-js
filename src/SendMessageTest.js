@@ -23,7 +23,6 @@ const client = new Client({
     ]
 });
 
-
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 const CHANNEL_ID = '1348741823237062781';
@@ -32,25 +31,25 @@ const CHANNEL_ID = '1348741823237062781';
 // CONNEXION DU BOT
 // ============================================
 function addHours(date, hours) {
-  const hoursToAdd = hours * 60 * 60 * 1000;
-  date.setTime(date.getTime() + hoursToAdd);
-  return date;
+    const hoursToAdd = hours * 60 * 60 * 1000;
+    date.setTime(date.getTime() + hoursToAdd);
+    return date;
 }
 
 
 client.once('ready', async () => {
     console.log(`Bot connecté en tant que ${client.user.tag}`);
-    
+
     try {
         // Récupérer le serveur (guild)
         const guild = await client.guilds.fetch(GUILD_ID);
         console.log(`Serveur trouvé: ${guild.name}`);
-        
+
         // Récupérer le canal
         const channel = await guild.channels.fetch(CHANNEL_ID);
         console.log(`Canal trouvé: ${channel.name}`);
         var time = new Date();
-        time2 = addHours(time,2);
+        time2 = addHours(time, 2);
         const heureParis = time2.toLocaleTimeString('fr-FR', {
             timeZone: 'Europe/Paris',
             hour: '2-digit',
@@ -58,14 +57,14 @@ client.once('ready', async () => {
         });
         channel.send(`## Prochain Bump à : ** ${heureParis} **`)
 
-        
+
         // Déconnecter le bot après l'envoi
         setTimeout(() => {
             console.log('Déconnexion du bot...');
             client.destroy();
             process.exit(0);
         }, 1000);
-        
+
     } catch (error) {
         console.error('Erreur:', error);
         client.destroy();

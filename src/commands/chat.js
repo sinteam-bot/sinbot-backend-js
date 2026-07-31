@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { callChatGPTWithHistory, calculateCost } = require('../utils/openai');
+const { callChatGPTWithHistory, calculateCost } = require('../utils/openrouter');
 //const { logInfo, logError } = require('../database');
 
 // Stocker les conversations en mémoire (par utilisateur)
@@ -41,14 +41,14 @@ module.exports = {
                 .setName('clear')
                 .setDescription('Effacer la conversation')
         ),
-    
+
     async execute(message, args) {
         message.reply('❌ Cette commande est uniquement disponible en Slash Command. Utilisez `/chat`');
     },
-    
+
     async executeSlash(interaction) {
         const subcommand = interaction.options.getSubcommand();
-        
+
         if (subcommand === 'start') {
             await this.startConversation(interaction);
         } else if (subcommand === 'message') {
@@ -59,11 +59,11 @@ module.exports = {
             await this.clearConversation(interaction);
         }
     },
-    
+
     async startConversation(interaction) {
         const userId = interaction.user.id;
         const firstMessage = interaction.options.getString('premier_message');
-        
+
         // Initialiser la conversation
         conversations.set(userId, {
             history: [],
@@ -71,7 +71,7 @@ module.exports = {
             totalCost: 0,
             startedAt: new Date()
         });
-        
+
         if (firstMessage) {
             await this.sendMessage(interaction, firstMessage);
         } else {
@@ -81,14 +81,14 @@ module.exports = {
             });
         }
     },
-    
+
     async sendMessage(interaction, overrideMessage = null) {
         await interaction.deferReply();
-        
+
         try {
             const userId = interaction.user.id;
             const message = overrideMessage || interaction.options.getString('texte');
-            
+
             // Vérifier si conversation existe
             if (!conversations.has(userId)) {
                 conversations.set(userId, {
@@ -98,14 +98,14 @@ module.exports = {
                     startedAt: new Date()
                 });
             }
-            
+
             const conversation = conversations.get(userId);
-            
+
             // Limiter l'historique à 10 messages max (pour éviter les coûts)
             if (conversation.history.length >= 20) {
                 conversation.history = conversation.history.slice(-18);
             }
-            
+
             // Appeler ChatGPT avec l'historique
             const response = await callChatGPTWithHistory(
                 conversation.history,
@@ -114,19 +114,19 @@ module.exports = {
                     systemPrompt: 'Tu es un assistant amical sur Discord. Réponds de manière concise et claire.'
                 }
             );
-            
+
             // Calculer le coût
             const cost = calculateCost(
                 response.model,
                 response.usage.promptTokens,
                 response.usage.completionTokens
             );
-            
+
             // Mettre à jour la conversation
             conversation.history = response.updatedHistory;
             conversation.totalTokens += response.usage.totalTokens;
             conversation.totalCost += cost;
-            
+
             // Logger
             /*await logInfo('chatgpt_conversation', 'Message dans conversation ChatGPT', {
                 userId: interaction.user.id,
@@ -139,7 +139,7 @@ module.exports = {
                     cost: cost.toFixed(6)
                 }
             });*/
-            
+
             // Créer l'embed
             const embed = new EmbedBuilder()
                 .setColor('#10a37f')
@@ -148,11 +148,11 @@ module.exports = {
                     iconURL: 'https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg'
                 })
                 .setDescription(response.text)
-                .setFooter({ 
-                    text: `💬 ${conversation.history.length / 2} messages • ${conversation.totalTokens} tokens • ~$${conversation.totalCost.toFixed(6)}` 
+                .setFooter({
+                    text: `💬 ${conversation.history.length / 2} messages • ${conversation.totalTokens} tokens • ~$${conversation.totalCost.toFixed(6)}`
                 })
                 .setTimestamp();
-            
+
             // Boutons
             /*const row = new ActionRowBuilder()
                 .addComponents(
@@ -174,7 +174,7 @@ module.exports = {
                 embeds: [embed],
                 components: [row]
             });*/
-            
+
         } catch (error) {
             console.error('❌ Erreur chat:', error);
             await interaction.editReply({
@@ -182,10 +182,10 @@ module.exports = {
             });
         }
     },
-    
+
     async showHistory(interaction) {
         const userId = interaction.user.id;
-        
+
         if (!conversations.has(userId)) {
             await interaction.reply({
                 content: '❌ Aucune conversation en cours. Utilisez `/chat start`',
@@ -193,39 +193,39 @@ module.exports = {
             });
             return;
         }
-        
+
         const conversation = conversations.get(userId);
-        
+
         const historyEmbed = new EmbedBuilder()
             .setColor('#0099FF')
             .setTitle('📜 Historique de Conversation')
             .setDescription(`${conversation.history.length} message(s)`)
             .setTimestamp();
-        
+
         conversation.history.forEach((msg, index) => {
             const role = msg.role === 'user' ? '👤 Vous' : '🤖 ChatGPT';
             const content = msg.content.substring(0, 200);
-            
+
             historyEmbed.addFields({
                 name: `${index + 1}. ${role}`,
                 value: content + (msg.content.length > 200 ? '...' : ''),
                 inline: false
             });
         });
-        
+
         historyEmbed.setFooter({
             text: `Total: ${conversation.totalTokens} tokens • ~$${conversation.totalCost.toFixed(6)}`
         });
-        
+
         await interaction.reply({
             embeds: [historyEmbed],
             ephemeral: true
         });
     },
-    
+
     async clearConversation(interaction) {
         const userId = interaction.user.id;
-        
+
         if (conversations.has(userId)) {
             conversations.delete(userId);
             await interaction.reply({
