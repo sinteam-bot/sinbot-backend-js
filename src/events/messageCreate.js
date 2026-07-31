@@ -8,9 +8,9 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 function addHours(date, hours) {
-  const hoursToAdd = hours * 60 * 60 * 1000;
-  date.setTime(date.getTime() + hoursToAdd);
-  return date;
+    const hoursToAdd = hours * 60 * 60 * 1000;
+    date.setTime(date.getTime() + hoursToAdd);
+    return date;
 }
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -22,40 +22,40 @@ const CAPTCHA_CONFIG = require('../config/captcha-config');
 async function handleCaptchaResponse(message) {
     // Ignorer les messages du bot
     if (message.author.bot) return false;
-    
+
     // Vérifier si le message est dans un canal captcha
-    const isCaptchaChannel = message.channel.name.includes('verification') || 
-                            message.channel.name.includes('captcha') ||
-                            message.channel.topic?.includes('vérification') ||
-                            message.channel.topic?.includes('captcha');
-    
+    const isCaptchaChannel = message.channel.name.includes('verification') ||
+        message.channel.name.includes('captcha') ||
+        message.channel.topic?.includes('vérification') ||
+        message.channel.topic?.includes('captcha');
+
     if (!isCaptchaChannel) return false;
-    
+
     try {
         // Récupérer le captcha de l'utilisateur
         const captcha = await getUserCaptcha(message.author.id, message.guild.id);
-        
+
         if (!captcha) {
             // Pas de captcha en attente pour cet utilisateur
             return false;
         }
-        
+
         // Vérifier si déjà vérifié
         if (captcha.is_verified) {
             await message.reply(CAPTCHA_CONFIG.MESSAGES.ALREADY_VERIFIED);
             return true;
         }
-        
+
         // Vérifier si le message est une réponse valide (nombre)
         const userAnswer = message.content.trim();
-        
+
         // Vérifier la réponse (les chaînes non numériques seront traitées comme réponses incorrectes)
         const result = await verifyCaptchaAnswer(message.author.id, message.guild.id, userAnswer);
-        
+
         if (result.success) {
             // Réponse correcte - donner le rôle vérifié
             await message.reply(CAPTCHA_CONFIG.MESSAGES.SUCCESS_MESSAGE);
-            
+
             // Donner le rôle vérifié
             try {
                 const verifiedRole = await getVerifiedRole(message.guild);
@@ -68,7 +68,7 @@ async function handleCaptchaResponse(message) {
             } catch (error) {
                 console.error('❌ Erreur lors de l\'ajout du rôle vérifié:', error);
             }
-            
+
             // Supprimer le canal captcha après succès
             try {
                 await message.channel.delete();
@@ -76,9 +76,9 @@ async function handleCaptchaResponse(message) {
             } catch (error) {
                 console.error('❌ Erreur suppression canal succès:', error);
             }
-            
+
             return true;
-            
+
         } else if (result.reason === 'wrong_answer') {
             // Réponse incorrecte
             const remainingAttempts = CAPTCHA_CONFIG.MAX_ATTEMPTS - result.attempts;
@@ -86,15 +86,15 @@ async function handleCaptchaResponse(message) {
             const replyMessage = isNotANumber
                 ? '❌ Veuillez répondre avec un **nombre en chiffres** uniquement (exemple: 18).'
                 : CAPTCHA_CONFIG.MESSAGES.FAIL_MESSAGE.replace('{attempts}', remainingAttempts);
-            
+
             await message.reply(replyMessage);
             await sendCaptchaLog(message.guild, 'Tentative échouée', `**${message.author.tag}** - Réponse incorrecte (Tentative ${result.attempts}/${CAPTCHA_CONFIG.MAX_ATTEMPTS})`, '#f39c12');
             return true;
-            
+
         } else if (result.reason === 'max_attempts_reached') {
             // Trop de tentatives
             await message.reply(CAPTCHA_CONFIG.MESSAGES.MAX_ATTEMPTS_MESSAGE);
-            
+
             // Kicker l'utilisateur
             try {
                 await message.member.kick('Trop de tentatives de captcha');
@@ -102,7 +102,7 @@ async function handleCaptchaResponse(message) {
             } catch (error) {
                 console.error('❌ Erreur kick max tentatives:', error);
             }
-            
+
             // Supprimer le canal captcha après échec
             try {
                 await message.channel.delete();
@@ -110,16 +110,16 @@ async function handleCaptchaResponse(message) {
             } catch (error) {
                 console.error('❌ Erreur suppression canal échec:', error);
             }
-            
+
             return true;
-            
+
         } else if (result.reason === 'expired') {
             await message.reply(CAPTCHA_CONFIG.MESSAGES.TIMEOUT_MESSAGE);
             return true;
         }
-        
+
         return false;
-        
+
     } catch (error) {
         console.error('❌ Erreur lors de la vérification du captcha:', error);
         return false;
@@ -148,11 +148,11 @@ async function getVerifiedRole(guild) {
 
 module.exports = {
     name: 'messageCreate',
-    
+
     async execute(message) {
         // Ignorer les messages du bot lui-même
-        if (message.author.bot){
-            if(message.author.id == '302050872383242240'){
+        if (message.author.bot) {
+            if (message.author.id == '302050872383242240') {
                 if (message.embeds.length === 0) return;
                 const chaineRecherchee = "Bump effectué !"
                 for (const embed of message.embeds) {
@@ -164,16 +164,16 @@ module.exports = {
                         const deuxHeures = 2 * 60 * 60 * 1000;
 
                         setTimeout(async () => {
-                            await message.channel.send(`<@&1427703047534153872> **c'est l'heure**`);
+                            await message.channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** :Obsydemoncouverture:`); // 1488145689916473544
                         }, deuxHeures);
                     }
                 }
             }
-        }else{
-             //return false; //to deactivate the captcha
+        } else {
+            //return false; //to deactivate the captcha
             // Vérifier si c'est une réponse au captcha
             const isCaptchaResponse = await handleCaptchaResponse(message);
-            
+
             // Si ce n'est pas une réponse au captcha, continuer avec le traitement normal
             if (!isCaptchaResponse) {
                 // Log de l'événement utilisateur
@@ -189,7 +189,7 @@ module.exports = {
                         guildName: message.guild?.name
                     }
                 );
-                
+
                 // Ajouter de l'XP pour le message
                 await addMessageXP(message.author.id, message.author.username);
             }
