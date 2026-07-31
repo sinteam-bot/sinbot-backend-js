@@ -5,13 +5,29 @@ services:
     container_name: discord_bot
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
-    env_file:
-      - .env
+      - "3000:3000"
     environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - NODE_ENV=production
+      # Configuration Discord
+      DISCORD_TOKEN: "votre_token_discord_ici"
+      CLIENT_ID: "votre_client_id_ici"
+      GUILD_ID: "votre_guild_id_ici"
+
+      # Configuration Base de Donnees
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: discord_bot
+      DB_USER: postgres
+      DB_PASSWORD: superpassword_secret
+
+      # Configuration Serveur Express
+      PORT: 3000
+      NODE_ENV: production
+
+      # Configuration OpenAI API
+      OPENAI_API_KEY: "votre_cle_openai_ici"
+      OPENAI_MODEL: "gpt-4o-mini"
+      OPENAI_MAX_TOKENS: 500
+      OPENAI_TEMPERATURE: 0.7
     depends_on:
       postgres:
         condition: service_healthy
@@ -22,17 +38,17 @@ services:
     container_name: discord_bot_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-discord_bot}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: discord_bot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: superpassword_secret
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Initialisation automatique des tables SQL au premier lancement
       - ./src/database/captcha-tables.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-discord_bot}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d discord_bot"]
       interval: 5s
       timeout: 5s
       retries: 5
