@@ -1,6 +1,9 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
+// Configuration du captcha
+const CAPTCHA_CONFIG = require('./config/captcha-config');
+
 // Configuration de la connexion PostgreSQL
 const pool = new Pool({
     host: process.env.DB_HOST,
@@ -1119,6 +1122,338 @@ async function addGrognement(user){
 
 }
 
+// ============================================
+// FONCTIONS CAPTCHA
+// ============================================
+
+/**
+ * Créer un nouveau captcha pour un utilisateur
+ */
+async function createCaptcha(userId, username, guildId, question, answer, channelId, timeoutMinutes = 10) {
+    const query = `
+        INSERT INTO user_captchas (
+            user_id,
+            username,
+            guild_id,
+            question,
+            answer,
+            channel_id,
+            attempts,
+            created_at,
+            expires_at,
+            is_verified
+        ) VALUES ($1, $2, $3, $4, $5, $6, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + ($7 * INTERVAL '1 minute'), false)
+        ON CONFLICT (user_id, guild_id) 
+        DO UPDATE SET
+            question = $4,
+            answer = $5,
+            channel_id = $6,
+            attempts = 0,
+            created_at = CURRENT_TIMESTAMP,
+            expires_at = CURRENT_TIMESTAMP + ($7 * INTERVAL '1 minute'),
+            is_verified = false,
+            updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+    `;
+    
+    try {
+        const result = await pool.query(query, [
+            userId,
+            username,
+            guildId,
+            question,
+            answer,
+            channelId,
+            timeoutMinutes
+        ]);
+        
+        console.log(`🔒 Captcha créé pour ${username} (${userId}) dans le serveur ${guildId}`);
+        return result.rows[0];
+        
+    } catch (error) {
+        console.error('❌ Erreur createCaptcha:', error);
+        throw error;
+    }
+}
+
+/**
+ * Récupérer le captcha d'un utilisateur
+ */
+async function getUserCaptcha(userId, guildId) {
+    const query = `
+        SELECT * FROM user_captchas 
+        WHERE user_id = $1 AND guild_id = $2 
+        AND (is_verified = false OR expires_at > CURRENT_TIMESTAMP)
+        ORDER BY created_at DESC
+        LIMIT 1
+    `;
+    
+    try {
+        const result = await pool.query(query, [userId, guildId]);
+        return result.rows[0] || null;
+    } catch (error) {
+        console.error('❌ Erreur getUserCaptcha:', error);
+        throw error;
+    }
+}
+
+/**
+ * Vérifier la réponse au captcha
+ */
+async function verifyCaptchaAnswer(userId, guildId, userAnswer) {
+    const client = await pool.connect();
+    
+    try {
+        await client.query('BEGIN');
+        
+        // Récupérer le captcha
+        const captcha = await getUserCaptcha(userId, guildId);
+        
+        if (!captcha) {
+            await client.query('ROLLBACK');
+            return { success: false, reason: 'no_captcha_found' };
+        }
+        
+        // Vérifier si déjà vérifié
+        if (captcha.is_verified) {
+            await client.query('ROLLBACK');
+            return { success: false, reason: 'already_verified' };
+        }
+        
+        // Vérifier si expiré
+        if (new Date(captcha.expires_at) < new Date()) {
+            await client.query('ROLLBACK');
+            return { success: false, reason: 'expired' };
+        }
+        
+        // Vérifier la réponse
+        const correctAnswer = parseInt(captcha.answer, 10);
+        const userAnswerInt = parseInt(userAnswer, 10);
+        
+        if (userAnswerInt === correctAnswer) {
+            // Réponse correcte
+            const updateQuery = `
+                UPDATE user_captchas 
+                SET is_verified = true, 
+                    verified_at = CURRENT_TIMESTAMP,
+                    attempts = attempts + 1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = $1
+                RETURNING *
+            `;
+            
+            const result = await client.query(updateQuery, [captcha.id]);
+            await client.query('COMMIT');
+            
+            console.log(`✅ Captcha validé pour ${captcha.username} (${userId})`);
+            return { success: true, captcha: result.rows[0] };
+        } else {
+            // Réponse incorrecte
+            const newAttempts = captcha.attempts + 1;
+            
+            const updateQuery = `
+                UPDATE user_captchas 
+                SET attempts = $1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = $2
+                RETURNING *
+            `;
+            
+            const result = await client.query(updateQuery, [newAttempts, captcha.id]);
+            await client.query('COMMIT');
+            
+            console.log(`❌ Captcha échoué pour ${captcha.username} (${userId}) - Tentative ${newAttempts}`);
+            
+            if (newAttempts >= 3) {
+                return { success: false, reason: 'max_attempts_reached', attempts: newAttempts };
+            }
+            
+            return { success: false, reason: 'wrong_answer', attempts: newAttempts };
+        }
+        
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('❌ Erreur verifyCaptchaAnswer:', error);
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+/**
+ * Marquer un captcha comme expiré et optionnellement incrémenter les tentatives
+ */
+async function expireCaptcha(userId, guildId, incrementAttempts = false) {
+    const client = await pool.connect();
+    
+    try {
+        await client.query('BEGIN');
+        
+        let result;
+        
+        if (incrementAttempts) {
+            // Incrémenter les tentatives et vérifier si max atteint
+            const captchaQuery = `
+                SELECT attempts FROM user_captchas 
+                WHERE user_id = $1 AND guild_id = $2 AND is_verified = false
+            `;
+            const captcha = await client.query(captchaQuery, [userId, guildId]);
+            
+            if (captcha.rows.length > 0) {
+                const currentAttempts = captcha.rows[0].attempts;
+                const newAttempts = currentAttempts + 1;
+                const maxAttempts = CAPTCHA_CONFIG.MAX_ATTEMPTS || 3;
+                
+                const updateQuery = `
+                    UPDATE user_captchas 
+                    SET is_verified = false,
+                        attempts = $1,
+                        expired_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = $2 AND guild_id = $3 AND is_verified = false
+                    RETURNING *
+                `;
+                
+                result = await client.query(updateQuery, [newAttempts, userId, guildId]);
+                
+                await client.query('COMMIT');
+                
+                if (result.rows.length > 0) {
+                    console.log(`⏰ Captcha expiré pour ${result.rows[0].username} (${userId}) - Tentatives: ${newAttempts}/${maxAttempts}`);
+                    return { captcha: result.rows[0], shouldKick: newAttempts >= maxAttempts };
+                }
+            }
+        } else {
+            const query = `
+                UPDATE user_captchas 
+                SET is_verified = false,
+                    expired_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = $1 AND guild_id = $2 AND is_verified = false
+                RETURNING *
+            `;
+            
+            result = await client.query(query, [userId, guildId]);
+            await client.query('COMMIT');
+            
+            if (result.rows.length > 0) {
+                console.log(`⏰ Captcha expiré pour ${result.rows[0].username} (${userId})`);
+            }
+        }
+        
+        return { captcha: result?.rows[0] || null, shouldKick: false };
+        
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('❌ Erreur expireCaptcha:', error);
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+/**
+ * Vérifier si un utilisateur est vérifié (a passé le captcha)
+ */
+async function isUserVerified(userId, guildId) {
+    const query = `
+        SELECT is_verified FROM user_captchas 
+        WHERE user_id = $1 AND guild_id = $2 
+        AND expires_at > CURRENT_TIMESTAMP
+        ORDER BY created_at DESC
+        LIMIT 1
+    `;
+    
+    try {
+        const result = await pool.query(query, [userId, guildId]);
+        return result.rows[0]?.is_verified || false;
+    } catch (error) {
+        console.error('❌ Erreur isUserVerified:', error);
+        throw error;
+    }
+}
+
+/**
+ * Supprimer un captcha
+ */
+async function deleteCaptcha(userId, guildId) {
+    const query = `
+        DELETE FROM user_captchas 
+        WHERE user_id = $1 AND guild_id = $2
+        RETURNING *
+    `;
+    
+    try {
+        const result = await pool.query(query, [userId, guildId]);
+        return result.rows[0] || null;
+    } catch (error) {
+        console.error('❌ Erreur deleteCaptcha:', error);
+        throw error;
+    }
+}
+
+/**
+ * Sauvegarder la configuration du captcha pour un serveur
+ */
+async function saveCaptchaConfig(guildId, config) {
+    const query = `
+        INSERT INTO captcha_config (
+            guild_id,
+            channel_id,
+            verified_role_id,
+            timeout_minutes,
+            max_attempts,
+            is_enabled,
+            created_at,
+            updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (guild_id) 
+        DO UPDATE SET
+            channel_id = $2,
+            verified_role_id = $3,
+            timeout_minutes = $4,
+            max_attempts = $5,
+            is_enabled = $6,
+            updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+    `;
+    
+    try {
+        const result = await pool.query(query, [
+            guildId,
+            config.channelId,
+            config.verifiedRoleId,
+            config.timeoutMinutes,
+            config.maxAttempts,
+            config.isEnabled
+        ]);
+        
+        console.log(`⚙️ Configuration captcha mise à jour pour le serveur ${guildId}`);
+        return result.rows[0];
+        
+    } catch (error) {
+        console.error('❌ Erreur saveCaptchaConfig:', error);
+        throw error;
+    }
+}
+
+/**
+ * Récupérer la configuration du captcha pour un serveur
+ */
+async function getCaptchaConfig(guildId) {
+    const query = `
+        SELECT * FROM captcha_config WHERE guild_id = $1
+    `;
+    
+    try {
+        const result = await pool.query(query, [guildId]);
+        return result.rows[0] || null;
+    } catch (error) {
+        console.error('❌ Erreur getCaptchaConfig:', error);
+        throw error;
+    }
+}
+
 module.exports = {
     pool,
     logUserEvent,
@@ -1155,5 +1490,14 @@ module.exports = {
     getLastOpenAIMessageId,
     addGuildMember,
     addGrognement,
-    getMemberForGrognement
+    getMemberForGrognement,
+    // Fonctions Captcha
+    createCaptcha,
+    getUserCaptcha,
+    verifyCaptchaAnswer,
+    expireCaptcha,
+    isUserVerified,
+    deleteCaptcha,
+    saveCaptchaConfig,
+    getCaptchaConfig
 };

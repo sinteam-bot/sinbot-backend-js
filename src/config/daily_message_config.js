@@ -59,42 +59,61 @@ function buildPrompt(date = new Date()) {
   return retour;
 }
 
-function requestPrompt(){
-  var date = new Date();
+function requestPrompt(date = new Date()) {
   const dateStr = date.toISOString().slice(0, 10);
+  const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' });
+  const day = date.getDate();
+  const monthName = date.toLocaleDateString('fr-FR', { month: 'long' });
+  const year = date.getFullYear();
+  const fullDate = `${dayName} ${day} ${monthName} ${year}`;
+
   const generateprompt = `Tu es un générateur de prompts créatifs pour messages Discord.
 
-      Ta mission est de produire un prompt unique qui servira à générer un message de "bonne journée".
+  Ta mission est de produire UNIQUEMENT un prompt unique et original qui servira à générer un message de "bonne journée".
+  Ne génère PAS le message final, uniquement le prompt.
 
-      Contraintes :
-      - Le prompt doit être en français
-      - Il doit donner une direction claire (ton, style, thème)
-      - Il doit varier chaque jour (ambiance, humour, inspiration, saison, événements, etc.)
-      - Il peut inclure :
-        - un style (poétique, drôle, motivant, absurde, philosophique…)
-        - un contexte (météo, jour de la semaine, saison, événement imaginaire ou réel)
-        - une contrainte créative (rime, emoji, métaphore, longueur, etc.)
+  Contraintes pour le prompt à générer:
+  - Le prompt doit être en français
+  - Il doit donner une direction claire et créative (ton, style, thème, ambiance)
+  - Il doit varier chaque jour (humour, inspiration, saison, événements, etc.)
+  - Il doit inclure des éléments concrets pour inspirer l'IA
 
-      Objectif :
-      Créer un prompt qui permettra de générer un message court (1 à 3 phrases) de "bonne journée" adapté à Discord.
+  Le prompt généré doit obligatoirement imposer que:
+  - Le message final commence par "En ce ${fullDate}"
+  - Le message final fait entre 1 et 3 phrases maximum
+  - Le message final ne contient pas d'emoji
+  - Le message final est clair et positif
 
-      Contraintes supplémentaires pour le message final :
-      - Le message doit obligatoirement commencer par "En ce ${dateStr}"
-      - Le format de la date doit être exactement : "lundi 1 janvier 2026"
+  Exemples de prompts à générer (ne copie pas ces exemples, invente des nouveaux):
+  - "Rédige un message de bonne journée sur un ton philosophique inspiré par le calme d'un matin pluvieux, en commençant par 'En ce ${fullDate}'."
+  - "Écris un message de bonne journée avec un ton motivant façon coach, en utilisant une métaphore liée au café, et commence par 'En ce ${fullDate}'."
+  - "Crée un message de bonne journée poétique évoquant la lumière du matin, en 2 phrases maximum, en commençant par 'En ce ${fullDate}'."
 
-      Important :
-      - Ne génère PAS le message final
-      - Génère UNIQUEMENT le prompt à utiliser ensuite
+  Important: Retourne UNIQUEMENT le texte du prompt, sans explication ni commentaire.`;
 
-      Exemples de sortie attendue :
+  return generateprompt;
+}
 
-      "Rédige un message de bonne journée sur un ton humoristique comme si un chat donnait des conseils de vie, avec 2 emojis, et commence par 'En ce lundi 1 janvier 2026'."
+/**
+ * Génère un prompt final formaté avec la date du jour
+ * @param {string} rawPrompt - Le prompt généré par l'IA
+ * @param {Date} date - Date à utiliser
+ * @returns {object} - {prompt: string, instruction: string}
+ */
+function formatFinalPrompt(rawPrompt, date = new Date()) {
+  const dateStr = date.toISOString().slice(0, 10);
+  const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' });
+  const day = date.getDate();
+  const monthName = date.toLocaleDateString('fr-FR', { month: 'long' });
+  const year = date.getFullYear();
+  const fullDate = `${dayName} ${day} ${monthName} ${year}`;
 
-      "Écris un message de bonne journée poétique inspiré d’un matin de printemps, en 2 phrases maximum, en commençant par 'En ce lundi 1 janvier 2026'."
-
-      "Crée un message de bonne journée motivant façon coach sportif, avec une énergie intense et une punchline finale, et commence par 'En ce lundi 1 janvier 2026'."`
-
- return generateprompt;
+  return {
+    prompt: rawPrompt,
+    instruction: `Écris UNIQUEMENT le message final. Commence obligatoirement par "En ce ${fullDate}". 
+                  Le message doit faire 1 à 3 phrases maximum, être clair, positif et sans emoji.
+                  Respecte exactement les contraintes du prompt fourni.`
+  };
 }
 
 function getHumour(){
@@ -114,6 +133,7 @@ function getContrainte(){
 module.exports = {
     buildPrompt,
     requestPrompt,
+    formatFinalPrompt,
     getHumour,
     getEcriture,
     getNarratif,
