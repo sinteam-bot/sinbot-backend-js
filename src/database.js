@@ -1,28 +1,271 @@
-const { Pool } = require('pg');
+const Database = require('better-sqlite3');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 // Configuration du captcha
 const CAPTCHA_CONFIG = require('./config/captcha-config');
 
-// Configuration de la connexion PostgreSQL
-const pool = new Pool({
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    database: process.env.DB_NAME,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-});
+// Repertoire et chemin de la base de donnees SQLite
+const dbDir = process.env.DB_DIR || path.join(__dirname, '../data');
+if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+}
 
-// Test de connexion au démarrage
-pool.query('SELECT NOW()', (err, res) => {
-    if (err) {
-        console.error('❌ Erreur de connexion à PostgreSQL:', err);
-        process.exit(1);
+const dbPath = process.env.DB_PATH || path.join(dbDir, 'bot.db');
+const db = new Database(dbPath);
+
+// Activer le mode WAL pour de meilleures performances
+db.pragma('journal_mode = WAL');
+
+// Initialisation automatique des tables SQLite au démarrage
+function initDb() {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS user_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            event_data TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS form_responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            form_name TEXT NOT NULL,
+            responses TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS user_birthdays (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
+            birthdate DATE NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS user_xp (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
+            xp INTEGER DEFAULT 0,
+            level INTEGER DEFAULT 1,
+            total_xp_earned INTEGER DEFAULT 0,
+            messages_count INTEGER DEFAULT 0,
+            voice_minutes INTEGER DEFAULT 0,
+            events_participated INTEGER DEFAULT 0,
+            last_message_xp DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS xp_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            xp_amount INTEGER NOT NULL,
+            xp_type TEXT NOT NULL,
+            description TEXT,
+            metadata TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS voice_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            channel_name TEXT NOT NULL,
+            join_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+            leave_time DATETIME,
+            duration_minutes INTEGER DEFAULT 0,
+            xp_earned INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_name TEXT NOT NULL,
+            event_description TEXT,
+            event_date DATETIME,
+            xp_reward INTEGER DEFAULT 0,
+            created_by TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS event_participants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id INTEGER NOT NULL,
+            user_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            xp_earned INTEGER DEFAULT 0,
+            joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(event_id, user_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS server_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
+            discriminator TEXT,
+            tag TEXT,
+            display_name TEXT,
+            avatar_url TEXT,
+            joined_at DATETIME,
+            account_created_at DATETIME,
+            is_bot INTEGER DEFAULT 0,
+            rejoin_count INTEGER DEFAULT 0,
+            left_at DATETIME,
+            roles TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS member_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            action TEXT NOT NULL,
+            guild_id TEXT NOT NULL,
+            metadata TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS welcome_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT UNIQUE NOT NULL,
+            welcome_channel_id TEXT,
+            welcome_message TEXT,
+            auto_roles TEXT,
+            is_enabled INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS openaimessages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            msgid TEXT UNIQUE NOT NULL,
+            prompt TEXT,
+            instruction TEXT,
+            model TEXT,
+            tokeninput INTEGER,
+            tokenoutput INTEGER,
+            content TEXT,
+            previousmsgid TEXT,
+            rawdata TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS guild_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS grognement (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS user_captchas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            guild_id TEXT NOT NULL,
+            question TEXT NOT NULL,
+            answer TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            attempts INTEGER DEFAULT 0,
+            is_verified INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME,
+            verified_at DATETIME,
+            expired_at DATETIME,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, guild_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS captcha_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT UNIQUE NOT NULL,
+            channel_id TEXT,
+            verified_role_id TEXT,
+            timeout_minutes INTEGER DEFAULT 10,
+            max_attempts INTEGER DEFAULT 3,
+            is_enabled INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    `);
+    console.log('✅ Base de donnees SQLite initialisee avec succes (' + dbPath + ')');
+}
+
+initDb();
+
+function adaptQuery(sql) {
+    let cleanSql = sql;
+    cleanSql = cleanSql.replace(/::[a-zA-Z]+/g, '');
+    cleanSql = cleanSql.replace(/\$\d+/g, '?');
+    return cleanSql;
+}
+
+function queryDb(sql, params = []) {
+    const cleanSql = adaptQuery(sql);
+    const trimmed = cleanSql.trim().toUpperCase();
+    
+    if (trimmed.startsWith('SELECT') || trimmed.startsWith('WITH')) {
+        const stmt = db.prepare(cleanSql);
+        const rows = stmt.all(...params);
+        return { rows };
     } else {
-        console.log('✅ Connexion à PostgreSQL réussie');
-        console.log('📅 Date serveur:', res.rows[0].now);
+        const stmt = db.prepare(cleanSql);
+        if (cleanSql.toUpperCase().includes('RETURNING')) {
+            const rows = stmt.all(...params);
+            return { rows };
+        } else {
+            const info = stmt.run(...params);
+            return { rows: [{ id: info.lastInsertRowid }], changes: info.changes };
+        }
     }
-});
+}
+
+const pool = {
+    query: async (sql, params = []) => {
+        return queryDb(sql, params);
+    },
+    connect: async () => {
+        let inTx = false;
+        return {
+            query: async (sql, params = []) => {
+                const trimmed = sql.trim().toUpperCase();
+                if (trimmed === 'BEGIN') {
+                    db.exec('BEGIN TRANSACTION');
+                    inTx = true;
+                    return { rows: [] };
+                } else if (trimmed === 'COMMIT') {
+                    if (inTx) db.exec('COMMIT');
+                    inTx = false;
+                    return { rows: [] };
+                } else if (trimmed === 'ROLLBACK') {
+                    if (inTx) db.exec('ROLLBACK');
+                    inTx = false;
+                    return { rows: [] };
+                } else {
+                    return queryDb(sql, params);
+                }
+            },
+            release: () => {}
+        };
+    }
+};
 
 /**
  * Enregistrer un événement utilisateur
@@ -30,10 +273,9 @@ pool.query('SELECT NOW()', (err, res) => {
 async function logUserEvent(userId, username, eventType, eventData = {}) {
     const query = `
         INSERT INTO user_events (user_id, username, event_type, event_data)
-        VALUES ($1, $2, $3, $4)
+        VALUES (?, ?, ?, ?)
         RETURNING id, created_at
     `;
-    
     try {
         const result = await pool.query(query, [
             userId,
@@ -55,11 +297,10 @@ async function logUserEvent(userId, username, eventType, eventData = {}) {
 async function getUserEvents(userId, limit = 10) {
     const query = `
         SELECT * FROM user_events
-        WHERE user_id = $1
+        WHERE user_id = ?
         ORDER BY created_at DESC
-        LIMIT $2
+        LIMIT ?
     `;
-    
     try {
         const result = await pool.query(query, [userId, limit]);
         return result.rows;
@@ -75,10 +316,9 @@ async function getUserEvents(userId, limit = 10) {
 async function saveFormResponse(userId, username, formName, responses) {
     const query = `
         INSERT INTO form_responses (user_id, username, form_name, responses)
-        VALUES ($1, $2, $3, $4)
+        VALUES (?, ?, ?, ?)
         RETURNING id
     `;
-    
     try {
         const result = await pool.query(query, [
             userId,
@@ -107,7 +347,6 @@ async function getGlobalStats() {
         GROUP BY event_type
         ORDER BY count DESC
     `;
-    
     try {
         const result = await pool.query(query);
         return result.rows;
@@ -123,24 +362,18 @@ async function getGlobalStats() {
 async function setBirthday(userId, username, birthdate) {
     const query = `
         INSERT INTO user_birthdays (user_id, username, birthdate)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (user_id) 
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id) 
         DO UPDATE SET 
-            username = $2,
-            birthdate = $3,
+            username = excluded.username,
+            birthdate = excluded.birthdate,
             updated_at = CURRENT_TIMESTAMP
-        RETURNING id, birthdate, 
-            CASE 
-                WHEN user_birthdays.created_at = user_birthdays.updated_at 
-                THEN 'created' 
-                ELSE 'updated' 
-            END as action
+        RETURNING id, birthdate
     `;
-    
     try {
         const result = await pool.query(query, [userId, username, birthdate]);
-        console.log(`🎂 Date de naissance ${result.rows[0].action} pour ${username}`);
-        return result.rows[0];
+        console.log(`🎂 Date de naissance enregistrée pour ${username}`);
+        return { ...result.rows[0], action: 'saved' };
     } catch (error) {
         console.error('❌ Erreur lors de l\'enregistrement de la date de naissance:', error);
         throw error;
@@ -156,14 +389,13 @@ async function getBirthday(userId) {
             user_id,
             username,
             birthdate,
-            EXTRACT(YEAR FROM AGE(birthdate)) as age,
-            TO_CHAR(birthdate, 'DD/MM/YYYY') as formatted_date,
+            CAST((strftime('%Y', 'now') - strftime('%Y', birthdate)) AS INTEGER) as age,
+            strftime('%d/%m/%Y', birthdate) as formatted_date,
             created_at,
             updated_at
         FROM user_birthdays
-        WHERE user_id = $1
+        WHERE user_id = ?
     `;
-    
     try {
         const result = await pool.query(query, [userId]);
         return result.rows[0] || null;
@@ -179,10 +411,9 @@ async function getBirthday(userId) {
 async function deleteBirthday(userId) {
     const query = `
         DELETE FROM user_birthdays
-        WHERE user_id = $1
+        WHERE user_id = ?
         RETURNING username
     `;
-    
     try {
         const result = await pool.query(query, [userId]);
         if (result.rows.length > 0) {
@@ -205,13 +436,12 @@ async function getTodayBirthdays() {
             user_id,
             username,
             birthdate,
-            EXTRACT(YEAR FROM AGE(birthdate)) as age
+            CAST((strftime('%Y', 'now') - strftime('%Y', birthdate)) AS INTEGER) as age
         FROM user_birthdays
         WHERE 
-            EXTRACT(MONTH FROM birthdate) = EXTRACT(MONTH FROM CURRENT_DATE)
-            AND EXTRACT(DAY FROM birthdate) = EXTRACT(DAY FROM CURRENT_DATE)
+            strftime('%m', birthdate) = strftime('%m', 'now')
+            AND strftime('%d', birthdate) = strftime('%d', 'now')
     `;
-    
     try {
         const result = await pool.query(query);
         return result.rows;
@@ -225,89 +455,75 @@ async function getTodayBirthdays() {
  * Récupérer les prochains anniversaires (dans les N jours)
  */
 async function getUpcomingBirthdays(days = 7) {
-    const query = `
-        SELECT 
-            user_id,
-            username,
-            birthdate,
-            TO_CHAR(birthdate, 'DD/MM') as birthday_date,
-            EXTRACT(YEAR FROM AGE(birthdate)) as current_age,
-            CASE
-                WHEN EXTRACT(MONTH FROM birthdate) = EXTRACT(MONTH FROM CURRENT_DATE)
-                     AND EXTRACT(DAY FROM birthdate) >= EXTRACT(DAY FROM CURRENT_DATE)
-                THEN EXTRACT(DAY FROM birthdate) - EXTRACT(DAY FROM CURRENT_DATE)
-                WHEN EXTRACT(MONTH FROM birthdate) > EXTRACT(MONTH FROM CURRENT_DATE)
-                THEN DATE_PART('day', 
-                    (DATE_TRUNC('year', CURRENT_DATE) + 
-                     INTERVAL '1 year' * EXTRACT(MONTH FROM birthdate - 1) + 
-                     INTERVAL '1 day' * EXTRACT(DAY FROM birthdate - 1)) - CURRENT_DATE
-                )
-                ELSE DATE_PART('day',
-                    (DATE_TRUNC('year', CURRENT_DATE) + INTERVAL '1 year' +
-                     INTERVAL '1 month' * EXTRACT(MONTH FROM birthdate - 1) +
-                     INTERVAL '1 day' * EXTRACT(DAY FROM birthdate - 1)) - CURRENT_DATE
-                )
-            END as days_until
-        FROM user_birthdays
-        ORDER BY days_until ASC
-        LIMIT $1
-    `;
-    
     try {
-        const result = await pool.query(query, [days]);
-        return result.rows;
+        const result = await pool.query(`
+            SELECT 
+                user_id,
+                username,
+                birthdate,
+                strftime('%d/%m', birthdate) as birthday_date
+            FROM user_birthdays
+        `);
+        
+        const now = new Date();
+        const upcoming = result.rows.map(b => {
+            const bdate = new Date(b.birthdate);
+            let nextBirthday = new Date(now.getFullYear(), bdate.getMonth(), bdate.getDate());
+            if (nextBirthday < now) {
+                nextBirthday.setFullYear(now.getFullYear() + 1);
+            }
+            const diffTime = nextBirthday - now;
+            const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            let age = now.getFullYear() - bdate.getFullYear();
+            return {
+                ...b,
+                current_age: age,
+                days_until: daysUntil
+            };
+        })
+        .filter(b => b.days_until <= days)
+        .sort((a, b) => a.days_until - b.days_until);
+
+        return upcoming;
     } catch (error) {
         console.error('❌ Erreur lors de la récupération des anniversaires à venir:', error);
         throw error;
     }
 }
+
 // ============================================
 // FONCTIONS XP & LEVELS
 // ============================================
 
 const XP_CONFIG = require('./config/xp-config');
 
-/**
- * Calculer l'XP requis pour un niveau donné
- */
 function calculateXPForLevel(level) {
     return Math.floor(XP_CONFIG.LEVEL.BASE_XP * Math.pow(level, XP_CONFIG.LEVEL.MULTIPLIER));
 }
 
-/**
- * Calculer le niveau en fonction de l'XP total
- */
 function calculateLevel(totalXP) {
     let level = 1;
     let xpRequired = calculateXPForLevel(level);
-    
     while (totalXP >= xpRequired) {
         level++;
         xpRequired = calculateXPForLevel(level);
     }
-    
     return level - 1;
 }
 
-/**
- * Récupérer ou créer un utilisateur dans le système XP
- */
 async function getOrCreateUserXP(userId, username) {
-    const selectQuery = 'SELECT * FROM user_xp WHERE user_id = $1';
+    const selectQuery = 'SELECT * FROM user_xp WHERE user_id = ?';
     const insertQuery = `
         INSERT INTO user_xp (user_id, username, xp, level)
-        VALUES ($1, $2, 0, 1)
+        VALUES (?, ?, 0, 1)
         RETURNING *
     `;
-    
     try {
         let result = await pool.query(selectQuery, [userId]);
-        
         if (result.rows.length === 0) {
             result = await pool.query(insertQuery, [userId, username]);
             console.log(`✨ Nouvel utilisateur XP créé: ${username}`);
         }
-        
         return result.rows[0];
     } catch (error) {
         console.error('❌ Erreur getOrCreateUserXP:', error);
@@ -315,37 +531,27 @@ async function getOrCreateUserXP(userId, username) {
     }
 }
 
-/**
- * Ajouter de l'XP à un utilisateur
- */
 async function addXP(userId, username, xpAmount, xpType = 'message', description = null, metadata = {}) {
     const client = await pool.connect();
-    
     try {
         await client.query('BEGIN');
         
-        // Récupérer l'utilisateur
         let user = await getOrCreateUserXP(userId, username);
-        
-        // IMPORTANT : S'assurer que xpAmount est un nombre
         const xpToAdd = parseInt(xpAmount, 10);
-        
-        // Calculer le nouvel XP et niveau
-        const currentXP = parseInt(user.xp, 10) || 0;  // S'assurer que c'est un nombre
+        const currentXP = parseInt(user.xp, 10) || 0;
         const newTotalXP = currentXP + xpToAdd;
         const oldLevel = user.level;
         const newLevel = calculateLevel(newTotalXP);
         
-        // Mettre à jour l'utilisateur
         const updateQuery = `
             UPDATE user_xp 
-            SET xp = $1::BIGINT, 
-                level = $2, 
-                total_xp_earned = total_xp_earned + $3::BIGINT,
-                username = $4,
-                messages_count = CASE WHEN $5 = 'message' THEN messages_count + 1 ELSE messages_count END,
+            SET xp = ?, 
+                level = ?, 
+                total_xp_earned = total_xp_earned + ?,
+                username = ?,
+                messages_count = CASE WHEN ? = 'message' THEN messages_count + 1 ELSE messages_count END,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = $6
+            WHERE user_id = ?
             RETURNING *
         `;
         
@@ -358,10 +564,9 @@ async function addXP(userId, username, xpAmount, xpType = 'message', description
             userId
         ]);
         
-        // Enregistrer la transaction
         const transactionQuery = `
             INSERT INTO xp_transactions (user_id, username, xp_amount, xp_type, description, metadata)
-            VALUES ($1, $2, $3::INTEGER, $4, $5, $6)
+            VALUES (?, ?, ?, ?, ?, ?)
         `;
         
         await client.query(transactionQuery, [
@@ -394,14 +599,10 @@ async function addXP(userId, username, xpAmount, xpType = 'message', description
     }
 }
 
-/**
- * Ajouter de l'XP pour un message (avec cooldown)
- */
 async function addMessageXP(userId, username) {
     try {
         const user = await getOrCreateUserXP(userId, username);
         
-        // Vérifier le cooldown
         if (user.last_message_xp) {
             const lastXP = new Date(user.last_message_xp);
             const now = new Date();
@@ -412,20 +613,16 @@ async function addMessageXP(userId, username) {
             }
         }
         
-        // Calculer l'XP aléatoire
         const xpAmount = Math.floor(
             Math.random() * (XP_CONFIG.MESSAGE_XP.MAX - XP_CONFIG.MESSAGE_XP.MIN + 1)
         ) + XP_CONFIG.MESSAGE_XP.MIN;
         
-        // Mettre à jour le timestamp du dernier message XP
         await pool.query(
-            'UPDATE user_xp SET last_message_xp = CURRENT_TIMESTAMP WHERE user_id = $1',
+            'UPDATE user_xp SET last_message_xp = CURRENT_TIMESTAMP WHERE user_id = ?',
             [userId]
         );
         
-        // Ajouter l'XP
         const result = await addXP(userId, username, xpAmount, 'message', 'Message XP');
-        
         return { success: true, ...result };
         
     } catch (error) {
@@ -434,16 +631,12 @@ async function addMessageXP(userId, username) {
     }
 }
 
-/**
- * Démarrer une session vocale
- */
 async function startVoiceSession(userId, username, channelId, channelName) {
     const query = `
         INSERT INTO voice_sessions (user_id, username, channel_id, channel_name, join_time)
-        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
         RETURNING id
     `;
-    
     try {
         const result = await pool.query(query, [userId, username, channelId, channelName]);
         console.log(`🎤 ${username} a rejoint le vocal ${channelName}`);
@@ -454,52 +647,19 @@ async function startVoiceSession(userId, username, channelId, channelName) {
     }
 }
 
-/**
- * Récupérer ou créer un utilisateur dans le système XP
- */
-async function getOrCreateUserXP(userId, username) {
-    const selectQuery = 'SELECT * FROM user_xp WHERE user_id = $1';
-    const insertQuery = `
-        INSERT INTO user_xp (user_id, username, xp, level)
-        VALUES ($1, $2, 0::BIGINT, 1)
-        RETURNING *
-    `;
-    
-    try {
-        let result = await pool.query(selectQuery, [userId]);
-        
-        if (result.rows.length === 0) {
-            result = await pool.query(insertQuery, [userId, username]);
-            console.log(`✨ Nouvel utilisateur XP créé: ${username}`);
-        }
-        
-        return result.rows[0];
-    } catch (error) {
-        console.error('❌ Erreur getOrCreateUserXP:', error);
-        throw error;
-    }
-}
-
-
-/**
- * Terminer une session vocale et donner l'XP
- */
 async function endVoiceSession(userId, username) {
     const client = await pool.connect();
-    
     try {
         await client.query('BEGIN');
         
-        // Trouver la session active
         const findQuery = `
             SELECT * FROM voice_sessions 
-            WHERE user_id = $1 AND leave_time IS NULL
+            WHERE user_id = ? AND leave_time IS NULL
             ORDER BY join_time DESC
             LIMIT 1
         `;
         
         const session = await client.query(findQuery, [userId]);
-        
         if (session.rows.length === 0) {
             await client.query('ROLLBACK');
             return null;
@@ -509,22 +669,18 @@ async function endVoiceSession(userId, username) {
         const joinTime = new Date(sessionData.join_time);
         const leaveTime = new Date();
         const durationMinutes = Math.floor((leaveTime - joinTime) / (1000 * 60));
-        
-        // Calculer l'XP gagné
         const xpEarned = durationMinutes * XP_CONFIG.VOICE_XP.PER_MINUTE;
         
-        // Mettre à jour la session
         const updateQuery = `
             UPDATE voice_sessions 
             SET leave_time = CURRENT_TIMESTAMP,
-                duration_minutes = $1,
-                xp_earned = $2
-            WHERE id = $3
+                duration_minutes = ?,
+                xp_earned = ?
+            WHERE id = ?
         `;
         
         await client.query(updateQuery, [durationMinutes, xpEarned, sessionData.id]);
         
-        // Ajouter l'XP si la durée est suffisante
         if (durationMinutes >= XP_CONFIG.VOICE_XP.MIN_DURATION && xpEarned > 0) {
             await addXP(
                 userId,
@@ -535,9 +691,8 @@ async function endVoiceSession(userId, username) {
                 { channel: sessionData.channel_name, duration: durationMinutes }
             );
             
-            // Mettre à jour le compteur de minutes vocales
             await client.query(
-                'UPDATE user_xp SET voice_minutes = voice_minutes + $1 WHERE user_id = $2',
+                'UPDATE user_xp SET voice_minutes = voice_minutes + ? WHERE user_id = ?',
                 [durationMinutes, userId]
             );
         }
@@ -561,13 +716,9 @@ async function endVoiceSession(userId, username) {
     }
 }
 
-/**
- * Récupérer les informations XP d'un utilisateur
- */
 async function getUserXPInfo(userId) {
     try {
         const user = await getOrCreateUserXP(userId, 'Unknown');
-        
         const currentLevel = user.level;
         const currentXP = user.xp;
         const xpForCurrentLevel = calculateXPForLevel(currentLevel);
@@ -592,9 +743,6 @@ async function getUserXPInfo(userId) {
     }
 }
 
-/**
- * Récupérer le leaderboard
- */
 async function getLeaderboard(limit = 10) {
     const query = `
         SELECT 
@@ -608,9 +756,8 @@ async function getLeaderboard(limit = 10) {
             ROW_NUMBER() OVER (ORDER BY xp DESC) as rank
         FROM user_xp
         ORDER BY xp DESC
-        LIMIT $1
+        LIMIT ?
     `;
-    
     try {
         const result = await pool.query(query, [limit]);
         return result.rows;
@@ -620,9 +767,6 @@ async function getLeaderboard(limit = 10) {
     }
 }
 
-/**
- * Récupérer le rang d'un utilisateur
- */
 async function getUserRank(userId) {
     const query = `
         WITH ranked_users AS (
@@ -631,9 +775,8 @@ async function getUserRank(userId) {
                 ROW_NUMBER() OVER (ORDER BY xp DESC) as rank
             FROM user_xp
         )
-        SELECT rank FROM ranked_users WHERE user_id = $1
+        SELECT rank FROM ranked_users WHERE user_id = ?
     `;
-    
     try {
         const result = await pool.query(query, [userId]);
         return result.rows[0]?.rank || null;
@@ -643,16 +786,12 @@ async function getUserRank(userId) {
     }
 }
 
-/**
- * Créer un événement
- */
 async function createEvent(eventName, eventDescription, eventDate, xpReward, createdBy) {
     const query = `
         INSERT INTO events (event_name, event_description, event_date, xp_reward, created_by)
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES (?, ?, ?, ?, ?)
         RETURNING *
     `;
-    
     try {
         const result = await pool.query(query, [eventName, eventDescription, eventDate, xpReward, createdBy]);
         console.log(`🎉 Événement créé: ${eventName}`);
@@ -663,17 +802,12 @@ async function createEvent(eventName, eventDescription, eventDate, xpReward, cre
     }
 }
 
-/**
- * Ajouter un participant à un événement
- */
 async function addEventParticipant(eventId, userId, username) {
     const client = await pool.connect();
-    
     try {
         await client.query('BEGIN');
         
-        // Récupérer l'événement
-        const eventQuery = 'SELECT * FROM events WHERE id = $1 AND is_active = true';
+        const eventQuery = 'SELECT * FROM events WHERE id = ? AND is_active = 1';
         const event = await client.query(eventQuery, [eventId]);
         
         if (event.rows.length === 0) {
@@ -682,11 +816,10 @@ async function addEventParticipant(eventId, userId, username) {
         
         const eventData = event.rows[0];
         
-        // Ajouter le participant
         const participantQuery = `
             INSERT INTO event_participants (event_id, user_id, username, xp_earned)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (event_id, user_id) DO NOTHING
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(event_id, user_id) DO NOTHING
             RETURNING *
         `;
         
@@ -698,7 +831,6 @@ async function addEventParticipant(eventId, userId, username) {
         ]);
         
         if (participant.rows.length > 0) {
-            // Donner l'XP
             await addXP(
                 userId,
                 username,
@@ -708,21 +840,18 @@ async function addEventParticipant(eventId, userId, username) {
                 { event_id: eventId, event_name: eventData.event_name }
             );
             
-            // Incrémenter le compteur d'événements
             await client.query(
-                'UPDATE user_xp SET events_participated = events_participated + 1 WHERE user_id = $1',
+                'UPDATE user_xp SET events_participated = events_participated + 1 WHERE user_id = ?',
                 [userId]
             );
         }
         
         await client.query('COMMIT');
-        
         return {
             success: participant.rows.length > 0,
             xpEarned: eventData.xp_reward,
             eventName: eventData.event_name
         };
-        
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('❌ Erreur addEventParticipant:', error);
@@ -736,36 +865,24 @@ async function addEventParticipant(eventId, userId, username) {
 // FONCTIONS GESTION DES MEMBRES
 // ============================================
 
-/**
- * Enregistrer un nouveau membre
- */
 async function registerNewMember(member) {
     const query = `
         INSERT INTO server_members (
-            user_id,
-            username,
-            discriminator,
-            tag,
-            display_name,
-            avatar_url,
-            joined_at,
-            account_created_at,
-            is_bot
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (user_id) 
+            user_id, username, discriminator, tag, display_name, avatar_url, joined_at, account_created_at, is_bot
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) 
         DO UPDATE SET
-            username = $2,
-            discriminator = $3,
-            tag = $4,
-            display_name = $5,
-            avatar_url = $6,
+            username = excluded.username,
+            discriminator = excluded.discriminator,
+            tag = excluded.tag,
+            display_name = excluded.display_name,
+            avatar_url = excluded.avatar_url,
             rejoin_count = server_members.rejoin_count + 1,
-            joined_at = $7,
+            joined_at = excluded.joined_at,
             left_at = NULL,
             updated_at = CURRENT_TIMESTAMP
         RETURNING *
     `;
-    
     try {
         const result = await pool.query(query, [
             member.id,
@@ -776,28 +893,22 @@ async function registerNewMember(member) {
             member.user.displayAvatarURL({ size: 512 }),
             member.joinedAt,
             member.user.createdAt,
-            member.user.bot
+            member.user.bot ? 1 : 0
         ]);
-        
         console.log(`👤 Membre enregistré: ${member.user.tag}`);
         return result.rows[0];
-        
     } catch (error) {
         console.error('❌ Erreur registerNewMember:', error);
         throw error;
     }
 }
 
-/**
- * Enregistrer un événement membre (arrivée, départ, etc.)
- */
 async function logMemberEvent(userId, username, action, guildId, metadata = {}) {
     const query = `
         INSERT INTO member_history (user_id, username, action, guild_id, metadata)
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES (?, ?, ?, ?, ?)
         RETURNING *
     `;
-    
     try {
         const result = await pool.query(query, [
             userId,
@@ -806,58 +917,45 @@ async function logMemberEvent(userId, username, action, guildId, metadata = {}) 
             guildId,
             JSON.stringify(metadata)
         ]);
-        
         console.log(`📝 Événement membre: ${username} - ${action}`);
         return result.rows[0];
-        
     } catch (error) {
         console.error('❌ Erreur logMemberEvent:', error);
         throw error;
     }
 }
 
-/**
- * Mettre à jour les rôles d'un membre
- */
 async function updateMemberRoles(userId, roles) {
     const rolesArray = roles.map(role => ({
         id: role.id,
         name: role.name,
         color: role.hexColor
     }));
-    
     const query = `
         UPDATE server_members 
-        SET roles = $1, updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = $2
+        SET roles = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ?
         RETURNING *
     `;
-    
     try {
         const result = await pool.query(query, [
             JSON.stringify(rolesArray),
             userId
         ]);
-        
         return result.rows[0];
-        
     } catch (error) {
         console.error('❌ Erreur updateMemberRoles:', error);
         throw error;
     }
 }
 
-/**
- * Marquer un membre comme parti
- */
 async function markMemberLeft(userId) {
     const query = `
         UPDATE server_members 
         SET left_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = $1
+        WHERE user_id = ?
         RETURNING *
     `;
-    
     try {
         const result = await pool.query(query, [userId]);
         return result.rows[0];
@@ -867,14 +965,8 @@ async function markMemberLeft(userId) {
     }
 }
 
-/**
- * Récupérer les informations d'un membre
- */
 async function getMemberInfo(userId) {
-    const query = `
-        SELECT * FROM server_members WHERE user_id = $1
-    `;
-    
+    const query = `SELECT * FROM server_members WHERE user_id = ?`;
     try {
         const result = await pool.query(query, [userId]);
         return result.rows[0] || null;
@@ -884,17 +976,13 @@ async function getMemberInfo(userId) {
     }
 }
 
-/**
- * Récupérer les derniers membres arrivés
- */
 async function getRecentMembers(limit = 10) {
     const query = `
         SELECT * FROM server_members 
         WHERE left_at IS NULL
         ORDER BY joined_at DESC 
-        LIMIT $1
+        LIMIT ?
     `;
-    
     try {
         const result = await pool.query(query, [limit]);
         return result.rows;
@@ -904,17 +992,13 @@ async function getRecentMembers(limit = 10) {
     }
 }
 
-/**
- * Récupérer l'historique d'un membre
- */
 async function getMemberHistory(userId, limit = 20) {
     const query = `
         SELECT * FROM member_history 
-        WHERE user_id = $1 
+        WHERE user_id = ? 
         ORDER BY created_at DESC 
-        LIMIT $2
+        LIMIT ?
     `;
-    
     try {
         const result = await pool.query(query, [userId, limit]);
         return result.rows;
@@ -924,14 +1008,8 @@ async function getMemberHistory(userId, limit = 20) {
     }
 }
 
-/**
- * Récupérer la configuration d'accueil
- */
 async function getWelcomeConfig(guildId) {
-    const query = `
-        SELECT * FROM welcome_config WHERE guild_id = $1
-    `;
-    
+    const query = `SELECT * FROM welcome_config WHERE guild_id = ?`;
     try {
         const result = await pool.query(query, [guildId]);
         return result.rows[0] || null;
@@ -941,73 +1019,53 @@ async function getWelcomeConfig(guildId) {
     }
 }
 
-/**
- * Sauvegarder la configuration d'accueil
- */
 async function saveWelcomeConfig(guildId, config) {
     const query = `
         INSERT INTO welcome_config (guild_id, welcome_channel_id, welcome_message, auto_roles, is_enabled)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (guild_id) 
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) 
         DO UPDATE SET
-            welcome_channel_id = $2,
-            welcome_message = $3,
-            auto_roles = $4,
-            is_enabled = $5,
+            welcome_channel_id = excluded.welcome_channel_id,
+            welcome_message = excluded.welcome_message,
+            auto_roles = excluded.auto_roles,
+            is_enabled = excluded.is_enabled,
             updated_at = CURRENT_TIMESTAMP
         RETURNING *
     `;
-    
     try {
         const result = await pool.query(query, [
             guildId,
             config.channelId,
             config.message,
             JSON.stringify(config.autoRoles),
-            config.enabled
+            config.enabled ? 1 : 0
         ]);
-        
         console.log(`⚙️ Configuration d'accueil mise à jour pour le serveur ${guildId}`);
         return result.rows[0];
-        
     } catch (error) {
         console.error('❌ Erreur saveWelcomeConfig:', error);
         throw error;
     }
 }
 
-
-/**
- * Function de sauvegarde des messages OpenIA
- */
-async function saveOpenAIMessage(config){
+async function saveOpenAIMessage(config) {
     const query = `
         INSERT INTO openaimessages (
-            msgid,
-            prompt,
-            instruction,
-            model,
-            tokeninput,
-            tokenoutput,
-            content,
-            previousmsgid,
-            created_at,
-            rawdata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP,$9)
-        ON CONFLICT (msgid) 
+            msgid, prompt, instruction, model, tokeninput, tokenoutput, content, previousmsgid, created_at, rawdata
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+        ON CONFLICT(msgid) 
         DO UPDATE SET
-            prompt = $2,
-            instruction = $3,
-            model = $4,
-            tokeninput = $5,
-            tokenoutput = $6,
-            content = $7,
-            previousmsgid = $8,
+            prompt = excluded.prompt,
+            instruction = excluded.instruction,
+            model = excluded.model,
+            tokeninput = excluded.tokeninput,
+            tokenoutput = excluded.tokenoutput,
+            content = excluded.content,
+            previousmsgid = excluded.previousmsgid,
             updated_at = CURRENT_TIMESTAMP,
-            rawdata = $9
+            rawdata = excluded.rawdata
         RETURNING *
     `;
-    
     try {
         const result = await pool.query(query, [
             config.msgid,
@@ -1020,142 +1078,106 @@ async function saveOpenAIMessage(config){
             config.previousmsgid || '',
             config.rawData
         ]);
-        
         console.log(`👤 Call OpenAI registered: ${config.msgid}`);
         return result.rows[0];
-        
     } catch (error) {
         console.error('❌ Erreur save callOpenAI:', error);
         throw error;
     }
 }
 
-async function getLastOpenAIMessageId(){
+async function getLastOpenAIMessageId() {
     const query = `
         SELECT msgid
-            FROM openaimessages
-            ORDER BY created_at DESC
-            LIMIT 1;
-        `
+        FROM openaimessages
+        ORDER BY created_at DESC
+        LIMIT 1
+    `;
     try {
-        const result = await pool.query(query)
-        return result.rows[0]['msgid']
+        const result = await pool.query(query);
+        return result.rows[0] ? result.rows[0]['msgid'] : 0;
     } catch (error) {
         console.error('❌ Erreur get Last openAiMessage:', error);
         throw error;
     }
-    return 0;
 }
 
-async function getMemberForGrognement(){
+async function getMemberForGrognement() {
     const query = `
-                SELECT user_id
-            FROM guild_members gm
-            WHERE NOT EXISTS (
-                SELECT user_id
-                FROM grognement gr
-                WHERE gm.user_id = gr.user_id
-            )
+        SELECT user_id
+        FROM guild_members gm
+        WHERE NOT EXISTS (
+            SELECT user_id
+            FROM grognement gr
+            WHERE gm.user_id = gr.user_id
+        )
         ORDER BY RANDOM()  
-        LIMIT 1            
-        `
+        LIMIT 1
+    `;
     try {
-        const result = await pool.query(query)
-        return result.rows[0]['user_id']
+        const result = await pool.query(query);
+        return result.rows[0] ? result.rows[0]['user_id'] : 0;
     } catch (error) {
-        console.error('❌ Erreur get Last openAiMessage:', error);
+        console.error('❌ Erreur getMemberForGrognement:', error);
         throw error;
     }
-    return 0;
 }
 
-async function addGuildMember(user){
-       const query = `
-        INSERT INTO guild_members (
-            user_id,
-            username
-        ) VALUES ($1, $2)
-        ON CONFLICT (user_id) 
-        DO UPDATE SET
-            username = $2
+async function addGuildMember(user) {
+    const query = `
+        INSERT INTO guild_members (user_id, username)
+        VALUES (?, ?)
+        ON CONFLICT(user_id) 
+        DO UPDATE SET username = excluded.username
         RETURNING *
     `;
-    
     try {
-        const result = await pool.query(query, [
-            user.id,
-            user.name
-        ]);
-        
+        const result = await pool.query(query, [user.id, user.name]);
         return result.rows[0];
-        
     } catch (error) {
-        console.error('❌ Erreur save callOpenAI:', error);
+        console.error('❌ Erreur addGuildMember:', error);
         throw error;
-    } 
+    }
 }
 
-async function addGrognement(user){
-           const query = `
-        INSERT INTO grognement (
-            user_id,
-            username
-        ) VALUES ($1, $2)
-        ON CONFLICT (user_id) 
-        DO UPDATE SET
-            username = $2
+async function addGrognement(user) {
+    const query = `
+        INSERT INTO grognement (user_id, username)
+        VALUES (?, ?)
+        ON CONFLICT(user_id) 
+        DO UPDATE SET username = excluded.username
         RETURNING *
     `;
-    
     try {
-        const result = await pool.query(query, [
-            user.id,
-            user.name
-        ]);
-        
+        const result = await pool.query(query, [user.id, user.name]);
         return result.rows[0];
-        
     } catch (error) {
-        console.error('❌ Erreur save callOpenAI:', error);
+        console.error('❌ Erreur addGrognement:', error);
         throw error;
-    } 
-
+    }
 }
 
 // ============================================
 // FONCTIONS CAPTCHA
 // ============================================
 
-/**
- * Créer un nouveau captcha pour un utilisateur
- */
 async function createCaptcha(userId, username, guildId, question, answer, channelId, timeoutMinutes = 10) {
     const query = `
         INSERT INTO user_captchas (
-            user_id,
-            username,
-            guild_id,
-            question,
-            answer,
-            channel_id,
-            attempts,
-            created_at,
-            expires_at,
-            is_verified
-        ) VALUES ($1, $2, $3, $4, $5, $6, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + ($7 * INTERVAL '1 minute'), false)
-        ON CONFLICT (user_id, guild_id) 
+            user_id, username, guild_id, question, answer, channel_id, attempts, created_at, expires_at, is_verified
+        ) VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, datetime('now', '+' || ? || ' minutes'), 0)
+        ON CONFLICT(user_id, guild_id) 
         DO UPDATE SET
-            question = $4,
-            answer = $5,
-            channel_id = $6,
+            question = excluded.question,
+            answer = excluded.answer,
+            channel_id = excluded.channel_id,
             attempts = 0,
             created_at = CURRENT_TIMESTAMP,
-            expires_at = CURRENT_TIMESTAMP + ($7 * INTERVAL '1 minute'),
-            is_verified = false,
+            expires_at = excluded.expires_at,
+            is_verified = 0,
             updated_at = CURRENT_TIMESTAMP
         RETURNING *
     `;
-    
     try {
         const result = await pool.query(query, [
             userId,
@@ -1166,28 +1188,22 @@ async function createCaptcha(userId, username, guildId, question, answer, channe
             channelId,
             timeoutMinutes
         ]);
-        
         console.log(`🔒 Captcha créé pour ${username} (${userId}) dans le serveur ${guildId}`);
         return result.rows[0];
-        
     } catch (error) {
         console.error('❌ Erreur createCaptcha:', error);
         throw error;
     }
 }
 
-/**
- * Récupérer le captcha d'un utilisateur
- */
 async function getUserCaptcha(userId, guildId) {
     const query = `
         SELECT * FROM user_captchas 
-        WHERE user_id = $1 AND guild_id = $2 
-        AND (is_verified = false OR expires_at > CURRENT_TIMESTAMP)
+        WHERE user_id = ? AND guild_id = ? 
+        AND (is_verified = 0 OR expires_at > CURRENT_TIMESTAMP)
         ORDER BY created_at DESC
         LIMIT 1
     `;
-    
     try {
         const result = await pool.query(query, [userId, guildId]);
         return result.rows[0] || null;
@@ -1197,80 +1213,61 @@ async function getUserCaptcha(userId, guildId) {
     }
 }
 
-/**
- * Vérifier la réponse au captcha
- */
 async function verifyCaptchaAnswer(userId, guildId, userAnswer) {
     const client = await pool.connect();
-    
     try {
         await client.query('BEGIN');
         
-        // Récupérer le captcha
         const captcha = await getUserCaptcha(userId, guildId);
-        
         if (!captcha) {
             await client.query('ROLLBACK');
             return { success: false, reason: 'no_captcha_found' };
         }
         
-        // Vérifier si déjà vérifié
         if (captcha.is_verified) {
             await client.query('ROLLBACK');
             return { success: false, reason: 'already_verified' };
         }
         
-        // Vérifier si expiré
         if (new Date(captcha.expires_at) < new Date()) {
             await client.query('ROLLBACK');
             return { success: false, reason: 'expired' };
         }
         
-        // Vérifier la réponse
         const correctAnswer = parseInt(captcha.answer, 10);
         const userAnswerInt = parseInt(userAnswer, 10);
         
         if (userAnswerInt === correctAnswer) {
-            // Réponse correcte
             const updateQuery = `
                 UPDATE user_captchas 
-                SET is_verified = true, 
+                SET is_verified = 1, 
                     verified_at = CURRENT_TIMESTAMP,
                     attempts = attempts + 1,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1
+                WHERE id = ?
                 RETURNING *
             `;
-            
             const result = await client.query(updateQuery, [captcha.id]);
             await client.query('COMMIT');
-            
             console.log(`✅ Captcha validé pour ${captcha.username} (${userId})`);
             return { success: true, captcha: result.rows[0] };
         } else {
-            // Réponse incorrecte
             const newAttempts = captcha.attempts + 1;
-            
             const updateQuery = `
                 UPDATE user_captchas 
-                SET attempts = $1,
+                SET attempts = ?,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = $2
+                WHERE id = ?
                 RETURNING *
             `;
-            
-            const result = await client.query(updateQuery, [newAttempts, captcha.id]);
+            await client.query(updateQuery, [newAttempts, captcha.id]);
             await client.query('COMMIT');
-            
             console.log(`❌ Captcha échoué pour ${captcha.username} (${userId}) - Tentative ${newAttempts}`);
-            
             if (newAttempts >= 3) {
                 return { success: false, reason: 'max_attempts_reached', attempts: newAttempts };
             }
-            
             return { success: false, reason: 'wrong_answer', attempts: newAttempts };
         }
-        
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('❌ Erreur verifyCaptchaAnswer:', error);
@@ -1280,25 +1277,17 @@ async function verifyCaptchaAnswer(userId, guildId, userAnswer) {
     }
 }
 
-/**
- * Marquer un captcha comme expiré et optionnellement incrémenter les tentatives
- */
 async function expireCaptcha(userId, guildId, incrementAttempts = false) {
     const client = await pool.connect();
-    
     try {
         await client.query('BEGIN');
-        
         let result;
-        
         if (incrementAttempts) {
-            // Incrémenter les tentatives et vérifier si max atteint
             const captchaQuery = `
                 SELECT attempts FROM user_captchas 
-                WHERE user_id = $1 AND guild_id = $2 AND is_verified = false
+                WHERE user_id = ? AND guild_id = ? AND is_verified = 0
             `;
             const captcha = await client.query(captchaQuery, [userId, guildId]);
-            
             if (captcha.rows.length > 0) {
                 const currentAttempts = captcha.rows[0].attempts;
                 const newAttempts = currentAttempts + 1;
@@ -1306,18 +1295,15 @@ async function expireCaptcha(userId, guildId, incrementAttempts = false) {
                 
                 const updateQuery = `
                     UPDATE user_captchas 
-                    SET is_verified = false,
-                        attempts = $1,
+                    SET is_verified = 0,
+                        attempts = ?,
                         expired_at = CURRENT_TIMESTAMP,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE user_id = $2 AND guild_id = $3 AND is_verified = false
+                    WHERE user_id = ? AND guild_id = ? AND is_verified = 0
                     RETURNING *
                 `;
-                
                 result = await client.query(updateQuery, [newAttempts, userId, guildId]);
-                
                 await client.query('COMMIT');
-                
                 if (result.rows.length > 0) {
                     console.log(`⏰ Captcha expiré pour ${result.rows[0].username} (${userId}) - Tentatives: ${newAttempts}/${maxAttempts}`);
                     return { captcha: result.rows[0], shouldKick: newAttempts >= maxAttempts };
@@ -1326,23 +1312,19 @@ async function expireCaptcha(userId, guildId, incrementAttempts = false) {
         } else {
             const query = `
                 UPDATE user_captchas 
-                SET is_verified = false,
+                SET is_verified = 0,
                     expired_at = CURRENT_TIMESTAMP,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = $1 AND guild_id = $2 AND is_verified = false
+                WHERE user_id = ? AND guild_id = ? AND is_verified = 0
                 RETURNING *
             `;
-            
             result = await client.query(query, [userId, guildId]);
             await client.query('COMMIT');
-            
             if (result.rows.length > 0) {
                 console.log(`⏰ Captcha expiré pour ${result.rows[0].username} (${userId})`);
             }
         }
-        
         return { captcha: result?.rows[0] || null, shouldKick: false };
-        
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('❌ Erreur expireCaptcha:', error);
@@ -1352,37 +1334,29 @@ async function expireCaptcha(userId, guildId, incrementAttempts = false) {
     }
 }
 
-/**
- * Vérifier si un utilisateur est vérifié (a passé le captcha)
- */
 async function isUserVerified(userId, guildId) {
     const query = `
         SELECT is_verified FROM user_captchas 
-        WHERE user_id = $1 AND guild_id = $2 
+        WHERE user_id = ? AND guild_id = ? 
         AND expires_at > CURRENT_TIMESTAMP
         ORDER BY created_at DESC
         LIMIT 1
     `;
-    
     try {
         const result = await pool.query(query, [userId, guildId]);
-        return result.rows[0]?.is_verified || false;
+        return Boolean(result.rows[0]?.is_verified);
     } catch (error) {
         console.error('❌ Erreur isUserVerified:', error);
         throw error;
     }
 }
 
-/**
- * Supprimer un captcha
- */
 async function deleteCaptcha(userId, guildId) {
     const query = `
         DELETE FROM user_captchas 
-        WHERE user_id = $1 AND guild_id = $2
+        WHERE user_id = ? AND guild_id = ?
         RETURNING *
     `;
-    
     try {
         const result = await pool.query(query, [userId, guildId]);
         return result.rows[0] || null;
@@ -1392,32 +1366,21 @@ async function deleteCaptcha(userId, guildId) {
     }
 }
 
-/**
- * Sauvegarder la configuration du captcha pour un serveur
- */
 async function saveCaptchaConfig(guildId, config) {
     const query = `
         INSERT INTO captcha_config (
-            guild_id,
-            channel_id,
-            verified_role_id,
-            timeout_minutes,
-            max_attempts,
-            is_enabled,
-            created_at,
-            updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        ON CONFLICT (guild_id) 
+            guild_id, channel_id, verified_role_id, timeout_minutes, max_attempts, is_enabled, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(guild_id) 
         DO UPDATE SET
-            channel_id = $2,
-            verified_role_id = $3,
-            timeout_minutes = $4,
-            max_attempts = $5,
-            is_enabled = $6,
+            channel_id = excluded.channel_id,
+            verified_role_id = excluded.verified_role_id,
+            timeout_minutes = excluded.timeout_minutes,
+            max_attempts = excluded.max_attempts,
+            is_enabled = excluded.is_enabled,
             updated_at = CURRENT_TIMESTAMP
         RETURNING *
     `;
-    
     try {
         const result = await pool.query(query, [
             guildId,
@@ -1425,26 +1388,18 @@ async function saveCaptchaConfig(guildId, config) {
             config.verifiedRoleId,
             config.timeoutMinutes,
             config.maxAttempts,
-            config.isEnabled
+            config.isEnabled ? 1 : 0
         ]);
-        
         console.log(`⚙️ Configuration captcha mise à jour pour le serveur ${guildId}`);
         return result.rows[0];
-        
     } catch (error) {
         console.error('❌ Erreur saveCaptchaConfig:', error);
         throw error;
     }
 }
 
-/**
- * Récupérer la configuration du captcha pour un serveur
- */
 async function getCaptchaConfig(guildId) {
-    const query = `
-        SELECT * FROM captcha_config WHERE guild_id = $1
-    `;
-    
+    const query = `SELECT * FROM captcha_config WHERE guild_id = ?`;
     try {
         const result = await pool.query(query, [guildId]);
         return result.rows[0] || null;
@@ -1491,7 +1446,6 @@ module.exports = {
     addGuildMember,
     addGrognement,
     getMemberForGrognement,
-    // Fonctions Captcha
     createCaptcha,
     getUserCaptcha,
     verifyCaptchaAnswer,
