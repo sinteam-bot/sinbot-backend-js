@@ -204,6 +204,17 @@ function initDb() {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS bump_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            user_id TEXT,
+            username TEXT,
+            bumped_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            reminder_sent INTEGER DEFAULT 0,
+            reminder_sent_at DATETIME
+        );
     `);
     console.log('✅ Base de donnees SQLite initialisee avec succes (' + dbPath + ')');
 }
@@ -1409,6 +1420,74 @@ async function getCaptchaConfig(guildId) {
     }
 }
 
+// ============================================
+// FONCTIONS BUMP LOGS
+// ============================================
+
+async function saveBump(guildId, channelId, userId = null, username = null) {
+    const query = `
+        INSERT INTO bump_logs (guild_id, channel_id, user_id, username, bumped_at, reminder_sent)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 0)
+        RETURNING *
+    `;
+    try {
+        const result = await pool.query(query, [guildId, channelId, userId, username]);
+        console.log(`📌 Bump enregistré en BDD pour le serveur ${guildId} par ${username || userId || 'inconnu'}`);
+        return result.rows[0];
+    } catch (error) {
+        console.error('❌ Erreur saveBump:', error);
+        throw error;
+    }
+}
+
+async function getPendingBumpReminders() {
+    const query = `
+        SELECT * FROM bump_logs
+        WHERE reminder_sent = 0
+          AND (strftime('%s', 'now') - strftime('%s', bumped_at)) >= 7200
+        ORDER BY bumped_at ASC
+    `;
+    try {
+        const result = await pool.query(query);
+        return result.rows;
+    } catch (error) {
+        console.error('❌ Erreur getPendingBumpReminders:', error);
+        throw error;
+    }
+}
+
+async function markBumpReminderSent(bumpId) {
+    const query = `
+        UPDATE bump_logs
+        SET reminder_sent = 1, reminder_sent_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        RETURNING *
+    `;
+    try {
+        const result = await pool.query(query, [bumpId]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('❌ Erreur markBumpReminderSent:', error);
+        throw error;
+    }
+}
+
+async function getLastBump(guildId) {
+    const query = `
+        SELECT * FROM bump_logs
+        WHERE guild_id = ?
+        ORDER BY bumped_at DESC
+        LIMIT 1
+    `;
+    try {
+        const result = await pool.query(query, [guildId]);
+        return result.rows[0] || null;
+    } catch (error) {
+        console.error('❌ Erreur getLastBump:', error);
+        throw error;
+    }
+}
+
 module.exports = {
     pool,
     logUserEvent,
@@ -1453,5 +1532,10 @@ module.exports = {
     isUserVerified,
     deleteCaptcha,
     saveCaptchaConfig,
-    getCaptchaConfig
+    getCaptchaConfig,
+    // Fonctions Bump
+    saveBump,
+    getPendingBumpReminders,
+    markBumpReminderSent,
+    getLastBump
 };
