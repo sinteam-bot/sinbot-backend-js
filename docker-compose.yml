@@ -28,6 +28,10 @@ services:
       OPENAI_MODEL: "gpt-4o-mini"
       OPENAI_MAX_TOKENS: 500
       OPENAI_TEMPERATURE: 0.7
+
+      # Configuration OpenRouter (Optionnel si vous utilisez OpenRouter)
+      OPENROUTER_API_KEY: "votre_cle_openrouter_ici"
+      OPENROUTER_MODEL: "openai/gpt-oss-20b:free"
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,7 +52,7 @@ services:
       # Initialisation automatique des tables SQL au premier lancement
       - ./src/database/captcha-tables.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d discord_bot"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d discord_bot" ]
       interval: 5s
       timeout: 5s
       retries: 5
