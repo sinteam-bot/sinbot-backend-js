@@ -203,7 +203,7 @@ async function runDailyMessageTest() {
         console.log(`   Bot: ${client.user.tag} (${client.user.id})`);
         console.log(`   Serveur: ${guild.name} (${guild.id})`);
         console.log(`   Channel: #${channel.name} (${channel.id})`);
-        console.log(`   Total tokens: ${promptResponse.usage.totalTokens + messageResponse.usage.totalTokens}`);
+        console.log(`   Total tokens: ${promptResponse.usage.totalTokens + messageResponse.usage.totalTokens} (input: ${promptResponse.usage.promptTokens + messageResponse.usage.promptTokens}, output: ${promptResponse.usage.completionTokens + messageResponse.usage.completionTokens})`);
         console.log(`   Modèle: ${promptResponse.model}`);
         console.log('   ✅ Test terminé avec succès !');
         console.log('   =======================================\n');
