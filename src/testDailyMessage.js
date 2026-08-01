@@ -22,7 +22,7 @@ const { requestPrompt, formatFinalPrompt } = require('./config/daily_message_con
 
 // ⬇️ ⬇️ ⬇️ CONFIGURATION ⬇️ ⬇️ ⬇️
 // Modifie cette variable avec l'ID du channel Discord où tu veux envoyer le message de test
-const TEST_CHANNEL_ID = '1511824357662396641'; // Channel par défaut (même que scheduledTasks.js)
+const TEST_CHANNEL_ID = '1348741823237062781'; // Channel par défaut (même que scheduledTasks.js) 
 
 // Optionnel : Tu peux aussi surcharger l'ID du serveur si besoin
 const TEST_GUILD_ID = '1337543177086959657'; // Guild par défaut
