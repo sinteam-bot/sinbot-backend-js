@@ -34,6 +34,9 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 const CHANNEL_ID = '1492194866451583059';
 
+// Modèle par défaut pour OpenRouter
+const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'openai/gpt-5-nano';
+
 // ============================================
 // CONNEXION DU BOT
 // ============================================
@@ -53,7 +56,7 @@ client.once('ready', async () => {
         // Envoyer le message
         var dailyPrompt = requestPrompt();
         var promptoption = {
-            "model": "gpt-5-nano"
+            "model": DEFAULT_MODEL
         }
 
         var promptresponse = await callResponseCustom(dailyPrompt, promptoption);
@@ -63,7 +66,7 @@ client.once('ready', async () => {
 
         var DailyText = promptresponse['text'];
         var option = {
-            "model": "gpt-5-nano",
+            "model": DEFAULT_MODEL,
             //"systemPrompt":DailyText['instruction']
         }
 

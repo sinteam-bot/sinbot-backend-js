@@ -17,7 +17,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const { saveOpenAIMessage } = require('./database');
-const { callResponseCustom } = require('./utils/openai');
+const { callResponseCustom } = require('./utils/openrouter');
 const { requestPrompt, formatFinalPrompt } = require('./config/daily_message_config');
 
 // ⬇️ ⬇️ ⬇️ CONFIGURATION ⬇️ ⬇️ ⬇️
@@ -51,17 +51,17 @@ const client = new Client({
  */
 async function runDailyMessageTest() {
     console.log('\n🧪 ========== DEBUT DU TEST AUTONOME ========== \n');
-    
+
     try {
         // Vérifier que le client est prêt
         if (!client || !client.isReady()) {
             throw new Error('❌ Le client Discord n\'est pas prêt. Attends qu\'il soit connecté.');
         }
-        
+
         console.log(`✅ Bot connecté en tant que: ${client.user.tag}\n`);
-        
+
         console.log('🔍 Vérification du channel et du serveur...');
-        
+
         // Récupérer le serveur
         let guild;
         try {
@@ -76,7 +76,7 @@ async function runDailyMessageTest() {
             }
             console.log(`✅ Utilisation du serveur: ${guild.name} (ID: ${guild.id})`);
         }
-        
+
         // Récupérer le channel
         let channel;
         try {
@@ -92,35 +92,35 @@ async function runDailyMessageTest() {
             channel = firstTextChannel;
             console.log(`✅ Utilisation du channel: #${channel.name} (ID: ${channel.id})`);
         }
-        
+
         console.log('\n🌅 Début de la génération du message du jour...\n');
-        
+
         // ============================================
         // ÉTAPE 1: Générer un prompt créatif via LLM
         // ============================================
         console.log('🔄 Étape 1/2: Génération du prompt créatif...');
         const date = new Date();
-        
+
         // Options pour la génération du prompt
         const promptGenerationOptions = {
-            model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            model: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
             temperature: 1.2,
             maxTokens: 500
         };
-        
+
         console.log(`   - Modèle: ${promptGenerationOptions.model}`);
         console.log(`   - Température: ${promptGenerationOptions.temperature}`);
-        
+
         const metaPrompt = requestPrompt(date);
         console.log('   - Meta-prompt envoyé à l\'IA (extraits):');
         console.log('     "' + metaPrompt.slice(0, 150) + '..."');
-        
+
         const promptResponse = await callResponseCustom(metaPrompt, promptGenerationOptions);
-        
+
         console.log('\n✅ Prompt généré par l\'IA:');
         console.log(`   "${promptResponse.text}"\n`);
         console.log(`   - Tokens utilisés: ${promptResponse.usage.totalTokens} (input: ${promptResponse.usage.promptTokens}, output: ${promptResponse.usage.completionTokens})`);
-        
+
         // Sauvegarder la première interaction
         const promptGenerationDb = {
             msgid: promptResponse.msgId,
@@ -135,48 +135,48 @@ async function runDailyMessageTest() {
         };
         await saveOpenAIMessage(promptGenerationDb);
         console.log('   💾 Génération du prompt sauvegardée en base de données.');
-        
+
         // ============================================
         // ÉTAPE 2: Générer le message final avec le prompt
         // ============================================
         console.log('\n🔄 Étape 2/2: Génération du message final...');
-        
+
         // Formater le prompt final avec la date du jour
         const { prompt: finalPrompt, instruction: finalInstruction } = formatFinalPrompt(promptResponse.text, date);
-        
+
         // Options pour la génération du message final
         const messageOptions = {
-            model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            model: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
             systemPrompt: finalInstruction,
             temperature: 0.8,
             maxTokens: 300
         };
-        
+
         console.log(`   - Modèle: ${messageOptions.model}`);
         console.log(`   - Température: ${messageOptions.temperature}`);
         console.log(`   - Instruction système: "${finalInstruction}"`);
-        
+
         const messageResponse = await callResponseCustom(finalPrompt, messageOptions);
-        
+
         console.log('\n✅ Message final généré par l\'IA:');
         console.log(`   "${messageResponse.text}"\n`);
         console.log(`   - Tokens utilisés: ${messageResponse.usage.totalTokens} (input: ${messageResponse.usage.promptTokens}, output: ${messageResponse.usage.completionTokens})`);
-        
+
         // ============================================
         // ENVOYER le message sur Discord
         // ============================================
         console.log('\n📤 Envoi du message sur Discord...');
-        
+
         const embed = new EmbedBuilder()
             .setColor('#F2C7CE')
             .setTitle('** ✨ Message du jour (TEST) **')
             .setDescription(messageResponse.text)
             .setTimestamp()
             .setFooter({ text: 'Mode test - Généré manuellement' });
-        
+
         await channel.send({ embeds: [embed] });
         console.log(`   ✅ Message envoyé dans #${channel.name} (ID: ${channel.id})`);
-        
+
         // ============================================
         // Sauvegarder le message final en base de données
         // ============================================
@@ -194,7 +194,7 @@ async function runDailyMessageTest() {
         };
         await saveOpenAIMessage(messageDb);
         console.log('   💾 Message final sauvegardé en base de données.');
-        
+
         // ============================================
         // Résumé du test
         // ============================================
@@ -207,10 +207,10 @@ async function runDailyMessageTest() {
         console.log(`   Modèle: ${promptResponse.model}`);
         console.log('   ✅ Test terminé avec succès !');
         console.log('   =======================================\n');
-        
+
         // Fermer le client après le test (optionnel)
         // client.destroy();
-        
+
     } catch (error) {
         console.error('\n❌ ERREUR lors du test:', error.message);
         if (error.stack) {

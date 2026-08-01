@@ -57,7 +57,7 @@ function setupScheduledTasks(client) {
             const date = new Date();
 
             const promptGenerationOptions = {
-                model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+                model: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
                 temperature: 1.2,
                 maxTokens: 500
             };
@@ -86,7 +86,7 @@ function setupScheduledTasks(client) {
             const { prompt: finalPrompt, instruction: finalInstruction } = formatFinalPrompt(promptResponse.text, date);
 
             const messageOptions = {
-                model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+                model: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
                 systemPrompt: finalInstruction,
                 temperature: 0.8,
                 maxTokens: 300
