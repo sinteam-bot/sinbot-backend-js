@@ -52,7 +52,7 @@ module.exports = {
         }
 
         await message.channel.send(
-          `<@${message.author.id}>, **Vous ne pouvez pas partager deux nombres à la suite** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
+          `<@${message.author.id}>, **vous ne pouvez pas partager deux nombres à la suite** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
         );
 
         console.log(`⚠️ [COUNTER] ${message.author.tag} a essayé de poster deux fois d'affilée.`);
@@ -95,7 +95,7 @@ module.exports = {
 
         // Message d'avertissement
         await message.channel.send(
-          `**Oups <@${message.author.id}> s\'est trompé(e), on va devoir sortir les crocs ! ** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
+          `**Oups <@${message.author.id}> s\'est trompé(e), je vais devoir mordre ** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
         );
 
         console.log(`❌ [COUNTER] ${message.author.tag} a fait une erreur (attendu: ${expectedNumber}, reçu: "${message.content}")`);
