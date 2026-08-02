@@ -215,6 +215,68 @@ function initDb() {
             reminder_sent INTEGER DEFAULT 0,
             reminder_sent_at DATETIME
         );
+
+        CREATE TABLE IF NOT EXISTS discord_channels (
+            channel_id TEXT PRIMARY KEY,
+            guild_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            parent_id TEXT,
+            position INTEGER DEFAULT 0,
+            topic TEXT,
+            is_nsfw INTEGER DEFAULT 0,
+            created_at DATETIME,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS discord_threads (
+            thread_id TEXT PRIMARY KEY,
+            guild_id TEXT NOT NULL,
+            parent_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            owner_id TEXT,
+            archived INTEGER DEFAULT 0,
+            locked INTEGER DEFAULT 0,
+            message_count INTEGER DEFAULT 0,
+            member_count INTEGER DEFAULT 0,
+            created_at DATETIME,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS discord_users (
+            user_id TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            global_name TEXT,
+            discriminator TEXT,
+            bot INTEGER DEFAULT 0,
+            avatar_url TEXT,
+            banner_url TEXT,
+            created_at DATETIME,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS discord_messages (
+            message_id TEXT PRIMARY KEY,
+            channel_id TEXT NOT NULL,
+            thread_id TEXT,
+            guild_id TEXT NOT NULL,
+            author_id TEXT NOT NULL,
+            author_username TEXT NOT NULL,
+            content TEXT,
+            pinned INTEGER DEFAULT 0,
+            embeds_json TEXT,
+            attachments_json TEXT,
+            reactions_json TEXT,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS counter_state (
+            channel_id TEXT PRIMARY KEY,
+            current_number INTEGER DEFAULT 0,
+            last_user_id TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     `);
     console.log('✅ Base de donnees SQLite initialisee avec succes (' + dbPath + ')');
 }
@@ -231,7 +293,7 @@ function adaptQuery(sql) {
 function queryDb(sql, params = []) {
     const cleanSql = adaptQuery(sql);
     const trimmed = cleanSql.trim().toUpperCase();
-    
+
     if (trimmed.startsWith('SELECT') || trimmed.startsWith('WITH')) {
         const stmt = db.prepare(cleanSql);
         const rows = stmt.all(...params);
@@ -273,7 +335,7 @@ const pool = {
                     return queryDb(sql, params);
                 }
             },
-            release: () => {}
+            release: () => { }
         };
     }
 };
@@ -475,7 +537,7 @@ async function getUpcomingBirthdays(days = 7) {
                 strftime('%d/%m', birthdate) as birthday_date
             FROM user_birthdays
         `);
-        
+
         const now = new Date();
         const upcoming = result.rows.map(b => {
             const bdate = new Date(b.birthdate);
@@ -492,8 +554,8 @@ async function getUpcomingBirthdays(days = 7) {
                 days_until: daysUntil
             };
         })
-        .filter(b => b.days_until <= days)
-        .sort((a, b) => a.days_until - b.days_until);
+            .filter(b => b.days_until <= days)
+            .sort((a, b) => a.days_until - b.days_until);
 
         return upcoming;
     } catch (error) {
@@ -546,14 +608,14 @@ async function addXP(userId, username, xpAmount, xpType = 'message', description
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        
+
         let user = await getOrCreateUserXP(userId, username);
         const xpToAdd = parseInt(xpAmount, 10);
         const currentXP = parseInt(user.xp, 10) || 0;
         const newTotalXP = currentXP + xpToAdd;
         const oldLevel = user.level;
         const newLevel = calculateLevel(newTotalXP);
-        
+
         const updateQuery = `
             UPDATE user_xp 
             SET xp = ?, 
@@ -565,7 +627,7 @@ async function addXP(userId, username, xpAmount, xpType = 'message', description
             WHERE user_id = ?
             RETURNING *
         `;
-        
+
         const updateResult = await client.query(updateQuery, [
             newTotalXP,
             newLevel,
@@ -574,12 +636,12 @@ async function addXP(userId, username, xpAmount, xpType = 'message', description
             xpType,
             userId
         ]);
-        
+
         const transactionQuery = `
             INSERT INTO xp_transactions (user_id, username, xp_amount, xp_type, description, metadata)
             VALUES (?, ?, ?, ?, ?, ?)
         `;
-        
+
         await client.query(transactionQuery, [
             userId,
             username,
@@ -588,11 +650,11 @@ async function addXP(userId, username, xpAmount, xpType = 'message', description
             description,
             JSON.stringify(metadata)
         ]);
-        
+
         await client.query('COMMIT');
-        
+
         console.log(`⭐ +${xpToAdd} XP pour ${username} (${xpType}) - Total: ${newTotalXP} XP`);
-        
+
         return {
             user: updateResult.rows[0],
             leveledUp: newLevel > oldLevel,
@@ -600,7 +662,7 @@ async function addXP(userId, username, xpAmount, xpType = 'message', description
             newLevel: newLevel,
             xpGained: xpToAdd
         };
-        
+
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('❌ Erreur addXP:', error);
@@ -613,29 +675,29 @@ async function addXP(userId, username, xpAmount, xpType = 'message', description
 async function addMessageXP(userId, username) {
     try {
         const user = await getOrCreateUserXP(userId, username);
-        
+
         if (user.last_message_xp) {
             const lastXP = new Date(user.last_message_xp);
             const now = new Date();
             const secondsSinceLastXP = (now - lastXP) / 1000;
-            
+
             if (secondsSinceLastXP < XP_CONFIG.MESSAGE_XP.COOLDOWN) {
                 return { success: false, reason: 'cooldown' };
             }
         }
-        
+
         const xpAmount = Math.floor(
             Math.random() * (XP_CONFIG.MESSAGE_XP.MAX - XP_CONFIG.MESSAGE_XP.MIN + 1)
         ) + XP_CONFIG.MESSAGE_XP.MIN;
-        
+
         await pool.query(
             'UPDATE user_xp SET last_message_xp = CURRENT_TIMESTAMP WHERE user_id = ?',
             [userId]
         );
-        
+
         const result = await addXP(userId, username, xpAmount, 'message', 'Message XP');
         return { success: true, ...result };
-        
+
     } catch (error) {
         console.error('❌ Erreur addMessageXP:', error);
         return { success: false, reason: 'error' };
@@ -662,26 +724,26 @@ async function endVoiceSession(userId, username) {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        
+
         const findQuery = `
             SELECT * FROM voice_sessions 
             WHERE user_id = ? AND leave_time IS NULL
             ORDER BY join_time DESC
             LIMIT 1
         `;
-        
+
         const session = await client.query(findQuery, [userId]);
         if (session.rows.length === 0) {
             await client.query('ROLLBACK');
             return null;
         }
-        
+
         const sessionData = session.rows[0];
         const joinTime = new Date(sessionData.join_time);
         const leaveTime = new Date();
         const durationMinutes = Math.floor((leaveTime - joinTime) / (1000 * 60));
         const xpEarned = durationMinutes * XP_CONFIG.VOICE_XP.PER_MINUTE;
-        
+
         const updateQuery = `
             UPDATE voice_sessions 
             SET leave_time = CURRENT_TIMESTAMP,
@@ -689,9 +751,9 @@ async function endVoiceSession(userId, username) {
                 xp_earned = ?
             WHERE id = ?
         `;
-        
+
         await client.query(updateQuery, [durationMinutes, xpEarned, sessionData.id]);
-        
+
         if (durationMinutes >= XP_CONFIG.VOICE_XP.MIN_DURATION && xpEarned > 0) {
             await addXP(
                 userId,
@@ -701,23 +763,23 @@ async function endVoiceSession(userId, username) {
                 `${durationMinutes} minutes en vocal`,
                 { channel: sessionData.channel_name, duration: durationMinutes }
             );
-            
+
             await client.query(
                 'UPDATE user_xp SET voice_minutes = voice_minutes + ? WHERE user_id = ?',
                 [durationMinutes, userId]
             );
         }
-        
+
         await client.query('COMMIT');
-        
+
         console.log(`🎤 ${username} a quitté le vocal - ${durationMinutes}min = ${xpEarned} XP`);
-        
+
         return {
             duration: durationMinutes,
             xpEarned: xpEarned,
             channel: sessionData.channel_name
         };
-        
+
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('❌ Erreur endVoiceSession:', error);
@@ -738,7 +800,7 @@ async function getUserXPInfo(userId) {
         const xpProgress = currentXP - xpForCurrentLevel;
         const xpToNextLevel = xpForNextLevel - xpForCurrentLevel;
         const progressPercentage = Math.floor((xpProgress / xpToNextLevel) * 100);
-        
+
         return {
             ...user,
             xpForCurrentLevel,
@@ -817,30 +879,30 @@ async function addEventParticipant(eventId, userId, username) {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        
+
         const eventQuery = 'SELECT * FROM events WHERE id = ? AND is_active = 1';
         const event = await client.query(eventQuery, [eventId]);
-        
+
         if (event.rows.length === 0) {
             throw new Error('Événement introuvable ou inactif');
         }
-        
+
         const eventData = event.rows[0];
-        
+
         const participantQuery = `
             INSERT INTO event_participants (event_id, user_id, username, xp_earned)
             VALUES (?, ?, ?, ?)
             ON CONFLICT(event_id, user_id) DO NOTHING
             RETURNING *
         `;
-        
+
         const participant = await client.query(participantQuery, [
             eventId,
             userId,
             username,
             eventData.xp_reward
         ]);
-        
+
         if (participant.rows.length > 0) {
             await addXP(
                 userId,
@@ -850,13 +912,13 @@ async function addEventParticipant(eventId, userId, username) {
                 `Participation à: ${eventData.event_name}`,
                 { event_id: eventId, event_name: eventData.event_name }
             );
-            
+
             await client.query(
                 'UPDATE user_xp SET events_participated = events_participated + 1 WHERE user_id = ?',
                 [userId]
             );
         }
-        
+
         await client.query('COMMIT');
         return {
             success: participant.rows.length > 0,
@@ -1228,26 +1290,26 @@ async function verifyCaptchaAnswer(userId, guildId, userAnswer) {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        
+
         const captcha = await getUserCaptcha(userId, guildId);
         if (!captcha) {
             await client.query('ROLLBACK');
             return { success: false, reason: 'no_captcha_found' };
         }
-        
+
         if (captcha.is_verified) {
             await client.query('ROLLBACK');
             return { success: false, reason: 'already_verified' };
         }
-        
+
         if (new Date(captcha.expires_at) < new Date()) {
             await client.query('ROLLBACK');
             return { success: false, reason: 'expired' };
         }
-        
+
         const correctAnswer = parseInt(captcha.answer, 10);
         const userAnswerInt = parseInt(userAnswer, 10);
-        
+
         if (userAnswerInt === correctAnswer) {
             const updateQuery = `
                 UPDATE user_captchas 
@@ -1303,7 +1365,7 @@ async function expireCaptcha(userId, guildId, incrementAttempts = false) {
                 const currentAttempts = captcha.rows[0].attempts;
                 const newAttempts = currentAttempts + 1;
                 const maxAttempts = CAPTCHA_CONFIG.MAX_ATTEMPTS || 3;
-                
+
                 const updateQuery = `
                     UPDATE user_captchas 
                     SET is_verified = 0,
@@ -1537,5 +1599,197 @@ module.exports = {
     saveBump,
     getPendingBumpReminders,
     markBumpReminderSent,
-    getLastBump
+    getLastBump,
+    // Fonctions Dump Discord
+    saveDumpUser,
+    saveDumpChannel,
+    saveDumpThread,
+    saveDumpMessagesBatch,
+    // Fonctions Counter Game
+    getCounterState,
+    updateCounterState
 };
+
+// ============================================
+// FONCTIONS DU JEU DES NOMBRES (COUNTER)
+// ============================================
+
+async function getCounterState(channelId) {
+    const query = `SELECT * FROM counter_state WHERE channel_id = ?`;
+    try {
+        const result = await pool.query(query, [channelId]);
+        return result.rows[0] || null;
+    } catch (error) {
+        console.error('❌ Erreur getCounterState:', error);
+        throw error;
+    }
+}
+
+async function updateCounterState(channelId, newNumber, userId = null) {
+    const query = `
+        INSERT INTO counter_state (channel_id, current_number, last_user_id, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(channel_id) DO UPDATE SET
+            current_number = excluded.current_number,
+            last_user_id = excluded.last_user_id,
+            updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+    `;
+    try {
+        const result = await pool.query(query, [channelId, newNumber, userId]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('❌ Erreur updateCounterState:', error);
+        throw error;
+    }
+}
+
+// ============================================
+// FONCTIONS DE SAUVEGARDE / DUMP DISCORD
+// ============================================
+
+async function saveDumpUser(user) {
+    const query = `
+        INSERT INTO discord_users (user_id, username, global_name, discriminator, bot, avatar_url, banner_url, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            username = excluded.username,
+            global_name = excluded.global_name,
+            discriminator = excluded.discriminator,
+            bot = excluded.bot,
+            avatar_url = excluded.avatar_url,
+            banner_url = excluded.banner_url,
+            updated_at = CURRENT_TIMESTAMP
+    `;
+    try {
+        await pool.query(query, [
+            user.id,
+            user.username,
+            user.globalName || null,
+            user.discriminator || '0',
+            user.bot ? 1 : 0,
+            user.displayAvatarURL ? user.displayAvatarURL({ size: 512 }) : null,
+            user.bannerURL ? user.bannerURL({ size: 512 }) : null,
+            user.createdAt ? user.createdAt.toISOString() : new Date().toISOString()
+        ]);
+    } catch (error) {
+        console.error('❌ Erreur saveDumpUser:', error);
+    }
+}
+
+async function saveDumpChannel(channel) {
+    const query = `
+        INSERT INTO discord_channels (channel_id, guild_id, name, type, parent_id, position, topic, is_nsfw, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(channel_id) DO UPDATE SET
+            name = excluded.name,
+            type = excluded.type,
+            parent_id = excluded.parent_id,
+            position = excluded.position,
+            topic = excluded.topic,
+            is_nsfw = excluded.is_nsfw,
+            updated_at = CURRENT_TIMESTAMP
+    `;
+    try {
+        await pool.query(query, [
+            channel.id,
+            channel.guildId,
+            channel.name || 'Unnamed',
+            String(channel.type),
+            channel.parentId || null,
+            channel.position || 0,
+            channel.topic || null,
+            channel.nsfw ? 1 : 0,
+            channel.createdAt ? channel.createdAt.toISOString() : new Date().toISOString()
+        ]);
+    } catch (error) {
+        console.error('❌ Erreur saveDumpChannel:', error);
+    }
+}
+
+async function saveDumpThread(thread) {
+    const query = `
+        INSERT INTO discord_threads (thread_id, guild_id, parent_id, name, owner_id, archived, locked, message_count, member_count, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(thread_id) DO UPDATE SET
+            name = excluded.name,
+            archived = excluded.archived,
+            locked = excluded.locked,
+            message_count = excluded.message_count,
+            member_count = excluded.member_count,
+            updated_at = CURRENT_TIMESTAMP
+    `;
+    try {
+        await pool.query(query, [
+            thread.id,
+            thread.guildId,
+            thread.parentId,
+            thread.name,
+            thread.ownerId || null,
+            thread.archived ? 1 : 0,
+            thread.locked ? 1 : 0,
+            thread.messageCount || 0,
+            thread.memberCount || 0,
+            thread.createdAt ? thread.createdAt.toISOString() : new Date().toISOString()
+        ]);
+    } catch (error) {
+        console.error('❌ Erreur saveDumpThread:', error);
+    }
+}
+
+async function saveDumpMessagesBatch(messages) {
+    if (!messages || messages.length === 0) return;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const query = `
+            INSERT INTO discord_messages (
+                message_id, channel_id, thread_id, guild_id, author_id, author_username, content, pinned, embeds_json, attachments_json, reactions_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(message_id) DO UPDATE SET
+                content = excluded.content,
+                pinned = excluded.pinned,
+                embeds_json = excluded.embeds_json,
+                attachments_json = excluded.attachments_json,
+                reactions_json = excluded.reactions_json,
+                updated_at = CURRENT_TIMESTAMP
+        `;
+
+        for (const msg of messages) {
+            const author = msg.author;
+            const embeds = msg.embeds ? msg.embeds.map(e => e.toJSON ? e.toJSON() : e) : [];
+            const attachments = msg.attachments ? Array.from(msg.attachments.values()).map(a => ({
+                id: a.id,
+                name: a.name,
+                url: a.url,
+                size: a.size,
+                contentType: a.contentType
+            })) : [];
+            const reactions = msg.reactions?.cache ? Array.from(msg.reactions.cache.values()).map(r => ({
+                emoji: r.emoji.name,
+                count: r.count
+            })) : [];
+
+            await client.query(query, [
+                msg.id,
+                msg.channelId,
+                msg.channel?.isThread?.() ? msg.channel.id : null,
+                msg.guildId || 'unknown',
+                author.id,
+                author.username || author.tag || 'Unknown',
+                msg.content || '',
+                msg.pinned ? 1 : 0,
+                JSON.stringify(embeds),
+                JSON.stringify(attachments),
+                JSON.stringify(reactions),
+                msg.createdAt ? msg.createdAt.toISOString() : new Date().toISOString()
+            ]);
+        }
+        await client.query('COMMIT');
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('❌ Erreur saveDumpMessagesBatch:', error);
+    } finally {
+        client.release();
+    }
+}

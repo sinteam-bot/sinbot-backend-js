@@ -5,24 +5,24 @@ module.exports = {
     // Définition de la Slash Command
     data: new SlashCommandBuilder()
         .setName('choose_member')
-        .setDescription('Récupérer un aléatoire pour le grognement')
+        .setDescription('Choisir un membre au pif')
     ,
-    
+
     // Exécution de la commande préfixe !ping
     async execute(message, args) {
-        return ;
+        return;
     },
-    
+
     // Exécution de la Slash Command /ping
     async executeSlash(interaction) {
-        try{
+        try {
 
             const userId = await getMemberForGrognement();
             interaction.reply({
                 content: `Le membre est <@${userId}>`
                 //,ephemeral: true
             })
-        }catch(error){
+        } catch (error) {
             await interaction.reply({
                 content: `❌ Erreur : ${error.message}`
             });

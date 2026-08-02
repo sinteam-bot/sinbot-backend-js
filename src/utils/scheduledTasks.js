@@ -48,7 +48,7 @@ function setupScheduledTasks(client) {
     });
 
     // 3. Cron pour la génération quotidienne du message du jour à 09:00 (Paris)
-    cron.schedule('0 11 * * *', async () => {
+    cron.schedule('0 9 * * *', async () => {
         try {
             console.log('🌅 Début de la génération du message du jour...');
 
@@ -97,7 +97,7 @@ function setupScheduledTasks(client) {
             console.log('✅ Message final généré:', messageResponse.text);
 
             const guildId = '1337543177086959657';
-            const channelId = '1348741823237062781';
+            const channelId = '1337807772024180756';
 
             const guild = await client.guilds.fetch(guildId, false);
             const channel = await guild.channels.fetch(channelId);

@@ -34,7 +34,7 @@ module.exports = {
         ),
 
     async execute(message, args) {
-        message.reply('❌ Cette commande est uniquement disponible en Slash Command. Utilisez `/ask`');
+        message.reply('❌ Cette commande est uniquement disponible en Slash Command. Utilisez `/config`');
     },
 
     async executeSlash(interaction) {
