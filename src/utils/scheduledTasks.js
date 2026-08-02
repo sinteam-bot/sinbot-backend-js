@@ -17,7 +17,7 @@ async function checkAndSendBumpReminders(client) {
                     const channel = await guild.channels.fetch(bump.channel_id);
                     if (channel) {
                         const userText = bump.username ? `@${bump.username}` : (bump.user_id ? `<@${bump.user_id}>` : null);
-                        const userMentionInfo = userText ? ` (Dernier bump par ${userText})` : '';
+                        const userMentionInfo = userText ? ` (Dernier bump par <@${bump.user_id}>)` : '';
                         await channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544> ${userMentionInfo}`);
 
                         const heureParis = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });

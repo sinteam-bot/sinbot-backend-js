@@ -47,7 +47,7 @@ module.exports = {
       // Initialisation par défaut si la BDD est vide
       if (!state) {
         state = await updateCountdownState(COUNTDOWN_CHANNEL_ID, 90, 0, null, null);
-        await message.channel.send("Allez je commence : 90");
+        await message.channel.send("**Allez je commence :** 90");
         console.log('✅ CountDown initialisé à 90 en BDD.');
       }
 
@@ -87,7 +87,7 @@ module.exports = {
           await message.react('❌').catch(() => { });
 
           await message.channel.send(
-            `❌ Oups... <@${message.author.id}>, Tu es tombé dans mon piège ! Le nombre qu'il fallait poster était **${trapNum}**.`
+            `<@${message.author.id}>**, Je t’ai eu ! ** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>` // Le nombre qu'il fallait poster était **${trapNum}**.
           );
 
           console.log(`🪤 [COUNTDOWN] ${message.author.tag} est tombé dans le piège (attendu: ${trapNum}, reçu: "${message.content}")`);
