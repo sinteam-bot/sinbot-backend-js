@@ -1,5 +1,5 @@
 # Utilisation d'une image Node.js legere (LTS)
-FROM node:20-alpine
+FROM node:24-alpine
 
 # Definition du repertoire de travail dans le conteneur
 WORKDIR /app

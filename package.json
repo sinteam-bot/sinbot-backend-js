@@ -1,10 +1,11 @@
 {
-  "name": "discord-bot2",
+  "name": "chienne-bot",
   "version": "1.0.0",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "deploy": "node src/deploy-commands.js",
+    "dump": "node src/dumpDiscord.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -18,7 +19,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "node-cron": "^4.6.0",
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^13.0.2",
     "openai": "^7.3.0"
   }
 }
