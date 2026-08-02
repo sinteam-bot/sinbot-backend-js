@@ -277,6 +277,23 @@ function initDb() {
             last_user_id TEXT,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS countdown_state (
+            channel_id TEXT PRIMARY KEY,
+            current_number INTEGER DEFAULT 90,
+            is_trap_active INTEGER DEFAULT 0,
+            trap_number INTEGER,
+            last_user_id TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS countdown_scores (
+            channel_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            score INTEGER DEFAULT 0,
+            PRIMARY KEY (channel_id, user_id)
+        );
     `);
     console.log('✅ Base de donnees SQLite initialisee avec succes (' + dbPath + ')');
 }
@@ -1607,8 +1624,94 @@ module.exports = {
     saveDumpMessagesBatch,
     // Fonctions Counter Game
     getCounterState,
-    updateCounterState
+    updateCounterState,
+    // Fonctions CountDown Game
+    getCountdownState,
+    updateCountdownState,
+    addCountdownScore,
+    getCountdownScores,
+    resetCountdownScores
 };
+
+// ============================================
+// FONCTIONS DU JEU COUNTDOWN (COMPTE À REBOURS 90 -> 0)
+// ============================================
+
+async function getCountdownState(channelId) {
+    const query = `SELECT * FROM countdown_state WHERE channel_id = ?`;
+    try {
+        const result = await pool.query(query, [channelId]);
+        return result.rows[0] || null;
+    } catch (error) {
+        console.error('❌ Erreur getCountdownState:', error);
+        throw error;
+    }
+}
+
+async function updateCountdownState(channelId, currentNumber, isTrapActive = 0, trapNumber = null, lastUserId = null) {
+    const query = `
+        INSERT INTO countdown_state (channel_id, current_number, is_trap_active, trap_number, last_user_id, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(channel_id) DO UPDATE SET
+            current_number = excluded.current_number,
+            is_trap_active = excluded.is_trap_active,
+            trap_number = excluded.trap_number,
+            last_user_id = excluded.last_user_id,
+            updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+    `;
+    try {
+        const result = await pool.query(query, [channelId, currentNumber, isTrapActive, trapNumber, lastUserId]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('❌ Erreur updateCountdownState:', error);
+        throw error;
+    }
+}
+
+async function addCountdownScore(channelId, userId, username) {
+    const query = `
+        INSERT INTO countdown_scores (channel_id, user_id, username, score)
+        VALUES (?, ?, ?, 1)
+        ON CONFLICT(channel_id, user_id) DO UPDATE SET
+            score = score + 1,
+            username = excluded.username
+        RETURNING *
+    `;
+    try {
+        const result = await pool.query(query, [channelId, userId, username]);
+        return result.rows[0];
+    } catch (error) {
+        console.error('❌ Erreur addCountdownScore:', error);
+        throw error;
+    }
+}
+
+async function getCountdownScores(channelId) {
+    const query = `
+        SELECT user_id, username, score
+        FROM countdown_scores
+        WHERE channel_id = ?
+        ORDER BY score DESC
+    `;
+    try {
+        const result = await pool.query(query, [channelId]);
+        return result.rows;
+    } catch (error) {
+        console.error('❌ Erreur getCountdownScores:', error);
+        throw error;
+    }
+}
+
+async function resetCountdownScores(channelId) {
+    const query = `DELETE FROM countdown_scores WHERE channel_id = ?`;
+    try {
+        await pool.query(query, [channelId]);
+    } catch (error) {
+        console.error('❌ Erreur resetCountdownScores:', error);
+        throw error;
+    }
+}
 
 // ============================================
 // FONCTIONS DU JEU DES NOMBRES (COUNTER)

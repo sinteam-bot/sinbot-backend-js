@@ -1,4 +1,5 @@
 const { setupScheduledTasks } = require('../utils/scheduledTasks');
+const { checkAndInitCountDown } = require('./messageCreate.CountDown');
 
 module.exports = {
     name: 'clientReady',
@@ -20,5 +21,8 @@ module.exports = {
         
         // Démarrer les tâches planifiées
         setupScheduledTasks(client);
+
+        // Initialiser le salon CountDown si necessaire
+        checkAndInitCountDown(client);
     }
 };

@@ -1,6 +1,6 @@
 const { getCounterState, updateCounterState } = require('../database');
 
-const COUNTER_CHANNEL_ID = '1348741823237062781';
+const COUNTER_CHANNEL_ID = '1533492692825276598';
 const EMOJI_OBSYBON_ID = '1524104068514189422';
 
 module.exports = {
@@ -71,7 +71,7 @@ module.exports = {
         // Message d'avertissement expliquant le nombre attendu
         const detail = postedNumber !== null
           ? `vous avez écrit **${postedNumber}**`
-          : `"${message.content}" n'est pas un nombre valide`;²
+          : `"${message.content}" n'est pas un nombre valide`;
 
         await message.channel.send(
           `**Oups <@${message.author.id}> s\'est trompé(e), on va devoir sortir les crocs ! ** <:Obsydemoncouverture:1488145689916473544>` // 'Le nombre attendu était **${expectedNumber}** (${detail}).`
