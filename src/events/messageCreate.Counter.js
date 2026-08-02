@@ -66,15 +66,15 @@ module.exports = {
       } else {
         // ❌ Le nombre est INCORRECT !
         // Ajouter la réaction croix rouge
-        await message.react('❌').catch(() => { });
+        await message.react('<:Obsydemoncouverture:1488145689916473544>').catch(() => { });
 
         // Message d'avertissement expliquant le nombre attendu
         const detail = postedNumber !== null
           ? `vous avez écrit **${postedNumber}**`
-          : `"${message.content}" n'est pas un nombre valide`;
+          : `"${message.content}" n'est pas un nombre valide`;²
 
         await message.channel.send(
-          `❌ <@${message.author.id}>, le nombre n'est pas bon ! Le nombre attendu était **${expectedNumber}** (${detail}).`
+          `**Oups <@${message.author.id}> s\'est trompé(e), on va devoir sortir les crocs ! ** <:Obsydemoncouverture:1488145689916473544>` // 'Le nombre attendu était **${expectedNumber}** (${detail}).`
         );
 
         console.log(`❌ [COUNTER] ${message.author.tag} a fait une erreur (attendu: ${expectedNumber}, reçu: "${message.content}")`);

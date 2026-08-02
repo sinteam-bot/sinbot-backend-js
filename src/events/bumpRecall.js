@@ -16,8 +16,8 @@ module.exports = {
                     // Extraction de l'utilisateur ayant exécuté la commande /bump
                     let bumperId = null;
                     let bumperUsername = null;
-                    let bumperDate = message.createdAt;
-                    console.log(`[BUMP]`, bumperDate);
+                    let bumperDate = null;
+                    console.log(`[BUMP]`, message.createdAt, message.createdTimestamp);
 
                     // 1. Essayer via l'objet interaction (Discord.js v14)
                     if (message.interaction?.user) {
