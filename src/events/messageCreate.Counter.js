@@ -2,6 +2,7 @@ const { getCounterState, updateCounterState } = require('../database');
 
 const COUNTER_CHANNEL_ID = '1533492692825276598';
 const EMOJI_OBSYBON_ID = '1524104068514189422';
+const EMOJI_OBSYDEMON_ID = '1488145689916473544';
 
 module.exports = {
   name: 'messageCreate',
@@ -39,6 +40,25 @@ module.exports = {
         console.log(`✅ Compteur initialisé au nombre: ${lastValidNum}`);
       }
 
+      // ============================================
+      // VÉRIFICATION : PAS DEUX NOMBRES À LA SUITE
+      // ============================================
+      if (state.last_user_id === message.author.id) {
+        try {
+          const obsyDemonEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYDEMON_ID) || EMOJI_OBSYDEMON_ID;
+          await message.react(obsyDemonEmoji);
+        } catch (e) {
+          await message.react('❌').catch(() => { });
+        }
+
+        await message.channel.send(
+          `<@${message.author.id}>, **Vous ne pouvez pas partager deux nombres à la suite** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
+        );
+
+        console.log(`⚠️ [COUNTER] ${message.author.tag} a essayé de poster deux fois d'affilée.`);
+        return;
+      }
+
       const currentNumber = state.current_number || 0;
       const expectedNumber = currentNumber + 1;
 
@@ -49,7 +69,7 @@ module.exports = {
       // Vérification si le nombre posté est le bon nombre attendu
       if (postedNumber !== null && postedNumber === expectedNumber) {
         // ✅ Le nombre est correct !
-        // Mettre à jour la BDD
+        // Mettre à jour la BDD avec le nouveau nombre et l'ID du joueur
         await updateCounterState(COUNTER_CHANNEL_ID, expectedNumber, message.author.id);
 
         // Ajouter la réaction :Obsybon: (ID: 1524104068514189422)
@@ -65,16 +85,17 @@ module.exports = {
 
       } else {
         // ❌ Le nombre est INCORRECT !
-        // Ajouter la réaction croix rouge
-        await message.react('<:Obsydemoncouverture:1488145689916473544>').catch(() => { });
+        // Ajouter la réaction démon
+        try {
+          const obsyDemonEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYDEMON_ID) || EMOJI_OBSYDEMON_ID;
+          await message.react(obsyDemonEmoji);
+        } catch (e) {
+          await message.react('❌').catch(() => { });
+        }
 
-        // Message d'avertissement expliquant le nombre attendu
-        const detail = postedNumber !== null
-          ? `vous avez écrit **${postedNumber}**`
-          : `"${message.content}" n'est pas un nombre valide`;
-
+        // Message d'avertissement
         await message.channel.send(
-          `**Oups <@${message.author.id}> s\'est trompé(e), on va devoir sortir les crocs ! ** <:Obsydemoncouverture:1488145689916473544>` // 'Le nombre attendu était **${expectedNumber}** (${detail}).`
+          `**Oups <@${message.author.id}> s\'est trompé(e), on va devoir sortir les crocs ! ** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
         );
 
         console.log(`❌ [COUNTER] ${message.author.tag} a fait une erreur (attendu: ${expectedNumber}, reçu: "${message.content}")`);

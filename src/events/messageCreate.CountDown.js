@@ -21,7 +21,7 @@ async function checkAndInitCountDown(client) {
       const channel = await client.channels.fetch(COUNTDOWN_CHANNEL_ID).catch(() => null);
       if (channel) {
         state = await updateCountdownState(COUNTDOWN_CHANNEL_ID, 90, 0, null, null);
-        await channel.send("Allez je commence : 90");
+        await channel.send("**Allez je commence :** 90");
         console.log('✅ CountDown initialisé : "Allez je commence : 90" envoyé dans le canal.');
       }
     }
@@ -51,6 +51,25 @@ module.exports = {
         console.log('✅ CountDown initialisé à 90 en BDD.');
       }
 
+      // ============================================
+      // VÉRIFICATION : PAS DEUX NOMBRES À LA SUITE
+      // ============================================
+      if (state.last_user_id === message.author.id) {
+        try {
+          const obsyDemonEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYDEMON_ID) || EMOJI_OBSYDEMON_ID;
+          await message.react(obsyDemonEmoji);
+        } catch (e) {
+          await message.react('❌').catch(() => { });
+        }
+
+        await message.channel.send(
+          `<@${message.author.id}>, **Vous ne pouvez pas partager deux nombres à la suite** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
+        );
+
+        console.log(`⚠️ [COUNTDOWN] ${message.author.tag} a essayé de poster deux fois d'affilée.`);
+        return;
+      }
+
       const contentText = message.content.trim();
       const isNumberFormat = /^\d+$/.test(contentText);
       const postedNumber = isNumberFormat ? parseInt(contentText, 10) : null;
@@ -76,7 +95,7 @@ module.exports = {
           // Ajouter un point au joueur
           await addCountdownScore(COUNTDOWN_CHANNEL_ID, message.author.id, message.author.username);
 
-          // Désactiver le piège et passer le nombre courant au trapNum
+          // Désactiver le piège et passer le nombre courant au trapNum avec l'id de l'utilisateur
           await updateCountdownState(COUNTDOWN_CHANNEL_ID, trapNum, 0, null, message.author.id);
 
           console.log(`🛡️ [COUNTDOWN] ${message.author.tag} a esquivé le piège (${trapNum}) !`);
@@ -87,7 +106,7 @@ module.exports = {
           await message.react('❌').catch(() => { });
 
           await message.channel.send(
-            `<@${message.author.id}>**, Je t’ai eu ! ** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>` // Le nombre qu'il fallait poster était **${trapNum}**.
+            `<@${message.author.id}>**, Je t’ai eu ! ** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
           );
 
           console.log(`🪤 [COUNTDOWN] ${message.author.tag} est tombé dans le piège (attendu: ${trapNum}, reçu: "${message.content}")`);
@@ -144,7 +163,7 @@ module.exports = {
           await resetCountdownScores(COUNTDOWN_CHANNEL_ID);
           await updateCountdownState(COUNTDOWN_CHANNEL_ID, 90, 0, null, message.author.id);
 
-          await message.channel.send("Allez je commence : 90");
+          await message.channel.send("**Allez je commence :** 90");
           return;
         }
 
@@ -160,7 +179,7 @@ module.exports = {
           // Le bot poste lui-même le nombre suivant
           await message.channel.send(`${trapNumber}`);
 
-          // Enregistrer le piège actif en BDD
+          // Enregistrer le piège actif en BDD (note: last_user_id reste le bot / systeme pour le piege, l'utilisateur devra répondre)
           await updateCountdownState(COUNTDOWN_CHANNEL_ID, trapNumber, 1, trapNumber, message.author.id);
         } else {
           // Mise à jour normale de l'état
@@ -170,10 +189,6 @@ module.exports = {
       } else {
         // ❌ Nombre INCORRECT !
         await message.react('❌').catch(() => { });
-
-        const detail = postedNumber !== null
-          ? `vous avez écrit **${postedNumber}**`
-          : `"${message.content}" n'est pas un nombre valide`;
 
         await message.channel.send(
           `**Oups <@${message.author.id}> s\'est trompé(e), on va devoir sortir les crocs ! ** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
