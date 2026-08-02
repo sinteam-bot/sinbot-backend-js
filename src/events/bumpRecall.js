@@ -17,7 +17,7 @@ module.exports = {
                     let bumperId = null;
                     let bumperUsername = null;
                     let bumperDate = message.createdAt;
-                    console.log(bumperDate);
+                    console.log(`[BUMP]`, bumperDate);
 
                     // 1. Essayer via l'objet interaction (Discord.js v14)
                     if (message.interaction?.user) {
@@ -48,7 +48,7 @@ module.exports = {
 
                     await saveBump(guildId, channelId, bumperId, bumperUsername);
 
-                    const heureParisRappel = new Date(Date.now() + (2 * 60 * 60 * 1000) - (1000 *)).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+                    const heureParisRappel = new Date(Date.now() + (2 * 60 * 60 * 1000)).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
                     const userLabel = bumperUsername ? `@${bumperUsername}` : (bumperId ? `<@${bumperId}>` : 'Inconnu');
                     console.log(`[BUMP] Bump détecté par ${userLabel}. Sauvegardé en BDD. Rappel prévu pour : ${heureParisRappel}`);
                 }
