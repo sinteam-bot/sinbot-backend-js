@@ -1,6 +1,6 @@
 const { getCounterState, updateCounterState } = require('../database');
 
-const COUNTER_CHANNEL_ID = '1470368172430590033';
+const COUNTER_CHANNEL_ID = '1348741823237062781';
 const EMOJI_OBSYBON_ID = '1524104068514189422';
 
 module.exports = {
