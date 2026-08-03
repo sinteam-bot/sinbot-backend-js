@@ -1523,7 +1523,7 @@ async function getPendingBumpReminders() {
     const query = `
         SELECT * FROM bump_logs
         WHERE reminder_sent = 0
-          AND (strftime('%s', 'now') - strftime('%s', bumped_at)) >= 7200
+          AND (strftime('%s', 'now') - strftime('%s', bumped_at)) >= 7140
         ORDER BY bumped_at ASC
     `;
     try {

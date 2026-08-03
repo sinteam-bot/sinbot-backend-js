@@ -18,10 +18,16 @@ async function checkAndSendBumpReminders(client) {
                     if (channel) {
                         const userText = bump.username ? `@${bump.username}` : (bump.user_id ? `<@${bump.user_id}>` : null);
                         const userMentionInfo = userText ? ` (Dernier bump par <@${bump.user_id}>)` : '';
-                        await channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544> ${userMentionInfo}`);
+                        // await channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544> ${userMentionInfo}`);
+                        const delay = (Math.floor(Date.now() / 1000) - (bump.bumped_at + 7199));
+                        console.log(`[BUMP] bientôt 2 heures se sont écoulées depuis le bump (ID: ${bump.id}), rappel envoyé dans ${delay} secondes !`);
 
-                        const heureParis = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
-                        console.log(`[BUMP] 2 heures se sont écoulées depuis le bump (ID: ${bump.id}), rappel envoyé à ${heureParis}!`);
+                        setTimeout(async () => {
+                            await channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544> ${userMentionInfo}`);
+                            const heureParis = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+                            await console.log(`[BUMP] 2 heures se sont écoulées, le rappel a été envoyé à ${heureParis}!`)
+                            bumped_at
+                        }, delay * 1000);
                     }
                 }
                 await markBumpReminderSent(bump.id);
