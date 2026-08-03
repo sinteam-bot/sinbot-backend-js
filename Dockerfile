@@ -1,4 +1,4 @@
-# Utilisation d'une image Node.js 24 Alpine
+# Utilisation d'une image Node.js LTS (v20 ou v22 recommandee)
 FROM node:24-alpine
 
 # Definition du repertoire de travail dans le conteneur

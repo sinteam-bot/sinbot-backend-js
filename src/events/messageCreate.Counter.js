@@ -1,4 +1,11 @@
-const { getCounterState, updateCounterState } = require('../database');
+const { EmbedBuilder } = require('discord.js');
+const {
+  getCounterState,
+  updateCounterState,
+  addCountdownScore,
+  getCountdownScores,
+  resetCountdownScores
+} = require('../database');
 
 const COUNTER_CHANNEL_ID = '1533492692825276598';
 const EMOJI_OBSYBON_ID = '1524104068514189422';
@@ -72,6 +79,9 @@ module.exports = {
         // Mettre à jour la BDD avec le nouveau nombre et l'ID du joueur
         await updateCounterState(COUNTER_CHANNEL_ID, expectedNumber, message.author.id);
 
+        // Ajouter un point au joueur
+        await addCountdownScore(COUNTER_CHANNEL_ID, message.author.id, message.author.username);
+
         // Ajouter la réaction :Obsybon: (ID: 1524104068514189422)
         try {
           const obsybonEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYBON_ID) || EMOJI_OBSYBON_ID;
@@ -93,12 +103,35 @@ module.exports = {
           await message.react('❌').catch(() => { });
         }
 
-        // Message d'avertissement
+        // Message d'avertissement et de réinitialisation
         await message.channel.send(
-          `**Oups <@${message.author.id}> s\'est trompé(e), je vais devoir mordre ** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
+          `❌ <@${message.author.id}> a ruiné la Route de l'Infini en envoyant un nombre incorrect !\nLe compteur a été réinitialisé, le prochain nombre est 1.`
         );
 
-        console.log(`❌ [COUNTER] ${message.author.tag} a fait une erreur (attendu: ${expectedNumber}, reçu: "${message.content}")`);
+        // Récupérer et afficher le classement de la session
+        const scores = await getCountdownScores(COUNTER_CHANNEL_ID);
+
+        let rankingText = "Aucune participation enregistrée pour cette session.";
+        if (scores.length > 0) {
+          rankingText = scores.map((s, index) => {
+            const medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : '👤'));
+            return `${medal} **${s.username}** : ${s.score} point(s)`;
+          }).join('\n');
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor('#F2C7CE')
+          .setTitle('🏆 **Classement de la session (Route de l\'Infini)**')
+          .setDescription(rankingText)
+          .setTimestamp();
+
+        await message.channel.send({ embeds: [embed] });
+
+        // Réinitialiser les scores et le compteur à 0 (le prochain sera 1)
+        await resetCountdownScores(COUNTER_CHANNEL_ID);
+        await updateCounterState(COUNTER_CHANNEL_ID, 0, null);
+
+        console.log(`❌ [COUNTER] ${message.author.tag} a fait une erreur (attendu: ${expectedNumber}, reçu: "${message.content}"). Classement affiché et réinitialisé.`);
       }
 
     } catch (error) {
