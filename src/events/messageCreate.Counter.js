@@ -103,11 +103,6 @@ module.exports = {
           await message.react('❌').catch(() => { });
         }
 
-        // Message d'avertissement et de réinitialisation
-        await message.channel.send(
-          `❌ <@${message.author.id}> a ruiné la Route de l'Infini en envoyant un nombre incorrect !\nLe compteur a été réinitialisé, le prochain nombre est 1.`
-        );
-
         // Récupérer et afficher le classement de la session
         const scores = await getCountdownScores(COUNTER_CHANNEL_ID);
 
@@ -118,11 +113,13 @@ module.exports = {
             return `${medal} **${s.username}** : ${s.score} point(s)`;
           }).join('\n');
         }
-
+        const rankingTextHeader = '🏆 **Classement de la Route de l\'Infini**\n'
+        // Message d'avertissement et de réinitialisation
+        const rankingTextFooter = "\nLe compteur a été réinitialisé, le prochain nombre est 1."
         const embed = new EmbedBuilder()
           .setColor('#F2C7CE')
-          .setTitle('🏆 **Classement de la session (Route de l\'Infini)**')
-          .setDescription(rankingText)
+          .setTitle(`❌ <@${message.author.id}> a ruiné la Route de l'Infini en envoyant un nombre incorrect !`)
+          .setDescription(rankingTextHeader + rankingText + rankingTextFooter)
           .setTimestamp();
 
         await message.channel.send({ embeds: [embed] });
