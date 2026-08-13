@@ -1,6 +1,6 @@
-const { createCaptcha, isUserVerified, getCaptchaConfig } = require('../database');
-const CAPTCHA_CONFIG = require('../config/captcha-config');
-const { sendCaptchaLog } = require('../utils/captchaLogger');
+const { createCaptcha, isUserVerified, getCaptchaConfig } = require("../database.js");
+const CAPTCHA_CONFIG = require("../config/captcha-config.js");
+const { sendCaptchaLog } = require("../utils/captchaLogger.js");
 
 // Générer une question mathématique aléatoire
 function generateMathQuestion() {
@@ -286,10 +286,10 @@ ${instructions}`;
             const timeoutMinutes = CAPTCHA_CONFIG.CAPTCHA_TIMEOUT;
             setTimeout(async () => {
                 try {
-                    const currentCaptcha = await require('../database').getUserCaptcha(member.id, member.guild.id);
+                    const currentCaptcha = await require("../database.js").getUserCaptcha(member.id, member.guild.id);
                     if (currentCaptcha && !currentCaptcha.is_verified) {
                         // Marquer comme expiré (sans incrémenter les tentatives)
-                        await require('../database').expireCaptcha(member.id, member.guild.id, false);
+                        await require("../database.js").expireCaptcha(member.id, member.guild.id, false);
 
                         // Envoyer un message d'expiration
                         await captchaChannel.send({

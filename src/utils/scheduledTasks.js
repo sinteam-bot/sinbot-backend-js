@@ -1,8 +1,8 @@
 const cron = require('node-cron');
 const { EmbedBuilder } = require('discord.js');
-const { saveOpenAIMessage, getLastOpenAIMessageId, getTodayBirthdays, getGlobalStats, getPendingBumpReminders, markBumpReminderSent } = require('../database');
-const { callResponseCustom } = require('./openrouter');
-const { buildPrompt, requestPrompt, formatFinalPrompt } = require('../config/daily_message_config');
+const { saveOpenAIMessage, getLastOpenAIMessageId, getTodayBirthdays, getGlobalStats, getPendingBumpReminders, markBumpReminderSent } = require("../database.js");
+const { callResponseCustom } = require("./openrouter.js");
+const { buildPrompt, requestPrompt, formatFinalPrompt } = require("../config/daily_message_config.js");
 
 /**
  * Fonction de vérification et d'envoi des rappels de bump en attente

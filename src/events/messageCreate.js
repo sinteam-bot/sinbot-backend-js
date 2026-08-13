@@ -1,6 +1,6 @@
-const { logUserEvent, addMessageXP, verifyCaptchaAnswer, getUserCaptcha, isUserVerified, getCaptchaConfig } = require('../database');
-const { executeCommand } = require('../utils/commandHandler');
-const { sendCaptchaLog } = require('../utils/captchaLogger');
+const { logUserEvent, addMessageXP, verifyCaptchaAnswer, getUserCaptcha, isUserVerified, getCaptchaConfig } = require("../database.js");
+const { executeCommand } = require("../utils/commandHandler.js");
+const { sendCaptchaLog } = require("../utils/captchaLogger.js");
 
 const path = require('path');
 
@@ -16,7 +16,7 @@ function addHours(date, hours) {
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 const CHANNEL_ID = '1348741823237062781'; // #bot
-const CAPTCHA_CONFIG = require('../config/captcha-config');
+const CAPTCHA_CONFIG = require("../config/captcha-config.js");
 
 // Vérifier si un message est une réponse au captcha
 async function handleCaptchaResponse(message) {

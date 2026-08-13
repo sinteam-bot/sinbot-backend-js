@@ -4,7 +4,7 @@ const fs = require('fs');
 require('dotenv').config();
 
 // Configuration du captcha
-const CAPTCHA_CONFIG = require('./config/captcha-config');
+const CAPTCHA_CONFIG = require("./config/captcha-config.js");
 
 // Repertoire et chemin de la base de donnees SQLite
 const dbDir = process.env.DB_DIR || path.join(__dirname, '../data');
@@ -585,7 +585,7 @@ async function getUpcomingBirthdays(days = 7) {
 // FONCTIONS XP & LEVELS
 // ============================================
 
-const XP_CONFIG = require('./config/xp-config');
+const XP_CONFIG = require("./config/xp-config.js");
 
 function calculateXPForLevel(level) {
     return Math.floor(XP_CONFIG.LEVEL.BASE_XP * Math.pow(level, XP_CONFIG.LEVEL.MULTIPLIER));

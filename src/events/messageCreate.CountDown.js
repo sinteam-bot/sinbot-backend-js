@@ -5,11 +5,12 @@ const {
   addCountdownScore,
   getCountdownScores,
   resetCountdownScores
-} = require('../database');
+} = require("../database.js");
 
 const COUNTDOWN_CHANNEL_ID = '1533492760697503805';
 const EMOJI_OBSYBON_ID = '1524104068514189422';
 const EMOJI_OBSYDEMON_ID = '1488145689916473544';
+const COUNTDOWN_START_AT = 900;
 
 /**
  * Vérifie et initialise le salon CountDown au démarrage si aucun état n'existe
@@ -20,9 +21,10 @@ async function checkAndInitCountDown(client) {
     if (!state) {
       const channel = await client.channels.fetch(COUNTDOWN_CHANNEL_ID).catch(() => null);
       if (channel) {
-        state = await updateCountdownState(COUNTDOWN_CHANNEL_ID, 90, 0, null, null);
-        await channel.send("**Allez la chienne commence :** 90");
-        console.log('✅ CountDown initialisé : "Allez je commence : 90" envoyé dans le canal.');
+        state = await updateCountdownState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, null);
+        const text = `**Allez la chienne commence :** ${COUNTDOWN_START_AT}`;
+        await channel.send(text);
+        console.log(`✅ CountDown initialisé: "${text}" envoyé dans le canal.`);
       }
     }
   } catch (error) {
@@ -46,9 +48,9 @@ module.exports = {
 
       // Initialisation par défaut si la BDD est vide
       if (!state) {
-        state = await updateCountdownState(COUNTDOWN_CHANNEL_ID, 90, 0, null, null);
-        await message.channel.send("**Allez la chienne commence :** 90");
-        console.log('✅ CountDown initialisé à 90 en BDD.');
+        state = await updateCountdownState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, null);
+        await message.channel.send("**Allez la chienne commence :** " + COUNTDOWN_START_AT);
+        console.log('✅ CountDown initialisé à ' + COUNTDOWN_START_AT + ' en BDD.');
       }
 
       // ============================================

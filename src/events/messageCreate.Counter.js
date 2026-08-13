@@ -5,7 +5,7 @@ const {
   addCountdownScore,
   getCountdownScores,
   resetCountdownScores
-} = require('../database');
+} = require("../database.js");
 
 const COUNTER_CHANNEL_ID = '1533492692825276598';
 const EMOJI_OBSYBON_ID = '1524104068514189422';
@@ -113,12 +113,12 @@ module.exports = {
             return `${medal} **${s.username}** : ${s.score} point(s)`;
           }).join('\n');
         }
-        const rankingTextHeader = '🏆 **Classement de la Route de l\'Infini**\n'
+        const rankingTextHeader = `**<@${message.author.id}> a ruiné la Route de l'Infini en envoyant un nombre incorrect !** \n\n 🏆 **Classement de la Route de l'Infini**\n`
         // Message d'avertissement et de réinitialisation
-        const rankingTextFooter = "\nLe compteur a été réinitialisé, le prochain nombre est 1."
+        const rankingTextFooter = "\n\nLe compteur a été réinitialisé, le prochain nombre est 1."
         const embed = new EmbedBuilder()
           .setColor('#F2C7CE')
-          .setTitle(`❌ <@${message.author.id}> a ruiné la Route de l'Infini en envoyant un nombre incorrect !`)
+          .setTitle(`❌ Perdu !`)
           .setDescription(rankingTextHeader + rankingText + rankingTextFooter)
           .setTimestamp();
 
