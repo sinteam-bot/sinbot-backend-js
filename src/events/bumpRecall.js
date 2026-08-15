@@ -1,4 +1,4 @@
-const { saveBump } = require('../database');
+const { saveBump } = require("../database.js");
 
 module.exports = {
     name: 'messageCreate',

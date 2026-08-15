@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 require('dotenv').config();
-const { callChatGPT, calculateCost, estimateTokens } = require('../utils/openrouter');
-const { getHumour, getEcriture, getNarratif, getContrainte } = require('../config/daily_message_config');
+const { callChatGPT, calculateCost, estimateTokens } = require("../utils/openrouter.js");
+const { getHumour, getEcriture, getNarratif, getContrainte } = require("../config/daily_message_config.js");
 
 //const { logInfo, logError } = require('../database');
 

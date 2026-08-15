@@ -16,9 +16,9 @@ const path = require('path');
 // ⭐ IMPORTANT : Remonter d'un niveau pour trouver .env
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
-const { saveOpenAIMessage } = require('./database');
-const { callResponseCustom } = require('./utils/openrouter');
-const { requestPrompt, formatFinalPrompt } = require('./config/daily_message_config');
+const { saveOpenAIMessage } = require("./database.js");
+const { callResponseCustom } = require("./utils/openrouter.js");
+const { requestPrompt, formatFinalPrompt } = require("./config/daily_message_config.js");
 
 // ⬇️ ⬇️ ⬇️ CONFIGURATION ⬇️ ⬇️ ⬇️
 // Modifie cette variable avec l'ID du channel Discord où tu veux envoyer le message de test

@@ -1,5 +1,5 @@
-const { setupScheduledTasks } = require('../utils/scheduledTasks');
-const { checkAndInitCountDown } = require('./messageCreate.CountDown');
+const { setupScheduledTasks } = require("../utils/scheduledTasks.js");
+const { checkAndInitCountDown } = require("./messageCreate.CountDown.js");
 
 module.exports = {
     name: 'clientReady',

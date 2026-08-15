@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getMemberForGrognement } = require('../database')
+const { getMemberForGrognement } = require("../database.js")
 
 module.exports = {
     // Définition de la Slash Command

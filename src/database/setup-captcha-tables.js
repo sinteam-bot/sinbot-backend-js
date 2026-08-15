@@ -1,4 +1,4 @@
-const { pool } = require('../database');
+const { pool } = require("../database.js");
 
 async function setupCaptchaTables() {
     console.log('🔧 Vérification / Configuration des tables Captcha SQLite...');
