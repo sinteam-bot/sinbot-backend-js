@@ -19,7 +19,7 @@ async function checkAndSendBumpReminders(client) {
                         const userText = bump.username ? `@${bump.username}` : (bump.user_id ? `<@${bump.user_id}>` : null);
                         const userMentionInfo = userText ? ` (Dernier bump par <@${bump.user_id}>)` : '';
                         // await channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544> ${userMentionInfo}`);
-                        const delay = (Math.floor(Date.now() / 1000) - (parseInt(bump.bumped_at) + 7200));
+                        const delay = ((parseInt(Date.parse(bump.bumped_at)) / 1000) + 7200) - Math.floor(Date.now() / 1000);
                         console.log(`[BUMP] bientôt 2 heures se sont écoulées depuis le bump (ID: ${bump.id}), rappel envoyé dans ${delay} secondes !`, bump.bumped_at);
 
                         setTimeout(async () => {
