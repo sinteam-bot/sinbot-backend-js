@@ -1,5 +1,6 @@
 const { setupScheduledTasks } = require("../utils/scheduledTasks.js");
 const { checkAndInitCountDown } = require("./messageCreate.CountDown.js");
+const { checkAndSendStartupNotification } = require("../utils/startupNotifier.js");
 
 module.exports = {
     name: 'clientReady',
@@ -24,5 +25,8 @@ module.exports = {
 
         // Initialiser le salon CountDown si necessaire
         checkAndInitCountDown(client);
+
+        // Envoyer la notification de démarrage avec état des commits et changements
+        checkAndSendStartupNotification(client);
     }
 };

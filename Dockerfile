@@ -19,9 +19,17 @@ RUN apk del python3 make g++
 # Copie de l'ensemble des fichiers du projet
 COPY . .
 
+# Variables de build pour le suivi de version Git
+ARG GIT_COMMIT_SHA="dev"
+ARG BUILD_DATE=""
+ARG GITHUB_REPO="sinteam-bot/chienne-bot"
+
 # Variables d'environnement par defaut
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+ENV BUILD_DATE=${BUILD_DATE}
+ENV GITHUB_REPO=${GITHUB_REPO}
 
 # Exposition du port du serveur Express (Webhooks / API)
 EXPOSE 3000

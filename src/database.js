@@ -294,6 +294,12 @@ function initDb() {
             score INTEGER DEFAULT 0,
             PRIMARY KEY (channel_id, user_id)
         );
+
+        CREATE TABLE IF NOT EXISTS bot_version_state (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     `);
     console.log('✅ Base de donnees SQLite initialisee avec succes (' + dbPath + ')');
 }
@@ -1630,7 +1636,10 @@ module.exports = {
     updateCountdownState,
     addCountdownScore,
     getCountdownScores,
-    resetCountdownScores
+    resetCountdownScores,
+    // État du bot et suivi de version
+    getBotState,
+    setBotState
 };
 
 // ============================================
@@ -1894,5 +1903,37 @@ async function saveDumpMessagesBatch(messages) {
         console.error('❌ Erreur saveDumpMessagesBatch:', error);
     } finally {
         client.release();
+    }
+}
+
+// ============================================
+// ÉTAT DU BOT & GESTION DES VERSIONS
+// ============================================
+
+async function getBotState(key) {
+    const query = `SELECT value FROM bot_version_state WHERE key = ?`;
+    try {
+        const result = await pool.query(query, [key]);
+        return result.rows.length > 0 ? result.rows[0].value : null;
+    } catch (error) {
+        console.error(`❌ Erreur getBotState(${key}):`, error);
+        return null;
+    }
+}
+
+async function setBotState(key, value) {
+    const query = `
+        INSERT INTO bot_version_state (key, value, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = CURRENT_TIMESTAMP
+    `;
+    try {
+        await pool.query(query, [key, String(value)]);
+        return true;
+    } catch (error) {
+        console.error(`❌ Erreur setBotState(${key}):`, error);
+        return false;
     }
 }
