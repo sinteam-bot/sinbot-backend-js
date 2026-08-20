@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { getPendingBumpReminders, markBumpReminderSent } = require("../database.js");
-const { sendDailyMessagePreview } = require("./dailyMessageManager.js");
+const { sendDailyMessagePreview, publishScheduledDailyMessage } = require("./dailyMessageManager.js");
 
 /**
  * Fonction de vérification et d'envoi des rappels de bump en attente
@@ -44,19 +44,32 @@ function setupScheduledTasks(client) {
 
     // 1. Vérification immédiate au démarrage du bot (reboot recovery)
     checkAndSendBumpReminders(client);
+    publishScheduledDailyMessage(client);
 
     // 2. Cron vérifiant toutes les minutes si un rappel de bump doit être envoyé
     cron.schedule('* * * * *', async () => {
         await checkAndSendBumpReminders(client);
     });
 
-    // 3. Cron pour la génération et prévisualisation du message du jour à 09:00 (Paris)
-    cron.schedule('0 9 * * *', async () => {
+    // 3. Cron pour la génération et prévisualisation du message du jour à 08:00 (Paris)
+    cron.schedule('0 8 * * *', async () => {
         try {
-            console.log('🌅 [Cron 09:00] Déclenchement du pré-rendu du message du jour...');
+            console.log('🌅 [Cron 08:00] Déclenchement du pré-rendu du message du jour...');
             await sendDailyMessagePreview(client);
         } catch (error) {
-            console.error('❌ Erreur lors du déclenchement du pré-rendu du message du jour:', error.message);
+            console.error('❌ Erreur lors du déclenchement du pré-rendu du message du jour (08:00):', error.message);
+        }
+    }, {
+        timezone: "Europe/Paris"
+    });
+
+    // 4. Cron pour la publication automatique du message validé à 09:00 (Paris)
+    cron.schedule('0 9 * * *', async () => {
+        try {
+            console.log('📢 [Cron 09:00] Déclenchement de la publication du message du jour...');
+            await publishScheduledDailyMessage(client);
+        } catch (error) {
+            console.error('❌ Erreur lors de la publication du message du jour (09:00):', error.message);
         }
     }, {
         timezone: "Europe/Paris"

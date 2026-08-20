@@ -93,7 +93,7 @@ function cleanCommitMessage(msg) {
  * @param {import('discord.js').Client} client
  */
 async function checkAndSendStartupNotification(client) {
-    const channelId = process.env.STARTUP_NOTIFICATION_CHANNEL_ID || '1533492760697503805';
+    const channelId = process.env.NOTIFICATION_CHANNEL_ID || '1533492760697503805';
     const repo = process.env.GITHUB_REPO || 'sinteam-bot/chienne-bot';
     const repoUrl = `https://github.com/${repo}`;
 

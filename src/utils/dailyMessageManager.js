@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { saveOpenAIMessage } = require("../database.js");
+const { saveOpenAIMessage, getBotState, setBotState } = require("../database.js");
 const { callResponseCustom } = require("./openrouter.js");
 const { requestPrompt, formatFinalPrompt } = require("../config/daily_message_config.js");
 
@@ -7,9 +7,26 @@ const { requestPrompt, formatFinalPrompt } = require("../config/daily_message_co
 const pendingDrafts = new Map();
 
 // Configuration des salons
-const PREVIEW_CHANNEL_ID = process.env.STARTUP_NOTIFICATION_CHANNEL_ID || '1533492760697503805';
+const PREVIEW_CHANNEL_ID = process.env.NOTIFICATION_CHANNEL_ID || process.env.STARTUP_NOTIFICATION_CHANNEL_ID || '1533492760697503805';
 const TARGET_CHANNEL_ID = process.env.DAILY_MESSAGE_CHANNEL_ID || '1337807772024180756';
 const TARGET_GUILD_ID = process.env.GUILD_ID || '1337543177086959657';
+
+/**
+ * Récupère l'heure actuelle au fuseau horaire de Paris
+ * @returns {number} Heure de 0 à 23
+ */
+function getParisHour() {
+    try {
+        const formatter = new Intl.DateTimeFormat('fr-FR', {
+            timeZone: 'Europe/Paris',
+            hour: 'numeric',
+            hour12: false
+        });
+        return parseInt(formatter.format(new Date()), 10);
+    } catch {
+        return new Date().getHours();
+    }
+}
 
 /**
  * Génère le contenu du message du jour en 2 étapes via LLM
@@ -82,7 +99,7 @@ function buildActionButtons(disabled = false) {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('daily_msg_accept')
-            .setLabel('Accepter & Publier')
+            .setLabel('Accepter (Diffusion à 09:00)')
             .setStyle(ButtonStyle.Success)
             .setEmoji('✅')
             .setDisabled(disabled),
@@ -101,13 +118,12 @@ function buildActionButtons(disabled = false) {
  * @param {Object} options - Options d'affichage (nombre de régénérations, auteur du refus)
  */
 function buildPreviewEmbed(dailyData, options = {}) {
-    const targetChannel = process.env.DAILY_MESSAGE_CHANNEL_ID || TARGET_CHANNEL_ID;
     const embed = new EmbedBuilder()
         .setColor('#F2C7CE')
-        .setTitle('📋 [Pré-rendu] Message du jour')
+        .setTitle('📋 [Pré-rendu 08:00] Message du jour')
         .setDescription(
             `### 💬 Aperçu du message :\n>>> ${dailyData.text}\n\n` +
-            `*Cliquez sur un bouton ci-dessous pour valider la publication ou régénérer un nouveau message.*`
+            `*Cliquez sur un bouton ci-dessous pour valider la diffusion programmée à 09:00 ou régénérer un nouveau texte.*`
         )
         .addFields(
             {
@@ -121,12 +137,12 @@ function buildPreviewEmbed(dailyData, options = {}) {
                 inline: true
             },
             {
-                name: '📢 Salon de publication',
-                value: `<#${targetChannel}>`,
+                name: '📢 Salon & Heure cible',
+                value: `<#${TARGET_CHANNEL_ID}> à **09:00**`,
                 inline: true
             }
         )
-        .setFooter({ text: 'Validation requise • Chienne Bot' })
+        .setFooter({ text: 'Validation requise avant 09:00 • Chienne Bot' })
         .setTimestamp();
 
     if (options.regenCount && options.regenCount > 0) {
@@ -141,19 +157,19 @@ function buildPreviewEmbed(dailyData, options = {}) {
 }
 
 /**
- * Envoie le pré-rendu du message du jour dans le salon d'administration
+ * Envoie le pré-rendu du message du jour dans le salon d'administration à 08:00
  * @param {import('discord.js').Client} client
  * @param {Date} date
  */
 async function sendDailyMessagePreview(client, date = new Date()) {
-    const previewChannelId = process.env.STARTUP_NOTIFICATION_CHANNEL_ID || PREVIEW_CHANNEL_ID;
+    const previewChannelId = process.env.NOTIFICATION_CHANNEL_ID || process.env.STARTUP_NOTIFICATION_CHANNEL_ID || PREVIEW_CHANNEL_ID;
 
     console.log(`📤 [DailyMessage] Envoi du pré-rendu dans le salon ${previewChannelId}...`);
 
     try {
         const previewChannel = await client.channels.fetch(previewChannelId);
         if (!previewChannel || !previewChannel.isTextBased()) {
-            console.error(`❌ [DailyMessage] Salon de prévisualisation introuvable ou non textuel (${previewChannelId})`);
+            console.error(`❌ [DailyMessage] Salon de notification introuvable ou non textuel (${previewChannelId})`);
             return null;
         }
 
@@ -177,6 +193,131 @@ async function sendDailyMessagePreview(client, date = new Date()) {
     } catch (error) {
         console.error('❌ [DailyMessage] Erreur lors de l\'envoi du pré-rendu:', error);
         throw error;
+    }
+}
+
+/**
+ * Publie effectivement un message du jour validé dans le salon public
+ * @param {import('discord.js').Client} client
+ * @param {Object} draftData - Données du message à publier
+ */
+async function executePublicPublication(client, draftData) {
+    const targetChannelId = process.env.DAILY_MESSAGE_CHANNEL_ID || TARGET_CHANNEL_ID;
+    const targetGuildId = process.env.GUILD_ID || TARGET_GUILD_ID;
+
+    let targetChannel;
+    try {
+        const guild = await client.guilds.fetch(targetGuildId, false);
+        targetChannel = await guild.channels.fetch(targetChannelId);
+    } catch {
+        targetChannel = await client.channels.fetch(targetChannelId);
+    }
+
+    if (!targetChannel || !targetChannel.isTextBased()) {
+        throw new Error(`Salon cible introuvable ou non textuel (${targetChannelId})`);
+    }
+
+    // 1. Envoyer l'embed public
+    const finalEmbed = new EmbedBuilder()
+        .setColor('#F2C7CE')
+        .setTitle('** Le message du jour **')
+        .setDescription(draftData.text)
+        .setTimestamp();
+
+    await targetChannel.send({ embeds: [finalEmbed] });
+    console.log(`📢 [DailyMessage] Message officiel publié dans ${targetChannel.name} (${targetChannel.id})`);
+
+    // 2. Sauvegarder en base de données SQLite
+    try {
+        const messageDb = {
+            msgid: draftData.messageResponse?.msgId || `manual_${Date.now()}`,
+            prompt: draftData.finalPrompt || 'Message validé',
+            instruction: draftData.finalInstruction || null,
+            model: draftData.model || 'gpt-4o-mini',
+            tokeninput: draftData.messageResponse?.usage?.promptTokens || 0,
+            tokenoutput: draftData.messageResponse?.usage?.completionTokens || 0,
+            content: draftData.text,
+            type: 'daily_message',
+            previousMsgId: draftData.promptResponse?.msgId || null
+        };
+        await saveOpenAIMessage(messageDb);
+        console.log('💾 [DailyMessage] Message final sauvegardé en BDD.');
+    } catch (dbErr) {
+        console.warn('⚠️ [DailyMessage] Erreur sauvegarde DB:', dbErr.message);
+    }
+}
+
+/**
+ * Fonction appelée à 09:00 par le cron pour publier le message préalablement validé
+ * @param {import('discord.js').Client} client
+ */
+async function publishScheduledDailyMessage(client) {
+    console.log('⏰ [DailyMessage 09:00] Vérification de la publication planifiée...');
+
+    try {
+        const rawScheduled = await getBotState('pending_daily_message_publish');
+        if (!rawScheduled) {
+            console.log('ℹ️ [DailyMessage 09:00] Aucun message validé en attente de publication.');
+            return;
+        }
+
+        const scheduledData = JSON.parse(rawScheduled);
+        if (!scheduledData || !scheduledData.text) {
+            console.warn('⚠️ [DailyMessage 09:00] Données de message planifié invalides.');
+            return;
+        }
+
+        // 1. Publier dans le salon cible
+        await executePublicPublication(client, scheduledData);
+
+        // 2. Mettre à jour le message de prévisualisation si accessible
+        if (scheduledData.previewMessageId && scheduledData.previewChannelId) {
+            try {
+                const previewChan = await client.channels.fetch(scheduledData.previewChannelId);
+                const previewMsg = await previewChan.messages.fetch(scheduledData.previewMessageId);
+
+                const publishedEmbed = new EmbedBuilder()
+                    .setColor('#57F287')
+                    .setTitle('✅ [Publié à 09:00] Message du jour')
+                    .setDescription(
+                        `### 💬 Message diffusé :\n>>> ${scheduledData.text}\n\n` +
+                        `🎉 **Le message a été automatiquement publié à 09:00 dans <#${TARGET_CHANNEL_ID}> !**`
+                    )
+                    .addFields(
+                        {
+                            name: '📢 Salon',
+                            value: `<#${TARGET_CHANNEL_ID}>`,
+                            inline: true
+                        },
+                        {
+                            name: '👤 Validé par',
+                            value: scheduledData.validatedBy ? `<@${scheduledData.validatedBy}>` : 'Modérateur',
+                            inline: true
+                        },
+                        {
+                            name: '⏱️ Heure de diffusion',
+                            value: `<t:${Math.floor(Date.now() / 1000)}:T>`,
+                            inline: true
+                        }
+                    )
+                    .setFooter({ text: 'Diffusé à 09:00 • Chienne Bot' })
+                    .setTimestamp();
+
+                await previewMsg.edit({
+                    embeds: [publishedEmbed],
+                    components: []
+                });
+            } catch (editErr) {
+                console.warn('⚠️ [DailyMessage] Impossible de mettre à jour le message de prévisualisation:', editErr.message);
+            }
+        }
+
+        // 3. Vider l'état planifié
+        await setBotState('pending_daily_message_publish', '');
+        console.log('🎉 [DailyMessage] Publication de 09:00 terminée avec succès !');
+
+    } catch (error) {
+        console.error('❌ [DailyMessage 09:00] Erreur lors de la publication planifiée:', error);
     }
 }
 
@@ -261,62 +402,35 @@ async function handleDailyMessageInteraction(interaction) {
 
         await interaction.deferUpdate();
 
+        const currentParisHour = getParisHour();
+        const draftPayload = {
+            ...(existingDraft || {}),
+            text: messageText,
+            validatedBy: interaction.user.id,
+            previewMessageId: message.id,
+            previewChannelId: message.channelId
+        };
 
-        try {
-            // Récupérer le salon public cible
-            let targetChannel;
-            try {
-                const guild = await interaction.client.guilds.fetch(TARGET_GUILD_ID, false);
-                targetChannel = await guild.channels.fetch(TARGET_CHANNEL_ID);
-            } catch {
-                targetChannel = await interaction.client.channels.fetch(TARGET_CHANNEL_ID);
-            }
+        // Si nous sommes avant 09:00 (ex: pré-rendu validé entre 08:00 et 08:59) -> Planifier pour 09:00
+        if (currentParisHour < 9) {
+            console.log(`⏳ [DailyMessage] Accepté avant 09:00 (${currentParisHour}h) -> Planification pour 09:00`);
 
-            if (!targetChannel || !targetChannel.isTextBased()) {
-                throw new Error(`Salon cible introuvable ou non textuel (${TARGET_CHANNEL_ID})`);
-            }
+            // Sauvegarder l'état planifié en base SQLite (persistant aux reboots)
+            await setBotState('pending_daily_message_publish', JSON.stringify(draftPayload));
 
-            // 1. Envoyer le message final dans le salon public
-            const finalEmbed = new EmbedBuilder()
-                .setColor('#F2C7CE')
-                .setTitle('** Le message du jour **')
-                .setDescription(messageText)
-                .setTimestamp();
-
-            await targetChannel.send({ embeds: [finalEmbed] });
-            console.log(`📢 [DailyMessage] Message officiel publié dans le salon ${targetChannel.name} (${targetChannel.id})`);
-
-            // 2. Sauvegarder en base de données SQLite
-            try {
-                const messageDb = {
-                    msgid: existingDraft?.messageResponse?.msgId || `manual_${Date.now()}`,
-                    prompt: existingDraft?.finalPrompt || 'Message validé manuellement',
-                    instruction: existingDraft?.finalInstruction || null,
-                    model: existingDraft?.model || 'gpt-4o-mini',
-                    tokeninput: existingDraft?.messageResponse?.usage?.promptTokens || 0,
-                    tokenoutput: existingDraft?.messageResponse?.usage?.completionTokens || 0,
-                    content: messageText,
-                    type: 'daily_message',
-                    previousMsgId: existingDraft?.promptResponse?.msgId || null
-                };
-                await saveOpenAIMessage(messageDb);
-                console.log('💾 [DailyMessage] Message sauvegardé en BDD.');
-            } catch (dbErr) {
-                console.warn('⚠️ [DailyMessage] Erreur sauvegarde DB:', dbErr.message);
-            }
-
-            // 3. Mettre à jour l'embed de pré-rendu pour afficher la confirmation et retirer les boutons
-            const validatedEmbed = new EmbedBuilder()
+            // Mettre à jour l'embed de pré-rendu pour confirmer la planification à 09:00
+            const scheduledEmbed = new EmbedBuilder()
                 .setColor('#57F287')
-                .setTitle('✅ [Validé & Publié] Message du jour')
+                .setTitle('⏳ [Validé - Diffusion à 09:00] Message du jour')
                 .setDescription(
-                    `### 💬 Message publié :\n>>> ${messageText}\n\n` +
-                    `🎉 **Validé par <@${interaction.user.id}> et publié avec succès dans <#${targetChannel.id}> !**`
+                    `### 💬 Message validé :\n>>> ${messageText}\n\n` +
+                    `✅ **Validé par <@${interaction.user.id}> !**\n` +
+                    `⏰ **Le message sera automatiquement publié dans <#${TARGET_CHANNEL_ID}> à 09:00.**`
                 )
                 .addFields(
                     {
-                        name: '📢 Salon',
-                        value: `<#${targetChannel.id}>`,
+                        name: '📢 Salon cible',
+                        value: `<#${TARGET_CHANNEL_ID}>`,
                         inline: true
                     },
                     {
@@ -325,29 +439,71 @@ async function handleDailyMessageInteraction(interaction) {
                         inline: true
                     },
                     {
-                        name: '⏱️ Publié le',
-                        value: `<t:${Math.floor(Date.now() / 1000)}:f>`,
+                        name: '⏰ Heure de diffusion',
+                        value: `**09:00** (Paris)`,
                         inline: true
                     }
                 )
-                .setFooter({ text: 'Publié • Chienne Bot' })
+                .setFooter({ text: 'Programmé pour 09:00 • Chienne Bot' })
                 .setTimestamp();
 
             await message.edit({
-                embeds: [validatedEmbed],
+                embeds: [scheduledEmbed],
                 components: []
             });
 
-            // Nettoyer le cache
             pendingDrafts.delete(message.id);
-            console.log(`🎉 [DailyMessage] Validation terminée pour le message ${message.id}`);
+            console.log(`🎉 [DailyMessage] Message programmé pour diffusion à 09:00`);
 
-        } catch (error) {
-            console.error('❌ [DailyMessage] Erreur lors de la publication finale:', error);
-            await interaction.followUp({
-                content: `❌ Erreur lors de la publication : ${error.message}`,
-                ephemeral: true
-            });
+        } else {
+            // Si nous sommes à 09:00 ou après -> Publication immédiate
+            console.log(`📢 [DailyMessage] Accepté à ou après 09:00 (${currentParisHour}h) -> Publication immédiate`);
+
+            try {
+                await executePublicPublication(interaction.client, draftPayload);
+
+                const validatedEmbed = new EmbedBuilder()
+                    .setColor('#57F287')
+                    .setTitle('✅ [Validé & Publié] Message du jour')
+                    .setDescription(
+                        `### 💬 Message publié :\n>>> ${messageText}\n\n` +
+                        `🎉 **Validé par <@${interaction.user.id}> et publié avec succès dans <#${TARGET_CHANNEL_ID}> !**`
+                    )
+                    .addFields(
+                        {
+                            name: '📢 Salon',
+                            value: `<#${TARGET_CHANNEL_ID}>`,
+                            inline: true
+                        },
+                        {
+                            name: '👤 Validé par',
+                            value: `<@${interaction.user.id}>`,
+                            inline: true
+                        },
+                        {
+                            name: '⏱️ Publié le',
+                            value: `<t:${Math.floor(Date.now() / 1000)}:f>`,
+                            inline: true
+                        }
+                    )
+                    .setFooter({ text: 'Publié • Chienne Bot' })
+                    .setTimestamp();
+
+                await message.edit({
+                    embeds: [validatedEmbed],
+                    components: []
+                });
+
+                pendingDrafts.delete(message.id);
+                // Vider toute planification résiduelle
+                await setBotState('pending_daily_message_publish', '');
+            } catch (error) {
+                console.error('❌ [DailyMessage] Erreur lors de la publication immédiate:', error);
+                await interaction.followUp({
+                    content: `❌ Erreur lors de la publication : ${error.message}`,
+                    ephemeral: true
+                });
+            }
         }
     }
 }
@@ -355,6 +511,7 @@ async function handleDailyMessageInteraction(interaction) {
 module.exports = {
     generateDailyMessageContent,
     sendDailyMessagePreview,
+    publishScheduledDailyMessage,
     handleDailyMessageInteraction,
     buildPreviewEmbed,
     buildActionButtons,
