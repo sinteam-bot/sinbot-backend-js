@@ -19,7 +19,7 @@ module.exports = {
     WELCOME_MESSAGE: {
         title: '🎉 Bienvenue sur {server} !',
         description: 'Bienvenue {user} !\n\nNous sommes ravis de t\'accueillir parmi nous ! 🎊',
-        color: '#00FF00',
+        color: '#f2c7ce',
         footer: 'Membre #{memberCount}',
         fields: [
             {
@@ -45,7 +45,7 @@ module.exports = {
     DM_MESSAGE: {
         title: '👋 Bienvenue !',
         description: 'Salut {username} !\n\nBienvenue sur **{server}** ! Nous espérons que tu vas t\'amuser avec nous. 😊',
-        color: '#0099FF',
+        color: '#f2c7ce',
         fields: [
             {
                 name: '💡 Conseil',

@@ -221,7 +221,7 @@ module.exports = {
                     const verifiedRole = await getVerifiedRole(member.guild);
                     if (verifiedRole) {
                         await member.roles.add(verifiedRole.id);
-                        await sendCaptchaLog(member.guild, 'Succès captcha', `**${member.user.tag}** a validé le captcha - Rôle vérifié donné`, '#e6d9e7');
+                        await sendCaptchaLog(member.guild, 'Succès captcha', `**${member.user.tag}** a validé le captcha - Rôle vérifié donné`, '#f2c7ce');
                     } else {
                         console.error('❌ Rôle vérifié introuvable. Le captcha est validé mais aucun rôle attribué.');
                     }
