@@ -336,12 +336,20 @@ function createWebRouter(client) {
                             footer: emb.footer ? { text: emb.footer.text, iconURL: emb.footer.iconURL } : null,
                             timestamp: emb.timestamp
                         })),
-                        reactions: Array.from(msg.reactions.cache.values()).map(r => ({
-                            emoji: r.emoji.name,
-                            id: r.emoji.id,
-                            count: r.count,
-                            url: r.emoji.url
-                        }))
+                        reactions: Array.from(msg.reactions.cache.values()).map(r => {
+                            const isCustom = !!r.emoji.id;
+                            const isAnimated = !!r.emoji.animated;
+                            const url = isCustom
+                                ? (r.emoji.imageURL ? r.emoji.imageURL({ extension: isAnimated ? 'gif' : 'png', size: 48 }) : `https://cdn.discordapp.com/emojis/${r.emoji.id}.${isAnimated ? 'gif' : 'png'}?size=48&quality=lossless`)
+                                : null;
+                            return {
+                                emoji: r.emoji.name,
+                                id: r.emoji.id || null,
+                                animated: isAnimated,
+                                count: r.count,
+                                url: url
+                            };
+                        })
                     };
                 });
 

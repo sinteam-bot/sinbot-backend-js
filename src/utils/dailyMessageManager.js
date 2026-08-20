@@ -7,7 +7,7 @@ const { requestPrompt, formatFinalPrompt } = require("../config/daily_message_co
 const pendingDrafts = new Map();
 
 // Configuration des salons
-const PREVIEW_CHANNEL_ID = process.env.NOTIFICATION_CHANNEL_ID || process.env.STARTUP_NOTIFICATION_CHANNEL_ID || '1533492760697503805';
+const PREVIEW_CHANNEL_ID = process.env.NOTIFICATION_CHANNEL_ID || '1533492760697503805';
 const TARGET_CHANNEL_ID = process.env.DAILY_MESSAGE_CHANNEL_ID || '1337807772024180756';
 const TARGET_GUILD_ID = process.env.GUILD_ID || '1337543177086959657';
 
@@ -162,14 +162,13 @@ function buildPreviewEmbed(dailyData, options = {}) {
  * @param {Date} date
  */
 async function sendDailyMessagePreview(client, date = new Date()) {
-    const previewChannelId = process.env.NOTIFICATION_CHANNEL_ID || process.env.STARTUP_NOTIFICATION_CHANNEL_ID || PREVIEW_CHANNEL_ID;
 
-    console.log(`📤 [DailyMessage] Envoi du pré-rendu dans le salon ${previewChannelId}...`);
+    console.log(`📤 [DailyMessage] Envoi du pré-rendu dans le salon ${PREVIEW_CHANNEL_ID}...`);
 
     try {
-        const previewChannel = await client.channels.fetch(previewChannelId);
+        const previewChannel = await client.channels.fetch(PREVIEW_CHANNEL_ID);
         if (!previewChannel || !previewChannel.isTextBased()) {
-            console.error(`❌ [DailyMessage] Salon de notification introuvable ou non textuel (${previewChannelId})`);
+            console.error(`❌ [DailyMessage] Salon de notification introuvable ou non textuel (${PREVIEW_CHANNEL_ID})`);
             return null;
         }
 
