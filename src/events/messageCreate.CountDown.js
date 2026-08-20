@@ -166,11 +166,11 @@ module.exports = {
 
           await message.channel.send({ embeds: [embed] });
 
-          // Réinitialiser les scores et réinitialiser le compte à rebours à 90
+          // Réinitialiser les scores et réinitialiser le compte à rebours à COUNTDOWN_START_AT
           await resetCountdownScores(COUNTDOWN_CHANNEL_ID);
-          await updateCountdownState(COUNTDOWN_CHANNEL_ID, 90, 0, null, message.author.id);
+          await updateCountdownState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, message.author.id);
 
-          await message.channel.send("**Allez la chienne commence :** 90");
+          await message.channel.send("**Allez la chienne commence :** " + COUNTDOWN_START_AT);
           return;
         }
 
