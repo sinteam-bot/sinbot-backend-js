@@ -99,6 +99,14 @@ function createWebRouter(client) {
                         icon: 'users',
                         topic: 'Liste des membres avec filtres avancés par rôles et statistiques XP',
                         unread: false
+                    },
+                    {
+                        id: 'virtual-daily-messages',
+                        name: '🌅-daily-messages',
+                        type: 'virtual',
+                        icon: 'sun',
+                        topic: 'Historique des Daily Messages avec métadonnées de génération IA, prompts et tokens',
+                        unread: false
                     }
                 ]
             };
@@ -1157,6 +1165,125 @@ function createWebRouter(client) {
             res.json({ success: true, message: `Configuration du module ${module} sauvegardée avec succès !` });
         } catch (error) {
             logger.error(`Erreur POST /api/config (${module}): ${error.message}`, 'CONFIG');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ============================================
+    // 7. SALON VIRTUEL : DAILY MESSAGES (HISTORIQUE ET INFOS DE GÉNÉRATION)
+    // ============================================
+    router.get('/daily-messages', async (req, res) => {
+        try {
+            // 1. Récupérer le message en attente de publication (s'il existe)
+            let pendingPublish = null;
+            try {
+                const rawPending = await db.getBotState('pending_daily_message_publish');
+                if (rawPending) {
+                    pendingPublish = JSON.parse(rawPending);
+                }
+            } catch (e) { }
+
+            // 2. Récupérer l'historique complet depuis openaimessages
+            const query = `
+                SELECT * FROM openaimessages 
+                ORDER BY created_at DESC 
+                LIMIT 100
+            `;
+            const result = await db.pool.query(query);
+            const rawMessages = result.rows || [];
+
+            // Créer une map pour faire correspondre le prompt créatif (étape 1) et le message final (étape 2)
+            const promptMap = new Map();
+            rawMessages.forEach(m => {
+                if (m.msgid && (m.msgid.startsWith('prompt_') || !m.previousmsgid)) {
+                    promptMap.set(m.msgid, m);
+                }
+            });
+
+            const history = rawMessages.map(m => {
+                let step1Data = null;
+                if (m.previousmsgid && promptMap.has(m.previousmsgid)) {
+                    step1Data = promptMap.get(m.previousmsgid);
+                }
+
+                let tokens = {
+                    input: m.tokeninput || 0,
+                    output: m.tokenoutput || 0,
+                    total: (m.tokeninput || 0) + (m.tokenoutput || 0)
+                };
+
+                let step1Tokens = step1Data ? {
+                    input: step1Data.tokeninput || 0,
+                    output: step1Data.tokenoutput || 0,
+                    total: (step1Data.tokeninput || 0) + (step1Data.tokenoutput || 0)
+                } : null;
+
+                return {
+                    id: m.id,
+                    msgId: m.msgid,
+                    content: m.content || '',
+                    prompt: m.prompt || '',
+                    instruction: m.instruction || '',
+                    model: m.model || 'gpt-4o-mini',
+                    tokens,
+                    previousMsgId: m.previousmsgid,
+                    step1: step1Data ? {
+                        msgId: step1Data.msgid,
+                        metaPrompt: step1Data.prompt,
+                        creativePrompt: step1Data.content,
+                        model: step1Data.model,
+                        tokens: step1Tokens,
+                        createdAt: step1Data.created_at
+                    } : null,
+                    createdAt: m.created_at,
+                    updatedAt: m.updated_at
+                };
+            });
+
+            // Statistiques globales
+            const totalMessages = history.length;
+            const totalTokens = history.reduce((acc, cur) => acc + cur.tokens.total, 0);
+
+            res.json({
+                success: true,
+                data: {
+                    pendingPublish,
+                    stats: {
+                        totalMessages,
+                        totalTokens,
+                        configuredChannelId: process.env.DAILY_MESSAGE_CHANNEL_ID || '1337807772024180756',
+                        configuredPreviewChannelId: process.env.NOTIFICATION_CHANNEL_ID || '1348741823237062781',
+                        configuredModel: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+                        scheduleTime: '09:00',
+                        previewTime: '08:30'
+                    },
+                    history
+                }
+            });
+        } catch (error) {
+            logger.error(`Erreur GET /api/daily-messages: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/daily-messages/generate-preview', async (req, res) => {
+        try {
+            const { generateDailyMessageContent } = require('../utils/dailyMessageManager.js');
+            const dailyData = await generateDailyMessageContent(new Date());
+            res.json({
+                success: true,
+                data: {
+                    text: dailyData.text,
+                    model: dailyData.model,
+                    metaPrompt: dailyData.metaPrompt,
+                    creativePrompt: dailyData.promptResponse?.text,
+                    finalPrompt: dailyData.finalPrompt,
+                    finalInstruction: dailyData.finalInstruction,
+                    usage: dailyData.messageResponse?.usage
+                }
+            });
+        } catch (error) {
+            logger.error(`Erreur génération test daily message: ${error.message}`, 'WEB');
             res.status(500).json({ success: false, error: error.message });
         }
     });
