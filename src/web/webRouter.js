@@ -455,6 +455,109 @@ function createWebRouter(client) {
     });
 
     // ============================================
+    // 4b. MODIFIER UN MESSAGE DEPUIS LE WEB
+    // ============================================
+    router.patch('/channels/:channelId/messages/:messageId', async (req, res) => {
+        const { channelId, messageId } = req.params;
+        const { content } = req.body;
+
+        if (!content || !content.trim()) {
+            return res.status(400).json({ success: false, error: 'Le contenu du message ne peut pas être vide' });
+        }
+
+        try {
+            let editedContent = content.trim();
+            let editedAt = new Date().toISOString();
+
+            if (client && client.isReady()) {
+                const channel = await client.channels.fetch(channelId).catch(() => null);
+                if (!channel || !channel.isTextBased()) {
+                    return res.status(404).json({ success: false, error: 'Salon introuvable' });
+                }
+
+                const message = await channel.messages.fetch(messageId).catch(() => null);
+                if (!message) {
+                    return res.status(404).json({ success: false, error: 'Message introuvable sur Discord' });
+                }
+
+                // Vérifier si le message appartient au bot (Discord n'autorise pas la modification des messages d'autrui)
+                if (message.author.id !== client.user.id) {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Discord n\'autorise que la modification des messages envoyés par le bot lui-même.'
+                    });
+                }
+
+                const editedMessage = await message.edit(editedContent);
+                editedAt = editedMessage.editedAt ? editedMessage.editedAt.toISOString() : new Date().toISOString();
+                logger.info(`Message ${messageId} modifié sur #${channel.name} par interface Web`, 'WEB');
+            }
+
+            // Mettre à jour dans la base SQLite si présent
+            try {
+                await db.pool.query(
+                    'UPDATE discord_messages SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE message_id = ?',
+                    [editedContent, messageId]
+                );
+            } catch (e) { }
+
+            res.json({
+                success: true,
+                data: {
+                    id: messageId,
+                    channelId,
+                    content: editedContent,
+                    editedAt: editedAt
+                }
+            });
+        } catch (error) {
+            logger.error(`Erreur modification message ${messageId}: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ============================================
+    // 4c. SUPPRIMER UN MESSAGE DEPUIS LE WEB
+    // ============================================
+    router.delete('/channels/:channelId/messages/:messageId', async (req, res) => {
+        const { channelId, messageId } = req.params;
+
+        try {
+            if (client && client.isReady()) {
+                const channel = await client.channels.fetch(channelId).catch(() => null);
+                if (!channel || !channel.isTextBased()) {
+                    return res.status(404).json({ success: false, error: 'Salon introuvable' });
+                }
+
+                const message = await channel.messages.fetch(messageId).catch(() => null);
+                if (!message) {
+                    return res.status(404).json({ success: false, error: 'Message introuvable sur Discord' });
+                }
+
+                await message.delete();
+                logger.info(`Message ${messageId} supprimé sur #${channel.name} par interface Web`, 'WEB');
+            }
+
+            // Supprimer de la base SQLite si présent
+            try {
+                await db.pool.query(
+                    'DELETE FROM discord_messages WHERE message_id = ?',
+                    [messageId]
+                );
+            } catch (e) { }
+
+            res.json({
+                success: true,
+                message: 'Message supprimé avec succès',
+                data: { id: messageId, channelId }
+            });
+        } catch (error) {
+            logger.error(`Erreur suppression message ${messageId}: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ============================================
     // 5. SALON VIRTUEL : LOGS DU BOT (CONSULTATION & SSE)
     // ============================================
     router.get('/logs', (req, res) => {
