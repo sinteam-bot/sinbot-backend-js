@@ -5,3 +5,4 @@ node_modules/
 pm2-logs/
 src/.env
 data/
+logs/

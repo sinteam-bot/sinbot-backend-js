@@ -2,8 +2,8 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { ChannelType } = require('discord.js');
-const logger = require('../utils/logger');
-const db = require('../database');
+const logger = require("../utils/logger.js");
+const db = require("../database.js");
 
 function createWebRouter(client) {
     const router = express.Router();

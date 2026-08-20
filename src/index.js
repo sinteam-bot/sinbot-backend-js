@@ -4,10 +4,10 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-const { logUserEvent, getUserEvents, getGlobalStats } = require('./database');
-const { loadCommands } = require('./utils/commandHandler');
-const logger = require('./utils/logger');
-const createWebRouter = require('./web/webRouter');
+const { logUserEvent, getUserEvents, getGlobalStats } = require("./database.js");
+const { loadCommands } = require("./utils/commandHandler.js");
+const logger = require("./utils/logger.js");
+const createWebRouter = require("./web/webRouter.js");
 
 // Activer la capture des logs console pour le salon virtuel Logs
 logger.initConsoleInterceptor();
