@@ -140,7 +140,7 @@ async function checkAndSendStartupNotification(client) {
         const isDocker = Boolean(process.env.BUILD_DATE || process.env.GIT_COMMIT_SHA || currentCommit.source === 'docker-env');
 
         if (isUpdate) {
-            embed.setColor('#57F287') // Vert vif
+            embed.setColor('#f2c7ce') // Vert vif
                 .setTitle('🚀 Mise à jour déployée - Chienne Bot')
                 .setDescription(
                     `Le bot a redémarré avec de nouveaux changements !\n\n` +
@@ -178,7 +178,7 @@ async function checkAndSendStartupNotification(client) {
                 });
             }
         } else {
-            embed.setColor('#5865F2') // Bleu Blurple Discord
+            embed.setColor('#f2c7ce') // Bleu Blurple Discord
                 .setTitle('🤖 Démarrage du bot - Chienne Bot')
                 .setDescription(
                     `Le bot est en ligne et opérationnel.\n\n` +
