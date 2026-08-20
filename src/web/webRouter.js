@@ -108,6 +108,34 @@ function createWebRouter(client) {
 
             if (guild) {
                 const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+                const activeThreads = await guild.threads.fetchActive().catch(() => ({ threads: new Map() }));
+                
+                const threadsByParent = new Map();
+                const addThread = (th) => {
+                    if (!th || !th.parentId) return;
+                    if (!threadsByParent.has(th.parentId)) threadsByParent.set(th.parentId, []);
+                    const list = threadsByParent.get(th.parentId);
+                    if (!list.some(t => t.id === th.id)) {
+                        list.push({
+                            id: th.id,
+                            name: th.name,
+                            type: 'thread',
+                            icon: 'git-commit',
+                            parentId: th.parentId,
+                            messageCount: th.messageCount || 0,
+                            memberCount: th.memberCount || 0,
+                            archived: !!th.archived,
+                            locked: !!th.locked,
+                            rateLimitPerUser: th.rateLimitPerUser || 0,
+                            createdAt: th.createdAt ? th.createdAt.toISOString() : null
+                        });
+                    }
+                };
+
+                if (activeThreads && activeThreads.threads) {
+                    activeThreads.threads.forEach(th => addThread(th));
+                }
+
                 const categoriesMap = new Map();
 
                 channels.forEach(ch => {
@@ -126,6 +154,16 @@ function createWebRouter(client) {
                 channels.forEach(ch => {
                     if (!ch || ch.type === ChannelType.GuildCategory) return;
 
+                    // Si c'est un thread
+                    if (ch.isThread && ch.isThread()) {
+                        addThread(ch);
+                        return;
+                    }
+                    if (ch.type === ChannelType.PublicThread || ch.type === ChannelType.PrivateThread || ch.type === ChannelType.AnnouncementThread) {
+                        addThread(ch);
+                        return;
+                    }
+
                     let typeStr = 'text';
                     let icon = 'hash';
                     if (ch.type === ChannelType.GuildVoice) {
@@ -137,9 +175,6 @@ function createWebRouter(client) {
                     } else if (ch.type === ChannelType.GuildForum) {
                         typeStr = 'forum';
                         icon = 'message-square';
-                    } else if (ch.type === ChannelType.PublicThread || ch.type === ChannelType.PrivateThread) {
-                        typeStr = 'thread';
-                        icon = 'git-commit';
                     }
 
                     const channelData = {
@@ -150,7 +185,14 @@ function createWebRouter(client) {
                         topic: ch.topic || '',
                         parentId: ch.parentId,
                         position: ch.position,
-                        isNsfw: ch.nsfw || false
+                        isNsfw: ch.nsfw || false,
+                        availableTags: ch.availableTags ? ch.availableTags.map(t => ({
+                            id: t.id,
+                            name: t.name,
+                            emoji: t.emoji ? (t.emoji.name || (t.emoji.id ? `https://cdn.discordapp.com/emojis/${t.emoji.id}.png?size=48&quality=lossless` : null)) : null,
+                            moderated: !!t.moderated
+                        })) : [],
+                        threads: threadsByParent.get(ch.id) || []
                     };
 
                     if (ch.parentId && categoriesMap.has(ch.parentId)) {
@@ -160,16 +202,22 @@ function createWebRouter(client) {
                     }
                 });
 
-                // Trier les canaux au sein des catégories
+                // Trier les canaux au sein des catégories et attacher les threads
                 const sortedCategories = Array.from(categoriesMap.values())
                     .sort((a, b) => a.position - b.position)
                     .map(cat => {
                         cat.channels.sort((a, b) => a.position - b.position);
+                        cat.channels.forEach(ch => {
+                            ch.threads = threadsByParent.get(ch.id) || [];
+                        });
                         return cat;
                     });
 
                 if (uncatChannels.length > 0) {
                     uncatChannels.sort((a, b) => a.position - b.position);
+                    uncatChannels.forEach(ch => {
+                        ch.threads = threadsByParent.get(ch.id) || [];
+                    });
                     categories.push({
                         id: 'cat-uncategorized',
                         name: 'SALONS',
@@ -187,6 +235,31 @@ function createWebRouter(client) {
                         SELECT * FROM discord_channels ORDER BY position ASC
                     `);
                     const dbChannels = dbChannelsRes.rows;
+
+                    // Récupérer les threads depuis la table discord_threads
+                    let dbThreads = [];
+                    try {
+                        const threadsRes = await db.pool.query(`SELECT * FROM discord_threads ORDER BY created_at DESC`);
+                        dbThreads = threadsRes.rows;
+                    } catch (te) { }
+
+                    const threadsByParent = new Map();
+                    dbThreads.forEach(th => {
+                        if (!th.parent_id) return;
+                        if (!threadsByParent.has(th.parent_id)) threadsByParent.set(th.parent_id, []);
+                        threadsByParent.get(th.parent_id).push({
+                            id: th.thread_id,
+                            name: th.name,
+                            type: 'thread',
+                            icon: 'git-commit',
+                            parentId: th.parent_id,
+                            messageCount: th.message_count || 0,
+                            memberCount: th.member_count || 0,
+                            archived: !!th.archived,
+                            locked: !!th.locked,
+                            createdAt: th.created_at
+                        });
+                    });
 
                     const catMap = new Map();
                     const uncat = [];
@@ -213,7 +286,8 @@ function createWebRouter(client) {
                             topic: ch.topic || '',
                             parentId: ch.parent_id,
                             position: ch.position,
-                            isNsfw: !!ch.is_nsfw
+                            isNsfw: !!ch.is_nsfw,
+                            threads: threadsByParent.get(ch.channel_id) || []
                         };
 
                         if (ch.parent_id && catMap.has(ch.parent_id)) {
@@ -349,7 +423,14 @@ function createWebRouter(client) {
                                 count: r.count,
                                 url: url
                             };
-                        })
+                        }),
+                        thread: (msg.thread || msg.hasThread) ? {
+                            id: msg.thread?.id || null,
+                            name: msg.thread?.name || 'Fil de discussion',
+                            messageCount: msg.thread?.messageCount || 0,
+                            memberCount: msg.thread?.memberCount || 0,
+                            archived: !!msg.thread?.archived
+                        } : null
                     };
                 });
 
@@ -401,17 +482,36 @@ function createWebRouter(client) {
                         pinned: !!row.pinned,
                         attachments,
                         embeds,
-                        reactions
+                        reactions,
+                        thread: null
                     };
                 });
 
                 messagesList.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
             }
 
+            const isThread = channelObj ? (channelObj.isThread ? channelObj.isThread() : false) : false;
+            const parentChannel = (isThread && channelObj.parent) ? {
+                id: channelObj.parent.id,
+                name: channelObj.parent.name
+            } : null;
+            const threadInfo = isThread ? {
+                id: channelObj.id,
+                name: channelObj.name,
+                archived: !!channelObj.archived,
+                locked: !!channelObj.locked,
+                messageCount: channelObj.messageCount || 0,
+                memberCount: channelObj.memberCount || 0
+            } : null;
+
             res.json({
                 success: true,
                 data: {
                     channelId,
+                    channelName: channelObj?.name || null,
+                    isThread,
+                    parentChannel,
+                    threadInfo,
                     messages: messagesList,
                     hasMore: hasMore,
                     oldestId: messagesList.length > 0 ? messagesList[0].id : null,
@@ -445,8 +545,12 @@ function createWebRouter(client) {
                 return res.status(404).json({ success: false, error: 'Salon introuvable ou non textuel' });
             }
 
+            if (channel.isThread && channel.isThread() && channel.archived) {
+                await channel.setArchived(false).catch(() => {});
+            }
+
             const sentMessage = await channel.send(content.trim());
-            logger.info(`Message envoyé sur #${channel.name} par interface Web`, 'WEB');
+            logger.info(`Message envoyé sur ${channel.isThread?.() ? 'le fil' : '#'}${channel.name} par interface Web`, 'WEB');
 
             res.json({
                 success: true,
@@ -458,6 +562,160 @@ function createWebRouter(client) {
             });
         } catch (error) {
             logger.error(`Erreur envoi message sur ${channelId}: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ============================================
+    // 4a. LISTE DES FILS DE DISCUSSION (THREADS) D'UN SALON
+    // ============================================
+    router.get('/channels/:channelId/threads', async (req, res) => {
+        const { channelId } = req.params;
+        try {
+            if (!client || !client.isReady()) return res.json({ success: true, data: [] });
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel || !channel.threads) return res.json({ success: true, data: [] });
+
+            const active = await channel.threads.fetchActive().catch(() => ({ threads: new Map() }));
+            const archived = await channel.threads.fetchArchived().catch(() => ({ threads: new Map() }));
+
+            const threads = [...active.threads.values(), ...archived.threads.values()].map(th => ({
+                id: th.id,
+                name: th.name,
+                type: 'thread',
+                icon: 'git-commit',
+                parentId: th.parentId,
+                messageCount: th.messageCount || 0,
+                memberCount: th.memberCount || 0,
+                archived: !!th.archived,
+                locked: !!th.locked
+            }));
+
+            res.json({ success: true, data: threads });
+        } catch (error) {
+            logger.error(`Erreur threads salon ${channelId}: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ============================================
+    // 4a-2. POSTS D'UN FORUM (LISTE DÉTAILLÉE AVEC TAGS & APERÇUS)
+    // ============================================
+    router.get('/channels/:channelId/posts', async (req, res) => {
+        const { channelId } = req.params;
+        try {
+            if (!client || !client.isReady()) {
+                return res.json({ success: true, data: { channelId, posts: [], availableTags: [] } });
+            }
+
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel) return res.status(404).json({ success: false, error: 'Salon forum introuvable' });
+
+            const availableTags = channel.availableTags ? channel.availableTags.map(t => ({
+                id: t.id,
+                name: t.name,
+                emoji: t.emoji ? (t.emoji.name || (t.emoji.id ? `https://cdn.discordapp.com/emojis/${t.emoji.id}.png?size=48&quality=lossless` : null)) : null,
+                moderated: !!t.moderated
+            })) : [];
+
+            let allThreads = [];
+            if (channel.threads) {
+                const active = await channel.threads.fetchActive().catch(() => ({ threads: new Map() }));
+                const archived = await channel.threads.fetchArchived().catch(() => ({ threads: new Map() }));
+                allThreads = [...active.threads.values(), ...archived.threads.values()];
+            }
+
+            const posts = await Promise.all(allThreads.map(async (th) => {
+                let starterContent = '';
+                try {
+                    const starter = await th.fetchStarterMessage().catch(() => null);
+                    if (starter) starterContent = starter.content || '';
+                } catch (e) { }
+
+                let owner = { id: th.ownerId, username: 'Membre', avatar: 'https://cdn.discordapp.com/embed/avatars/0.png' };
+                if (th.ownerId && th.guild) {
+                    const member = th.guild.members.cache.get(th.ownerId);
+                    if (member) {
+                        owner = {
+                            id: member.id,
+                            username: member.user.username,
+                            displayName: member.displayName,
+                            avatar: getUserAvatar(member.user, member)
+                        };
+                    }
+                }
+
+                return {
+                    id: th.id,
+                    name: th.name,
+                    parentId: th.parentId,
+                    ownerId: th.ownerId,
+                    owner,
+                    appliedTags: th.appliedTags || [],
+                    messageCount: th.messageCount || 0,
+                    memberCount: th.memberCount || 0,
+                    archived: !!th.archived,
+                    locked: !!th.locked,
+                    createdAt: th.createdAt ? th.createdAt.toISOString() : null,
+                    lastMessageId: th.lastMessageId,
+                    preview: starterContent
+                };
+            }));
+
+            posts.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+            res.json({
+                success: true,
+                data: {
+                    channelId: channel.id,
+                    channelName: channel.name,
+                    topic: channel.topic || '',
+                    availableTags,
+                    posts
+                }
+            });
+        } catch (error) {
+            logger.error(`Erreur posts forum ${channelId}: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/channels/:channelId/posts', async (req, res) => {
+        const { channelId } = req.params;
+        const { title, content, appliedTags } = req.body;
+
+        if (!title || !title.trim() || !content || !content.trim()) {
+            return res.status(400).json({ success: false, error: 'Titre et message initial requis' });
+        }
+
+        try {
+            if (!client || !client.isReady()) {
+                return res.status(503).json({ success: false, error: 'Bot Discord non connecté' });
+            }
+
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel || channel.type !== ChannelType.GuildForum) {
+                return res.status(400).json({ success: false, error: 'Salon forum introuvable' });
+            }
+
+            const createdPost = await channel.threads.create({
+                name: title.trim(),
+                message: { content: content.trim() },
+                appliedTags: Array.isArray(appliedTags) ? appliedTags : []
+            });
+
+            logger.info(`Nouveau post créé dans le forum #${channel.name}: "${title}"`, 'WEB');
+
+            res.json({
+                success: true,
+                data: {
+                    id: createdPost.id,
+                    name: createdPost.name,
+                    parentId: createdPost.parentId
+                }
+            });
+        } catch (error) {
+            logger.error(`Erreur création post forum ${channelId}: ${error.message}`, 'WEB');
             res.status(500).json({ success: false, error: error.message });
         }
     });
