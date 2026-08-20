@@ -1,8 +1,18 @@
+const { handleDailyMessageInteraction } = require("../utils/dailyMessageManager.js");
+
 module.exports = {
     name: 'interactionCreate',
     
     async execute(interaction) {
-        // Vérifier si c'est une commande slash
+        // 1. Gestion des interactions de type Bouton
+        if (interaction.isButton()) {
+            if (interaction.customId.startsWith('daily_msg_')) {
+                return await handleDailyMessageInteraction(interaction);
+            }
+            return;
+        }
+
+        // 2. Gestion des commandes slash
         if (!interaction.isChatInputCommand()) return;
         
         const command = interaction.client.commands.get(interaction.commandName);

@@ -1,8 +1,6 @@
 const cron = require('node-cron');
-const { EmbedBuilder } = require('discord.js');
-const { saveOpenAIMessage, getLastOpenAIMessageId, getTodayBirthdays, getGlobalStats, getPendingBumpReminders, markBumpReminderSent } = require("../database.js");
-const { callResponseCustom } = require("./openrouter.js");
-const { buildPrompt, requestPrompt, formatFinalPrompt } = require("../config/daily_message_config.js");
+const { getPendingBumpReminders, markBumpReminderSent } = require("../database.js");
+const { sendDailyMessagePreview } = require("./dailyMessageManager.js");
 
 /**
  * Fonction de vérification et d'envoi des rappels de bump en attente
@@ -52,89 +50,13 @@ function setupScheduledTasks(client) {
         await checkAndSendBumpReminders(client);
     });
 
-    // 3. Cron pour la génération quotidienne du message du jour à 09:00 (Paris)
+    // 3. Cron pour la génération et prévisualisation du message du jour à 09:00 (Paris)
     cron.schedule('0 9 * * *', async () => {
         try {
-            console.log('🌅 Début de la génération du message du jour...');
-
-            // ÉTAPE 1: Générer un prompt créatif via LLM
-            console.log('🔄 Étape 1/2: Génération du prompt créatif...');
-            const date = new Date();
-
-            const promptGenerationOptions = {
-                model: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
-                temperature: 1.2,
-                maxTokens: 500
-            };
-
-            const metaPrompt = requestPrompt(date);
-            const promptResponse = await callResponseCustom(metaPrompt, promptGenerationOptions);
-
-            console.log('✅ Prompt généré:', promptResponse.text);
-
-            const promptGenerationDb = {
-                msgid: promptResponse.msgId,
-                prompt: metaPrompt,
-                instruction: promptGenerationOptions.systemPrompt || null,
-                model: promptResponse.model,
-                tokeninput: promptResponse.usage.promptTokens,
-                tokenoutput: promptResponse.usage.completionTokens,
-                content: promptResponse.text,
-                type: 'prompt_generation'
-            };
-            await saveOpenAIMessage(promptGenerationDb);
-            console.log('💾 Génération du prompt sauvegardée en base de données.');
-
-            // ÉTAPE 2: Générer le message final avec le prompt
-            console.log('🔄 Étape 2/2: Génération du message final...');
-
-            const { prompt: finalPrompt, instruction: finalInstruction } = formatFinalPrompt(promptResponse.text, date);
-
-            const messageOptions = {
-                model: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
-                systemPrompt: finalInstruction,
-                temperature: 0.8,
-                maxTokens: 300
-            };
-
-            const messageResponse = await callResponseCustom(finalPrompt, messageOptions);
-
-            console.log('✅ Message final généré:', messageResponse.text);
-
-            const guildId = '1337543177086959657';
-            const channelId = '1337807772024180756';
-
-            const guild = await client.guilds.fetch(guildId, false);
-            const channel = await guild.channels.fetch(channelId);
-
-            const embed = new EmbedBuilder()
-                .setColor('#F2C7CE')
-                .setTitle('** Le message du jour **')
-                .setDescription(messageResponse.text)
-                .setTimestamp();
-
-            await channel.send({ embeds: [embed] });
-            console.log('📤 Message envoyé sur Discord avec succès.');
-
-            const messageDb = {
-                msgid: messageResponse.msgId,
-                prompt: finalPrompt,
-                instruction: finalInstruction,
-                model: messageResponse.model,
-                tokeninput: messageResponse.usage.promptTokens,
-                tokenoutput: messageResponse.usage.completionTokens,
-                content: messageResponse.text,
-                type: 'daily_message',
-                previousMsgId: promptResponse.msgId
-            };
-            await saveOpenAIMessage(messageDb);
-            console.log('💾 Message final sauvegardé en base de données.');
-
-            console.log('🎉 Message du jour généré et envoyé avec succès !');
-
+            console.log('🌅 [Cron 09:00] Déclenchement du pré-rendu du message du jour...');
+            await sendDailyMessagePreview(client);
         } catch (error) {
-            console.error('❌ Erreur lors de la génération du message du jour:', error.message);
-            console.error('Stack:', error.stack);
+            console.error('❌ Erreur lors du déclenchement du pré-rendu du message du jour:', error.message);
         }
     }, {
         timezone: "Europe/Paris"
