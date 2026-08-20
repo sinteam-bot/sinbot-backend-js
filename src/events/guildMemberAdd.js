@@ -184,7 +184,7 @@ async function createUserCaptchaChannel(member) {
             topic: `Canal de vérification pour ${member.user.tag}`,
             permissionOverwrites: permissionOverwrites
         });
-        await sendCaptchaLog(member.guild, 'Création canal', `Canal captcha créé pour **${member.user.tag}** (ID: ${channel.id})`);
+        await sendCaptchaLog(member.guild, 'Création canal', `Canal captcha créé pour **${member.user.tag}** (ID: ${channel.id})`, '#3498db');
         return channel;
     } catch (error) {
         console.error('❌ Erreur création canal utilisateur:', error);
@@ -221,7 +221,7 @@ module.exports = {
                     const verifiedRole = await getVerifiedRole(member.guild);
                     if (verifiedRole) {
                         await member.roles.add(verifiedRole.id);
-                        await sendCaptchaLog(member.guild, 'Succès captcha', `**${member.user.tag}** a validé le captcha - Rôle vérifié donné`, '#f2c7ce');
+                        await sendCaptchaLog(member.guild, 'Succès captcha', `**${member.user.tag}** a validé le captcha - Rôle vérifié donné`, '#3498db');
                     } else {
                         console.error('❌ Rôle vérifié introuvable. Le captcha est validé mais aucun rôle attribué.');
                     }
