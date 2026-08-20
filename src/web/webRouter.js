@@ -430,7 +430,7 @@ function createWebRouter(client) {
                             const isCustom = !!r.emoji.id;
                             const isAnimated = !!r.emoji.animated;
                             const url = isCustom
-                                ? (r.emoji.imageURL ? r.emoji.imageURL({ extension: isAnimated ? 'gif' : 'png', size: 48 }) : `https://cdn.discordapp.com/emojis/${r.emoji.id}.${isAnimated ? 'gif' : 'png'}?size=48&quality=lossless`)
+                                ? (r.emoji.imageURL ? r.emoji.imageURL({ extension: isAnimated ? 'gif' : 'png', size: 64 }) : `https://cdn.discordapp.com/emojis/${r.emoji.id}.${isAnimated ? 'gif' : 'png'}?size=64&quality=lossless`)
                                 : null;
                             return {
                                 emoji: r.emoji.name,
