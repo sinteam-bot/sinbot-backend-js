@@ -124,7 +124,7 @@ function createWebRouter(client) {
 
             if (guild) {
                 const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
-                const activeThreads = await guild.threads.fetchActive().catch(() => ({ threads: new Map() }));
+                const activeThreads = guild.channels?.fetchActiveThreads ? await guild.channels.fetchActiveThreads().catch(() => null) : null;
                 
                 const threadsByParent = new Map();
                 const addThread = (th) => {
