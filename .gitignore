@@ -6,3 +6,4 @@ pm2-logs/
 src/.env
 data/
 logs/
+.deno_lsp/

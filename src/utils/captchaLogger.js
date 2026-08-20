@@ -2,7 +2,7 @@
  * Utilitaire pour logger les actions du captcha dans le canal dédié
  */
 
-const CAPTCHA_CONFIG = require('../config/captcha-config');
+const CAPTCHA_CONFIG = require('../config/captcha-config.js');
 
 /**
  * Envoyer un log dans le canal de logs captcha
