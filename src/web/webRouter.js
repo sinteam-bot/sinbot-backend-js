@@ -124,33 +124,6 @@ function createWebRouter(client) {
 
             if (guild) {
                 const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
-                const activeThreads = guild.channels?.fetchActiveThreads ? await guild.channels.fetchActiveThreads().catch(() => null) : null;
-                
-                const threadsByParent = new Map();
-                const addThread = (th) => {
-                    if (!th || !th.parentId) return;
-                    if (!threadsByParent.has(th.parentId)) threadsByParent.set(th.parentId, []);
-                    const list = threadsByParent.get(th.parentId);
-                    if (!list.some(t => t.id === th.id)) {
-                        list.push({
-                            id: th.id,
-                            name: th.name,
-                            type: 'thread',
-                            icon: 'git-commit',
-                            parentId: th.parentId,
-                            messageCount: th.messageCount || 0,
-                            memberCount: th.memberCount || 0,
-                            archived: !!th.archived,
-                            locked: !!th.locked,
-                            rateLimitPerUser: th.rateLimitPerUser || 0,
-                            createdAt: th.createdAt ? th.createdAt.toISOString() : null
-                        });
-                    }
-                };
-
-                if (activeThreads && activeThreads.threads) {
-                    activeThreads.threads.forEach(th => addThread(th));
-                }
 
                 const categoriesMap = new Map();
 
@@ -170,13 +143,12 @@ function createWebRouter(client) {
                 channels.forEach(ch => {
                     if (!ch || ch.type === ChannelType.GuildCategory) return;
 
-                    // Si c'est un thread
-                    if (ch.isThread && ch.isThread()) {
-                        addThread(ch);
+                    // Ignorer les threads et les forums
+                    if (ch.isThread && ch.isThread()) return;
+                    if (ch.type === ChannelType.PublicThread || ch.type === ChannelType.PrivateThread || ch.type === ChannelType.AnnouncementThread) {
                         return;
                     }
-                    if (ch.type === ChannelType.PublicThread || ch.type === ChannelType.PrivateThread || ch.type === ChannelType.AnnouncementThread) {
-                        addThread(ch);
+                    if (ch.type === ChannelType.GuildForum || ch.type === ChannelType.GuildMedia) {
                         return;
                     }
 
@@ -188,9 +160,6 @@ function createWebRouter(client) {
                     } else if (ch.type === ChannelType.GuildAnnouncement) {
                         typeStr = 'announcement';
                         icon = 'megaphone';
-                    } else if (ch.type === ChannelType.GuildForum) {
-                        typeStr = 'forum';
-                        icon = 'message-square';
                     }
 
                     const channelData = {
@@ -201,14 +170,7 @@ function createWebRouter(client) {
                         topic: ch.topic || '',
                         parentId: ch.parentId,
                         position: ch.position,
-                        isNsfw: ch.nsfw || false,
-                        availableTags: ch.availableTags ? ch.availableTags.map(t => ({
-                            id: t.id,
-                            name: t.name,
-                            emoji: t.emoji ? (t.emoji.name || (t.emoji.id ? `https://cdn.discordapp.com/emojis/${t.emoji.id}.png?size=48&quality=lossless` : null)) : null,
-                            moderated: !!t.moderated
-                        })) : [],
-                        threads: threadsByParent.get(ch.id) || []
+                        isNsfw: ch.nsfw || false
                     };
 
                     if (ch.parentId && categoriesMap.has(ch.parentId)) {
@@ -218,22 +180,17 @@ function createWebRouter(client) {
                     }
                 });
 
-                // Trier les canaux au sein des catégories et attacher les threads
+                // Trier les canaux au sein des catégories
                 const sortedCategories = Array.from(categoriesMap.values())
                     .sort((a, b) => a.position - b.position)
                     .map(cat => {
                         cat.channels.sort((a, b) => a.position - b.position);
-                        cat.channels.forEach(ch => {
-                            ch.threads = threadsByParent.get(ch.id) || [];
-                        });
                         return cat;
-                    });
+                    })
+                    .filter(cat => cat.channels.length > 0);
 
                 if (uncatChannels.length > 0) {
                     uncatChannels.sort((a, b) => a.position - b.position);
-                    uncatChannels.forEach(ch => {
-                        ch.threads = threadsByParent.get(ch.id) || [];
-                    });
                     categories.push({
                         id: 'cat-uncategorized',
                         name: 'SALONS',
@@ -252,31 +209,6 @@ function createWebRouter(client) {
                     `);
                     const dbChannels = dbChannelsRes.rows;
 
-                    // Récupérer les threads depuis la table discord_threads
-                    let dbThreads = [];
-                    try {
-                        const threadsRes = await db.pool.query(`SELECT * FROM discord_threads ORDER BY created_at DESC`);
-                        dbThreads = threadsRes.rows;
-                    } catch (te) { }
-
-                    const threadsByParent = new Map();
-                    dbThreads.forEach(th => {
-                        if (!th.parent_id) return;
-                        if (!threadsByParent.has(th.parent_id)) threadsByParent.set(th.parent_id, []);
-                        threadsByParent.get(th.parent_id).push({
-                            id: th.thread_id,
-                            name: th.name,
-                            type: 'thread',
-                            icon: 'git-commit',
-                            parentId: th.parent_id,
-                            messageCount: th.message_count || 0,
-                            memberCount: th.member_count || 0,
-                            archived: !!th.archived,
-                            locked: !!th.locked,
-                            createdAt: th.created_at
-                        });
-                    });
-
                     const catMap = new Map();
                     const uncat = [];
 
@@ -294,16 +226,18 @@ function createWebRouter(client) {
 
                     dbChannels.forEach(ch => {
                         if (ch.type === 'GuildCategory') return;
+                        const typeLower = (ch.type || '').toLowerCase();
+                        if (typeLower.includes('forum') || typeLower.includes('thread') || typeLower.includes('media')) return;
+
                         const channelData = {
                             id: ch.channel_id,
                             name: ch.name,
-                            type: ch.type.toLowerCase().includes('voice') ? 'voice' : 'text',
-                            icon: ch.type.toLowerCase().includes('voice') ? 'volume-2' : 'hash',
+                            type: typeLower.includes('voice') ? 'voice' : 'text',
+                            icon: typeLower.includes('voice') ? 'volume-2' : 'hash',
                             topic: ch.topic || '',
                             parentId: ch.parent_id,
                             position: ch.position,
-                            isNsfw: !!ch.is_nsfw,
-                            threads: threadsByParent.get(ch.channel_id) || []
+                            isNsfw: !!ch.is_nsfw
                         };
 
                         if (ch.parent_id && catMap.has(ch.parent_id)) {
@@ -322,7 +256,7 @@ function createWebRouter(client) {
                             channels: uncat
                         });
                     }
-                    categories.push(...Array.from(catMap.values()));
+                    categories.push(...Array.from(catMap.values()).filter(cat => cat.channels.length > 0));
                 } catch (e) {
                     // Si aucune BDD, on garde au moins la catégorie virtuelle
                 }
