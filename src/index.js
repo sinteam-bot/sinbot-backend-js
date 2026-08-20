@@ -6,6 +6,11 @@ require('dotenv').config();
 
 const { logUserEvent, getUserEvents, getGlobalStats } = require('./database');
 const { loadCommands } = require('./utils/commandHandler');
+const logger = require('./utils/logger');
+const createWebRouter = require('./web/webRouter');
+
+// Activer la capture des logs console pour le salon virtuel Logs
+logger.initConsoleInterceptor();
 
 // ============================================
 // CONFIGURATION DU CLIENT DISCORD
@@ -54,6 +59,16 @@ console.log('');
 
 const app = express();
 app.use(express.json());
+
+// Servir l'interface web statique
+const publicPath = path.join(__dirname, '../public');
+if (!fs.existsSync(publicPath)) {
+    fs.mkdirSync(publicPath, { recursive: true });
+}
+app.use(express.static(publicPath));
+
+// Monter le routeur API Discord Web
+app.use('/api', createWebRouter(client));
 
 // Endpoint pour envoyer un message depuis n8n
 app.post('/webhook/send-message', async (req, res) => {
@@ -143,6 +158,7 @@ app.listen(PORT, () => {
     console.log('╚══════════════════════════════════════╝');
     console.log('');
     console.log(`✅ Serveur sur le port: ${PORT}`);
+    console.log(`🖥️  Interface Web: http://localhost:${PORT}/`);
     console.log(`📡 Webhook URL: http://localhost:${PORT}/webhook/send-message`);
     console.log(`📊 API Stats: http://localhost:${PORT}/api/stats`);
     console.log(`❤️  Health: http://localhost:${PORT}/health`);
