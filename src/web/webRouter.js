@@ -892,7 +892,7 @@ function createWebRouter(client) {
     router.get('/users', async (req, res) => {
         try {
             const guild = await getGuild();
-            const { search, role, isBot, sortBy = 'joined', order = 'desc', page = 1, limit = 50 } = req.query;
+            const { search, role, isBot, hasXp, sortBy = 'joined', order = 'desc', page = 1, limit = 500 } = req.query;
 
             let membersList = [];
 
@@ -959,7 +959,8 @@ function createWebRouter(client) {
                         roles: Array.isArray(roles) ? roles.map(r => typeof r === 'string' ? { id: r, name: r, color: '#5865F2' } : r) : [],
                         xp: row.xp || 0,
                         level: row.level || 1,
-                        messagesCount: row.messages_count || 0
+                        messagesCount: row.messages_count || 0,
+                        voiceMinutes: row.voice_minutes || 0
                     };
                 });
             }
@@ -981,6 +982,7 @@ function createWebRouter(client) {
                         m.xp = m.xp || 0;
                         m.level = m.level || 1;
                         m.messagesCount = m.messagesCount || 0;
+                        m.voiceMinutes = m.voiceMinutes || 0;
                     }
                 });
             } catch (e) { }
@@ -1009,6 +1011,13 @@ function createWebRouter(client) {
                 membersList = membersList.filter(m => !m.isBot);
             }
 
+            // Filtrage XP
+            if (hasXp === 'has_xp') {
+                membersList = membersList.filter(m => (m.xp || 0) > 0);
+            } else if (hasXp === 'no_xp') {
+                membersList = membersList.filter(m => (m.xp || 0) === 0);
+            }
+
             // Tri
             membersList.sort((a, b) => {
                 let diff = 0;
@@ -1018,6 +1027,16 @@ function createWebRouter(client) {
                     diff = (a.xp || 0) - (b.xp || 0);
                 } else if (sortBy === 'level') {
                     diff = (a.level || 1) - (b.level || 1);
+                } else if (sortBy === 'messages') {
+                    diff = (a.messagesCount || 0) - (b.messagesCount || 0);
+                } else if (sortBy === 'voice') {
+                    diff = (a.voiceMinutes || 0) - (b.voiceMinutes || 0);
+                } else if (sortBy === 'created') {
+                    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                    diff = dateA - dateB;
+                } else if (sortBy === 'type') {
+                    diff = (a.isBot ? 1 : 0) - (b.isBot ? 1 : 0);
                 } else {
                     // Par date d'arrivée
                     const dateA = a.joinedAt ? new Date(a.joinedAt).getTime() : 0;
@@ -1029,7 +1048,7 @@ function createWebRouter(client) {
 
             const total = membersList.length;
             const p = Math.max(parseInt(page) || 1, 1);
-            const l = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
+            const l = Math.min(Math.max(parseInt(limit) || 200, 1), 1000);
             const paginated = membersList.slice((p - 1) * l, p * l);
 
             res.json({
