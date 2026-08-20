@@ -7,13 +7,13 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const express = require('express');
 const fs = require('fs');
-const { buildPrompt, requestPrompt } = require('./config/daily_message_config');
-const { callResponseCustom } = require('./utils/openrouter')
+const { buildPrompt, requestPrompt } = require("./config/daily_message_config.js");
+const { callResponseCustom } = require("./utils/openrouter.js")
 const { EmbedBuilder } = require('discord.js');
 
 
-const { logUserEvent, getUserEvents, getGlobalStats } = require('./database');
-const { loadCommands } = require('./utils/commandHandler');
+const { logUserEvent, getUserEvents, getGlobalStats } = require("./database.js");
+const { loadCommands } = require("./utils/commandHandler.js");
 
 // ============================================
 // CONFIGURATION DU CLIENT DISCORD

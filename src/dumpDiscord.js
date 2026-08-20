@@ -13,7 +13,7 @@ const {
     saveDumpChannel,
     saveDumpThread,
     saveDumpMessagesBatch
-} = require('./database');
+} = require("./database.js");
 
 const client = new Client({
     intents: [

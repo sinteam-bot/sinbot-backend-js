@@ -7,7 +7,7 @@ const { requestPrompt, formatFinalPrompt } = require("../config/daily_message_co
 const pendingDrafts = new Map();
 
 // Configuration des salons
-const PREVIEW_CHANNEL_ID = process.env.NOTIFICATION_CHANNEL_ID || '1533492760697503805';
+const PREVIEW_CHANNEL_ID = process.env.NOTIFICATION_CHANNEL_ID || '1348741823237062781';
 const TARGET_CHANNEL_ID = process.env.DAILY_MESSAGE_CHANNEL_ID || '1337807772024180756';
 const TARGET_GUILD_ID = process.env.GUILD_ID || '1337543177086959657';
 
