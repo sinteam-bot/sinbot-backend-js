@@ -215,7 +215,7 @@ module.exports = {
             const alreadyVerified = await isUserVerified(member.id, member.guild.id);
 
             if (alreadyVerified) {
-                await sendCaptchaLog(member.guild, 'Déjà vérifié', `**${member.user.tag}** est déjà vérifié`);
+                await sendCaptchaLog(member.guild, 'Déjà vérifié', `**${member.user.tag}** est déjà vérifié`, "#3498db");
                 // Donner le rôle vérifié
                 try {
                     const verifiedRole = await getVerifiedRole(member.guild);
@@ -280,7 +280,7 @@ ${instructions}`;
                 }]
             });
 
-            await sendCaptchaLog(member.guild, 'Captcha envoyé', `Captcha envoyé à **${member.user.tag}** (ID: ${member.id}) - Question: ${mathQuestion.question}`);
+            await sendCaptchaLog(member.guild, 'Captcha envoyé', `Captcha envoyé à **${member.user.tag}** (ID: ${member.id}) - Question: ${mathQuestion.question}`, "#3498db");
 
             // Démarrer un timeout pour supprimer le captcha après expiration
             const timeoutMinutes = CAPTCHA_CONFIG.CAPTCHA_TIMEOUT;
@@ -308,7 +308,7 @@ ${instructions}`;
                         setTimeout(async () => {
                             try {
                                 await captchaChannel.delete();
-                                await sendCaptchaLog(member.guild, 'Suppression canal', `Canal captcha de **${member.user.tag}** supprimé (timeout)`);
+                                await sendCaptchaLog(member.guild, 'Suppression canal', `Canal captcha de **${member.user.tag}** supprimé (timeout)`, "#3498db");
                             } catch (error) {
                                 console.error('❌ Erreur suppression canal timeout:', error);
                             }
