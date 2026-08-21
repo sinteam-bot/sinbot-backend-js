@@ -51,13 +51,13 @@ function setupScheduledTasks(client) {
         await checkAndSendBumpReminders(client);
     });
 
-    // 3. Cron pour la génération et prévisualisation du message du jour à 08:00 (Paris)
-    cron.schedule('0 8 * * *', async () => {
+    // 3. Cron pour la génération et prévisualisation du message du jour à 19:00 (Paris)
+    cron.schedule('0 19 * * *', async () => {
         try {
-            console.log('🌅 [Cron 08:00] Déclenchement du pré-rendu du message du jour...');
+            console.log('🌅 [Cron 19:00] Déclenchement du pré-rendu du message du jour...');
             await sendDailyMessagePreview(client);
         } catch (error) {
-            console.error('❌ Erreur lors du déclenchement du pré-rendu du message du jour (08:00):', error.message);
+            console.error('❌ Erreur lors du déclenchement du pré-rendu du message du jour (19:00):', error.message);
         }
     }, {
         timezone: "Europe/Paris"
