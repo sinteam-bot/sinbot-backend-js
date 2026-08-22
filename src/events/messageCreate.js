@@ -15,7 +15,7 @@ function addHours(date, hours) {
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
-const CHANNEL_ID = '1348741823237062781'; // #bot
+const CHANNEL_ID = process.env.LOG_CHANNEL_ID; // #bot
 const CAPTCHA_CONFIG = require("../config/captcha-config.js");
 
 // Vérifier si un message est une réponse au captcha

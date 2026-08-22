@@ -6,7 +6,7 @@ module.exports = {
     // Activer ou désactiver le système de captcha
     ENABLED: true,
 
-    CAPTCHA_LOG_CHANNEL: '1338142545313796107',
+    CAPTCHA_LOG_CHANNEL: process.env.LOG_CHANNEL_ID,
 
     // ID du canal où les captchas seront envoyés
     // Si non défini, un canal sera créé automatiquement

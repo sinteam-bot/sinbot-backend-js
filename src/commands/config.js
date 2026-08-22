@@ -39,7 +39,7 @@ module.exports = {
 
     async executeSlash(interaction) {
         const subcommand = interaction.options.getSubcommand();
-        if (interaction.channel.id != '1348741823237062781') {
+        if (interaction.channel.id != process.env.LOG_CHANNEL_ID) {
             await interaction.reply({
                 content: `❌ Erreur : Vous n'avez pas accès à cette commande.`,
                 ephemeral: true

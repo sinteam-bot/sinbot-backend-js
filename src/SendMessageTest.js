@@ -25,7 +25,7 @@ const client = new Client({
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
-const CHANNEL_ID = '1348741823237062781';
+const CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 
 // ============================================
 // CONNEXION DU BOT

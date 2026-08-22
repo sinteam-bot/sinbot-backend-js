@@ -1063,7 +1063,7 @@ function createWebRouter(client) {
                     xp: xpConfig,
                     env: {
                         dailyMessageChannelId: process.env.DAILY_MESSAGE_CHANNEL_ID || '',
-                        notificationChannelId: process.env.NOTIFICATION_CHANNEL_ID || '',
+                        notificationChannelId: process.env.LOG_CHANNEL_ID || '',
                         openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini'
                     }
                 }
@@ -1194,7 +1194,7 @@ function createWebRouter(client) {
                         totalMessages,
                         totalTokens,
                         configuredChannelId: process.env.DAILY_MESSAGE_CHANNEL_ID || '1337807772024180756',
-                        configuredPreviewChannelId: process.env.NOTIFICATION_CHANNEL_ID || '1348741823237062781',
+                        configuredPreviewChannelId: process.env.LOG_CHANNEL_ID,
                         configuredModel: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
                         scheduleTime: '09:00',
                         previewTime: '21:00'
