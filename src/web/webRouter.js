@@ -1197,7 +1197,7 @@ function createWebRouter(client) {
                         configuredPreviewChannelId: process.env.NOTIFICATION_CHANNEL_ID || '1348741823237062781',
                         configuredModel: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
                         scheduleTime: '09:00',
-                        previewTime: '08:30'
+                        previewTime: '21:00'
                     },
                     history
                 }

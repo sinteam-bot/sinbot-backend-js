@@ -1,6 +1,11 @@
 const cron = require('node-cron');
 const { getPendingBumpReminders, markBumpReminderSent } = require("../database.js");
-const { sendDailyMessagePreview, publishScheduledDailyMessage } = require("./dailyMessageManager.js");
+const { 
+    sendDailyMessagePreview, 
+    publishScheduledDailyMessage, 
+    autoValidateAndPublishDailyMessage,
+    getParisHour 
+} = require("./dailyMessageManager.js");
 
 /**
  * Fonction de vérification et d'envoi des rappels de bump en attente
@@ -16,14 +21,13 @@ async function checkAndSendBumpReminders(client) {
                     if (channel) {
                         const userText = bump.username ? `@${bump.username}` : (bump.user_id ? `<@${bump.user_id}>` : null);
                         const userMentionInfo = userText ? ` (Dernier bump par <@${bump.user_id}>)` : '';
-                        // await channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544> ${userMentionInfo}`);
                         const delay = ((parseInt(Date.parse(bump.bumped_at)) / 1000) + 7200) - Math.floor(Date.now() / 1000);
                         console.log(`[BUMP] bientôt 2 heures se sont écoulées depuis le bump (ID: ${bump.id}), rappel envoyé dans ${delay} secondes !`, bump.bumped_at);
 
                         setTimeout(async () => {
                             await channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544> ${userMentionInfo}`);
                             const heureParis = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
-                            await console.log(`[BUMP] 2 heures se sont écoulées, le rappel a été envoyé à ${heureParis}!`)
+                            console.log(`[BUMP] 2 heures se sont écoulées, le rappel a été envoyé à ${heureParis}!`);
                         }, delay * 1000);
                     }
                 }
@@ -44,20 +48,26 @@ function setupScheduledTasks(client) {
 
     // 1. Vérification immédiate au démarrage du bot (reboot recovery)
     checkAndSendBumpReminders(client);
-    publishScheduledDailyMessage(client);
+
+    const currentHour = getParisHour();
+    if (currentHour >= 11) {
+        autoValidateAndPublishDailyMessage(client);
+    } else if (currentHour >= 9) {
+        publishScheduledDailyMessage(client);
+    }
 
     // 2. Cron vérifiant toutes les minutes si un rappel de bump doit être envoyé
     cron.schedule('* * * * *', async () => {
         await checkAndSendBumpReminders(client);
     });
 
-    // 3. Cron pour la génération et prévisualisation du message du jour à 19:00 (Paris)
-    cron.schedule('0 19 * * *', async () => {
+    // 3. Cron pour la génération et prévisualisation du message du jour à 21:00 (Paris, la veille)
+    cron.schedule('0 21 * * *', async () => {
         try {
-            console.log('🌅 [Cron 19:00] Déclenchement du pré-rendu du message du jour...');
+            console.log('🌅 [Cron 21:00] Déclenchement du pré-rendu du message du jour (pour demain)...');
             await sendDailyMessagePreview(client);
         } catch (error) {
-            console.error('❌ Erreur lors du déclenchement du pré-rendu du message du jour (19:00):', error.message);
+            console.error('❌ Erreur lors du déclenchement du pré-rendu du message du jour (21:00):', error.message);
         }
     }, {
         timezone: "Europe/Paris"
@@ -75,7 +85,19 @@ function setupScheduledTasks(client) {
         timezone: "Europe/Paris"
     });
 
-    console.log('✅ Tâches planifiées configurées');
+    // 5. Cron pour la validation et publication automatique à 11:00 (Paris) si non validé manuellement
+    cron.schedule('0 11 * * *', async () => {
+        try {
+            console.log('🤖 [Cron 11:00] Vérification de la validation automatique du message du jour...');
+            await autoValidateAndPublishDailyMessage(client);
+        } catch (error) {
+            console.error('❌ Erreur lors de la validation automatique du message du jour (11:00):', error.message);
+        }
+    }, {
+        timezone: "Europe/Paris"
+    });
+
+    console.log('✅ Tâches planifiées configurées (21:00 Preview, 09:00 Publish, 11:00 Auto-Validate)');
 }
 
 module.exports = {
