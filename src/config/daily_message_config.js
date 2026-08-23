@@ -1,73 +1,117 @@
 // Configuration du prompt for daily message
-const ANGLE_HUMOUR = [
-        "observation du quotidien",
-        "energie du matin",
-        "bienveillance complice"
-    ];
-const  STYLE_ECRITURE = [
-        "philosophique",
-        "familier chaleureux"
-    ];
-const DISPOSITIF_NARRATIF = [
-        "classique"
-    ];
- const CONTRAINTE_LEGERE = [
-        "interdire_les_mots: soleil",
-        "pas_de_point_dexclamation",
-        "utiliser_une_image_concrete",
-        "aucune_reference_au_temps",
-        "aucun_pronom_personnel"
-    ]
+// Connecté au système de configuration unifié (config.yml / variables d'environnement)
+const { getConfig } = require('./index.js');
 
-  const ajoutMod = ["Petit déjeuner"," boisson"," matin"," réconfortant"," motivation"," avec du pep’s"," le lever"," le lit"," doudou"," boire"," bol"," tasse"," verre"," coucher"," ambition"," sérénité"," tendresse"," chaleur"," café"," thé"," chocolat chaud"," confiance"," opportunité"," fraicheur"," oreiller"," couette"," cuisine"," tartine"," jus d’orange"," amour"," gorgée"]
-function pickRandom(arr, n) {
-  return [...arr]
-    .sort(() => Math.random() - 0.5)
-    .slice(0, n);
+const DEFAULT_ANGLE_HUMOUR = [
+    "observation du quotidien",
+    "energie du matin",
+    "bienveillance complice"
+];
+const DEFAULT_STYLE_ECRITURE = [
+    "philosophique",
+    "familier chaleureux"
+];
+const DEFAULT_DISPOSITIF_NARRATIF = [
+    "classique"
+];
+const DEFAULT_CONTRAINTE_LEGERE = [
+    "interdire_les_mots: soleil",
+    "pas_de_point_dexclamation",
+    "utiliser_une_image_concrete",
+    "aucune_reference_au_temps",
+    "aucun_pronom_personnel"
+];
+const DEFAULT_AJOUT_MOD = [
+    "Petit déjeuner", " boisson", " matin", " réconfortant", " motivation",
+    " avec du pep’s", " le lever", " le lit", " doudou", " boire", " bol",
+    " tasse", " verre", " coucher", " ambition", " sérénité", " tendresse",
+    " chaleur", " café", " thé", " chocolat chaud", " confiance", " opportunité",
+    " fraicheur", " oreiller", " couette", " cuisine", " tartine", " jus d’orange",
+    " amour", " gorgée"
+];
+
+function getAiConfig() {
+    const full = getConfig();
+    return full.daily_message?.ai_config || {};
 }
+
+function getAngleHumour() {
+    return getAiConfig().angle_humour || DEFAULT_ANGLE_HUMOUR;
+}
+
+function getStyleEcriture() {
+    return getAiConfig().style_ecriture || DEFAULT_STYLE_ECRITURE;
+}
+
+function getDispositifNarratif() {
+    return getAiConfig().dispositif_narratif || DEFAULT_DISPOSITIF_NARRATIF;
+}
+
+function getContrainteLegere() {
+    return getAiConfig().contrainte_legere || DEFAULT_CONTRAINTE_LEGERE;
+}
+
+function getAjoutMod() {
+    return getAiConfig().ajoutMod || DEFAULT_AJOUT_MOD;
+}
+
+function pickRandom(arr, n) {
+    return [...arr]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, n);
+}
+
 function getDayOfYear(date = new Date()) {
-  const start = new Date(date.getFullYear(), 0, 0);
-  const diff = date - start;
-  const oneDay = 1000 * 60 * 60 * 24;
-  return Math.floor(diff / oneDay);
+    const start = new Date(date.getFullYear(), 0, 0);
+    const diff = date - start;
+    const oneDay = 1000 * 60 * 60 * 24;
+    return Math.floor(diff / oneDay);
 }
 
 function pickDeterministic(array, seed) {
-  return array[seed % array.length];
+    return array[seed % array.length];
 }
 
 function getDailyVariation(date = new Date()) {
-  const day = getDayOfYear(date);
+    const day = getDayOfYear(date);
 
-  return {
-    angle: pickDeterministic(ANGLE_HUMOUR, day),
-    style: pickDeterministic(STYLE_ECRITURE, day + 3),
-    dispositif: pickDeterministic(DISPOSITIF_NARRATIF, day + 7),
-    contrainte: pickDeterministic(CONTRAINTE_LEGERE, day * 2)
-  };
+    return {
+        angle: pickDeterministic(getAngleHumour(), day),
+        style: pickDeterministic(getStyleEcriture(), day + 3),
+        dispositif: pickDeterministic(getDispositifNarratif(), day + 7),
+        contrainte: pickDeterministic(getContrainteLegere(), day * 2)
+    };
 }
 
 function buildPrompt(date = new Date()) {
-  const { angle, style, dispositif, contrainte } = getDailyVariation(date);
-  const dateStr = date.toISOString().slice(0, 10);
-  var retour  = {
-    "prompt" : `Date : ${dateStr}. Objectif : souhaiter une bonne journée en ambiance petit déjeuner. Voici les mots à inclure dans le texte : ${pickRandom(ajoutMod, 2)}`,
-    "instruction" :"Écris uniquement le message final. Commence les message par 'En ce ' suivi de la date du jour (exemple format : lundi 1 janvier 2025). Le message doit être clair et compréhensible de tous. Maximum 3 phrases sans emoji."
-    //"prompt" : `Date : ${dateStr}. Objectif : souhaiter une bonne journée avec beaucoup d'humour geek.`,
-    //"instruction" :"Écris uniquement le message final. Commence les message par 'En ce ' suivi de la date du jour (exemple format : lundi 1 janvier 2025). Maximum 3 phrases sans emoji."
-  }
-  return retour;
+    const { angle, style, dispositif, contrainte } = getDailyVariation(date);
+    const dateStr = date.toISOString().slice(0, 10);
+    const aiConf = getAiConfig();
+
+    const customPromptTemplate = aiConf.prompt;
+    const customInstruction = aiConf.instruction || "Écris uniquement le message final. Commence les message par 'En ce ' suivi de la date du jour (exemple format : lundi 1 janvier 2025). Le message doit être clair et compréhensible de tous. Maximum 3 phrases sans emoji.";
+
+    let promptText = `Date : ${dateStr}. Objectif : souhaiter une bonne journée en ambiance petit déjeuner. Voici les mots à inclure dans le texte : ${pickRandom(getAjoutMod(), 2).join(', ')}`;
+    if (customPromptTemplate) {
+        promptText = customPromptTemplate
+            .replace(/\${dateStr}/g, dateStr)
+            .replace(/\${pickRandom\(ajoutMod,\s*\d+\)}/g, pickRandom(getAjoutMod(), 2).join(', '));
+    }
+
+    return {
+        prompt: promptText,
+        instruction: customInstruction
+    };
 }
 
 function requestPrompt(date = new Date()) {
-  const dateStr = date.toISOString().slice(0, 10);
-  const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' });
-  const day = date.getDate();
-  const monthName = date.toLocaleDateString('fr-FR', { month: 'long' });
-  const year = date.getFullYear();
-  const fullDate = `${dayName} ${day} ${monthName} ${year}`;
+    const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' });
+    const day = date.getDate();
+    const monthName = date.toLocaleDateString('fr-FR', { month: 'long' });
+    const year = date.getFullYear();
+    const fullDate = `${dayName} ${day} ${monthName} ${year}`;
 
-  const generateprompt = `Tu es un générateur de prompts créatifs pour messages Discord.
+    const generateprompt = `Tu es un générateur de prompts créatifs pour messages Discord.
 
   Ta mission est de produire UNIQUEMENT un prompt unique et original qui servira à générer un message de "bonne journée".
   Ne génère PAS le message final, uniquement le prompt.
@@ -91,7 +135,7 @@ function requestPrompt(date = new Date()) {
 
   Important: Retourne UNIQUEMENT le texte du prompt, sans explication ni commentaire.`;
 
-  return generateprompt;
+    return generateprompt;
 }
 
 /**
@@ -101,34 +145,32 @@ function requestPrompt(date = new Date()) {
  * @returns {object} - {prompt: string, instruction: string}
  */
 function formatFinalPrompt(rawPrompt, date = new Date()) {
-  const dateStr = date.toISOString().slice(0, 10);
-  const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' });
-  const day = date.getDate();
-  const monthName = date.toLocaleDateString('fr-FR', { month: 'long' });
-  const year = date.getFullYear();
-  const fullDate = `${dayName} ${day} ${monthName} ${year}`;
+    const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' });
+    const day = date.getDate();
+    const monthName = date.toLocaleDateString('fr-FR', { month: 'long' });
+    const year = date.getFullYear();
+    const fullDate = `${dayName} ${day} ${monthName} ${year}`;
 
-  return {
-    prompt: rawPrompt,
-    instruction: `Écris UNIQUEMENT le message final. Commence obligatoirement par "En ce ${fullDate}". 
+    return {
+        prompt: rawPrompt,
+        instruction: `Écris UNIQUEMENT le message final. Commence obligatoirement par "En ce ${fullDate}". 
                   Le message doit faire 1 à 3 phrases maximum, être clair, positif et sans emoji.
                   Respecte exactement les contraintes du prompt fourni.`
-  };
+    };
 }
 
-function getHumour(){
-  return ANGLE_HUMOUR.toString();
+function getHumour() {
+    return getAngleHumour().toString();
 }
-function getEcriture(){
-  return STYLE_ECRITURE.toString();
+function getEcriture() {
+    return getStyleEcriture().toString();
 }
-function getNarratif(){
-  return DISPOSITIF_NARRATIF.toString();
+function getNarratif() {
+    return getDispositifNarratif().toString();
 }
-function getContrainte(){
-  return CONTRAINTE_LEGERE.toString();
+function getContrainte() {
+    return getContrainteLegere().toString();
 }
-
 
 module.exports = {
     buildPrompt,
@@ -138,4 +180,4 @@ module.exports = {
     getEcriture,
     getNarratif,
     getContrainte
-}
+};

@@ -7,3 +7,4 @@ src/.env
 data/
 logs/
 .deno_lsp/
+config.yml

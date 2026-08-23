@@ -1,7 +1,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config();
+const { config } = require('./config/index.js');
 
 // Configuration du captcha
 const CAPTCHA_CONFIG = require("./config/captcha-config.js");
@@ -12,7 +12,7 @@ if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const dbPath = process.env.DB_PATH || path.join(dbDir, 'bot.db');
+const dbPath = config.db_path || process.env.DB_PATH || path.join(dbDir, 'bot.db');
 const db = new Database(dbPath);
 
 // Activer le mode WAL pour de meilleures performances

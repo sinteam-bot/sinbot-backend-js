@@ -6,23 +6,38 @@ const {
   getCountdownScores,
   resetCountdownScores
 } = require("../database.js");
+const { config } = require("../config/index.js");
 
-const COUNTDOWN_CHANNEL_ID = '1533492760697503805';
-const EMOJI_OBSYBON_ID = '1524104068514189422';
-const EMOJI_OBSYDEMON_ID = '1488145689916473544';
-const COUNTDOWN_START_AT = 900;
+function formatMessage(template, replacements = {}) {
+  if (!template) return '';
+  let res = template;
+  for (const [key, val] of Object.entries(replacements)) {
+    res = res.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
+  }
+  return res;
+}
 
 /**
  * Vérifie et initialise le salon CountDown au démarrage si aucun état n'existe
  */
 async function checkAndInitCountDown(client) {
+  const cdConfig = config.countdown || {};
+  if (cdConfig.enabled === false) return;
+
+  const COUNTDOWN_CHANNEL_ID = cdConfig.channel_id || '1533492760697503805';
+  const COUNTDOWN_START_AT = cdConfig.start_number || 900;
+  const messages = cdConfig.messages || {};
+
   try {
     let state = await getCountdownState(COUNTDOWN_CHANNEL_ID);
     if (!state) {
       const channel = await client.channels.fetch(COUNTDOWN_CHANNEL_ID).catch(() => null);
       if (channel) {
         state = await updateCountdownState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, null);
-        const text = `**Allez la chienne commence :** ${COUNTDOWN_START_AT}`;
+        const text = formatMessage(
+          messages.start_message || "**Allez la chienne commence :** {number}",
+          { number: COUNTDOWN_START_AT }
+        );
         await channel.send(text);
         console.log(`✅ CountDown initialisé: "${text}" envoyé dans le canal.`);
       }
@@ -37,6 +52,17 @@ module.exports = {
   checkAndInitCountDown,
 
   async execute(message) {
+    const cdConfig = config.countdown || {};
+    if (cdConfig.enabled === false) return;
+
+    const COUNTDOWN_CHANNEL_ID = cdConfig.channel_id || '1533492760697503805';
+    const COUNTDOWN_START_AT = cdConfig.start_number || 900;
+    const trapChance = cdConfig.trap_chance !== undefined ? cdConfig.trap_chance : 0.15;
+    const emojis = cdConfig.emojis || {};
+    const EMOJI_OBSYBON_ID = emojis.obsybon_id || '1524104068514189422';
+    const EMOJI_OBSYDEMON_ID = emojis.obsydemon_id || '1488145689916473544';
+    const messages = cdConfig.messages || {};
+
     // Ne traiter que le salon CountDown et ignorer les bots
     if (message.channel.id !== COUNTDOWN_CHANNEL_ID || message.author.bot) {
       return;
@@ -49,7 +75,11 @@ module.exports = {
       // Initialisation par défaut si la BDD est vide
       if (!state) {
         state = await updateCountdownState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, null);
-        await message.channel.send("**Allez la chienne commence :** " + COUNTDOWN_START_AT);
+        const text = formatMessage(
+          messages.start_message || "**Allez la chienne commence :** {number}",
+          { number: COUNTDOWN_START_AT }
+        );
+        await message.channel.send(text);
         console.log('✅ CountDown initialisé à ' + COUNTDOWN_START_AT + ' en BDD.');
       }
 
@@ -64,10 +94,16 @@ module.exports = {
           await message.react('❌').catch(() => { });
         }
 
-        await message.channel.send(
-          `<@${message.author.id}>, **vous ne pouvez pas partager deux nombres à la suite** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
+        const doublePostMsg = formatMessage(
+          messages.double_post_message || "<@{userId}>, **vous ne pouvez pas partager deux nombres à la suite** <:Obsydemoncouverture:{emojiObsydemon}>",
+          {
+            userId: message.author.id,
+            username: message.author.username,
+            emojiObsydemon: EMOJI_OBSYDEMON_ID
+          }
         );
 
+        await message.channel.send(doublePostMsg);
         console.log(`⚠️ [COUNTDOWN] ${message.author.tag} a essayé de poster deux fois d'affilée.`);
         return;
       }
@@ -92,7 +128,15 @@ module.exports = {
           }
 
           // Message du bot s'il a esquivé le piège
-          await message.channel.send(`**J’ai cru que j’allais vous avoir <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>**`);
+          const dodgeMsg = formatMessage(
+            messages.trap_dodge_message || "**J’ai cru que j’allais vous avoir <:Obsydemoncouverture:{emojiObsydemon}>**",
+            {
+              userId: message.author.id,
+              username: message.author.username,
+              emojiObsydemon: EMOJI_OBSYDEMON_ID
+            }
+          );
+          await message.channel.send(dodgeMsg);
 
           // Ajouter un point au joueur
           await addCountdownScore(COUNTDOWN_CHANNEL_ID, message.author.id, message.author.username);
@@ -104,7 +148,7 @@ module.exports = {
           return;
 
         } else {
-          // ❌ L'utilisateur est TOMBÉ dans le piège ! (Il a posté trapNum - 1 ou un autre nombre)
+          // ❌ L'utilisateur est TOMBÉ dans le piège !
           try {
             const obsydemoEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYDEMON_ID) || EMOJI_OBSYDEMON_ID;
             await message.react(obsydemoEmoji);
@@ -112,9 +156,15 @@ module.exports = {
             await message.react('❌').catch(() => { });
           }
 
-          await message.channel.send(
-            `<@${message.author.id}>**, Je t’ai eu ** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
+          const trapFailMsg = formatMessage(
+            messages.trap_failed_message || "<@{userId}>**, Je t’ai eu ** <:Obsydemoncouverture:{emojiObsydemon}>",
+            {
+              userId: message.author.id,
+              username: message.author.username,
+              emojiObsydemon: EMOJI_OBSYDEMON_ID
+            }
           );
+          await message.channel.send(trapFailMsg);
 
           console.log(`🪤 [COUNTDOWN] ${message.author.tag} est tombé dans le piège (attendu: ${trapNum}, reçu: "${message.content}")`);
           return;
@@ -145,12 +195,20 @@ module.exports = {
         // CAS PARTICULIER : ARRIVÉE À 0 !
         // ============================================
         if (expectedNumber === 0) {
-          await message.channel.send(`**Je suis émue, vous ne vous êtes pas trompés mais ce n’est pas fini <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>**`);
+          const finishMsg = formatMessage(
+            messages.finish_message || "**Je suis émue, vous ne vous êtes pas trompés mais ce n’est pas fini <:Obsydemoncouverture:{emojiObsydemon}>**",
+            {
+              userId: message.author.id,
+              username: message.author.username,
+              emojiObsydemon: EMOJI_OBSYDEMON_ID
+            }
+          );
+          await message.channel.send(finishMsg);
 
           // Récupérer le classement des joueurs
           const scores = await getCountdownScores(COUNTDOWN_CHANNEL_ID);
 
-          let rankingText = "Aucune participation enregistrée.";
+          let rankingText = messages.no_participation || "Aucune participation enregistrée.";
           if (scores.length > 0) {
             rankingText = scores.map((s, index) => {
               const medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : '👤'));
@@ -159,8 +217,8 @@ module.exports = {
           }
 
           const embed = new EmbedBuilder()
-            .setColor('#F2C7CE')
-            .setTitle('🏆 **Classement de la partie**')
+            .setColor(messages.embed_color || '#F2C7CE')
+            .setTitle(messages.embed_title || '🏆 **Classement de la partie**')
             .setDescription(rankingText)
             .setTimestamp();
 
@@ -170,14 +228,18 @@ module.exports = {
           await resetCountdownScores(COUNTDOWN_CHANNEL_ID);
           await updateCountdownState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, message.author.id);
 
-          await message.channel.send("**Allez la chienne commence :** " + COUNTDOWN_START_AT);
+          const restartMsg = formatMessage(
+            messages.start_message || "**Allez la chienne commence :** {number}",
+            { number: COUNTDOWN_START_AT }
+          );
+          await message.channel.send(restartMsg);
           return;
         }
 
         // ============================================
-        // CHANCE D'ACTIVER UN PIÈGE ALÉATOIRE (~15% de chance)
+        // CHANCE D'ACTIVER UN PIÈGE ALÉATOIRE
         // ============================================
-        const shouldTrap = (expectedNumber > 5 && expectedNumber < 85) && (Math.random() < 0.15);
+        const shouldTrap = (expectedNumber > 5 && expectedNumber < 85) && (Math.random() < trapChance);
 
         if (shouldTrap) {
           const trapNumber = expectedNumber - 1;
@@ -186,7 +248,7 @@ module.exports = {
           // Le bot poste lui-même le nombre suivant
           await message.channel.send(`${trapNumber}`);
 
-          // Enregistrer le piège actif en BDD (note: last_user_id reste le bot / systeme pour le piege, l'utilisateur devra répondre)
+          // Enregistrer le piège actif en BDD
           await updateCountdownState(COUNTDOWN_CHANNEL_ID, trapNumber, 1, trapNumber, message.author.id);
         } else {
           // Mise à jour normale de l'état
@@ -202,10 +264,18 @@ module.exports = {
           await message.react('❌').catch(() => { });
         }
 
-        await message.channel.send(
-          `**Oups <@${message.author.id}> s\'est trompé(e), je vais devoir mordre ** <:Obsydemoncouverture:${EMOJI_OBSYDEMON_ID}>`
+        const errorMsg = formatMessage(
+          messages.error_message || "**Oups <@{userId}> s'est trompé(e), je vais devoir mordre ** <:Obsydemoncouverture:{emojiObsydemon}>",
+          {
+            userId: message.author.id,
+            username: message.author.username,
+            expectedNumber,
+            postedNumber: message.content,
+            emojiObsydemon: EMOJI_OBSYDEMON_ID
+          }
         );
 
+        await message.channel.send(errorMsg);
         console.log(`❌ [COUNTDOWN] ${message.author.tag} a fait une erreur (attendu: ${expectedNumber}, reçu: "${message.content}")`);
       }
 

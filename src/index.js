@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+const { config } = require('./config/index.js');
 
 const { logUserEvent, getUserEvents, getGlobalStats } = require("./database.js");
 const { loadCommands } = require("./utils/commandHandler.js");
@@ -59,6 +59,100 @@ console.log('');
 
 const app = express();
 app.use(express.json());
+
+// Middleware de protection et d'authentification Web / API
+const webAuthMiddleware = (req, res, next) => {
+    const authConfig = config.web?.auth || {};
+
+    // 1. Si la protection est désactivée, passer immédiatement
+    if (!authConfig.enabled) {
+        return next();
+    }
+
+    // 2. Endpoints toujours publics : health check et vérification d'authentification
+    if (req.path === '/health' || req.path === '/api/auth/status' || req.path === '/api/auth/verify') {
+        return next();
+    }
+
+    // 3. Vérification de la liste blanche d'adresses IP si configurée
+    const clientIp = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
+    if (authConfig.allowed_ips && Array.isArray(authConfig.allowed_ips) && authConfig.allowed_ips.length > 0) {
+        if (authConfig.allowed_ips.includes(clientIp) || clientIp === '127.0.0.1' || clientIp === '::1') {
+            return next();
+        }
+    }
+
+    // 4. Extraction du token / clé d'API
+    let providedKey = req.headers['x-api-key'] || req.query.api_key || req.query.token;
+
+    if (!providedKey && req.headers['authorization']) {
+        const authHeader = req.headers['authorization'];
+        if (authHeader.startsWith('Bearer ')) {
+            providedKey = authHeader.substring(7).trim();
+        } else if (authHeader.startsWith('Basic ')) {
+            try {
+                const decoded = Buffer.from(authHeader.substring(6), 'base64').toString('utf-8');
+                providedKey = decoded.includes(':') ? decoded.split(':')[1] : decoded;
+            } catch {
+                providedKey = authHeader;
+            }
+        } else {
+            providedKey = authHeader;
+        }
+    }
+
+    const expectedKey = authConfig.api_key;
+
+    if (providedKey && expectedKey && providedKey === expectedKey) {
+        return next();
+    }
+
+    // 5. Refus d'accès si non autorisé
+    if (req.path.startsWith('/api') || req.path.startsWith('/webhook')) {
+        return res.status(401).json({
+            success: false,
+            error: 'Accès non autorisé : Clé API manquante ou invalide.'
+        });
+    }
+
+    if (authConfig.protect_static) {
+        return res.status(401).send(`
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"><title>401 - Accès Protégé</title></head>
+            <body style="font-family:sans-serif;text-align:center;padding:50px;background:#1e1f22;color:#fff;">
+                <h2>🔒 Accès Protégé</h2>
+                <p>Une clé d'authentification valide est requise pour accéder au tableau de bord.</p>
+            </body>
+            </html>
+        `);
+    }
+
+    next();
+};
+
+// Endpoints publics d'état d'authentification
+app.get('/api/auth/status', (req, res) => {
+    const authConfig = config.web?.auth || {};
+    res.json({
+        success: true,
+        authRequired: !!authConfig.enabled,
+        protectStatic: !!authConfig.protect_static
+    });
+});
+
+app.post('/api/auth/verify', (req, res) => {
+    const authConfig = config.web?.auth || {};
+    const { apiKey } = req.body;
+    const isValid = !authConfig.enabled || (apiKey && apiKey === authConfig.api_key);
+    res.json({
+        success: true,
+        valid: isValid
+    });
+});
+
+// Appliquer le middleware d'authentification
+app.use(webAuthMiddleware);
 
 // Servir l'interface web statique
 const publicPath = path.join(__dirname, '../public');

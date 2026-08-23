@@ -1,11 +1,8 @@
 const { logUserEvent, addMessageXP, verifyCaptchaAnswer, getUserCaptcha, isUserVerified, getCaptchaConfig } = require("../database.js");
 const { executeCommand } = require("../utils/commandHandler.js");
 const { sendCaptchaLog } = require("../utils/captchaLogger.js");
-
-const path = require('path');
-
-// ⭐ IMPORTANT : Remonter d'un niveau pour trouver .env
-require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+const { config } = require("../config/index.js");
+const CAPTCHA_CONFIG = require("../config/captcha-config.js");
 
 function addHours(date, hours) {
     const hoursToAdd = hours * 60 * 60 * 1000;
@@ -13,10 +10,9 @@ function addHours(date, hours) {
     return date;
 }
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const GUILD_ID = process.env.GUILD_ID;
-const CHANNEL_ID = process.env.LOG_CHANNEL_ID; // #bot
-const CAPTCHA_CONFIG = require("../config/captcha-config.js");
+const BOT_TOKEN = config.discord?.token || process.env.BOT_TOKEN || process.env.DISCORD_TOKEN;
+const GUILD_ID = config.discord?.guild_id || process.env.GUILD_ID;
+const CHANNEL_ID = config.startup_notifier?.channel_id || process.env.LOG_CHANNEL_ID; // #bot
 
 // Vérifier si un message est une réponse au captcha
 async function handleCaptchaResponse(message) {

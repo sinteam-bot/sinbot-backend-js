@@ -1,13 +1,14 @@
 const { EmbedBuilder } = require('discord.js');
 const { execSync } = require('child_process');
 const { getBotState, setBotState } = require('../database.js');
+const { config } = require('../config/index.js');
 
 /**
  * Récupère le SHA du commit courant depuis l'environnement Docker ou Git local
  */
 function getCurrentCommitInfo() {
-    // 1. Variable d'environnement (injectée lors du build Docker ou via .env)
-    let sha = process.env.GIT_COMMIT_SHA;
+    // 1. Variable d'environnement (injectée lors du build Docker ou via config.yml)
+    let sha = config.startup_notifier?.last_commit_sha || process.env.GIT_COMMIT_SHA;
     if (sha && sha !== 'dev' && sha !== '') {
         return {
             sha: sha.trim(),
@@ -43,7 +44,7 @@ function getCurrentCommitInfo() {
  * Effectue un appel sécurisé vers l'API GitHub avec gestion d'erreurs et timeout
  */
 async function fetchGithubApi(endpoint) {
-    const repo = process.env.GITHUB_REPO || 'sinteam-bot/chienne-bot';
+    const repo = config.startup_notifier?.github?.repo || process.env.GITHUB_REPO || 'sinteam-bot/chienne-bot';
     const url = endpoint.startsWith('http') ? endpoint : `https://api.github.com/repos/${repo}${endpoint}`;
 
     const headers = {
@@ -51,8 +52,9 @@ async function fetchGithubApi(endpoint) {
         'Accept': 'application/vnd.github+json'
     };
 
-    if (process.env.GITHUB_TOKEN) {
-        headers['Authorization'] = `Bearer ${process.env.GITHUB_TOKEN}`;
+    const token = config.startup_notifier?.github?.token || process.env.GITHUB_TOKEN;
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
     }
 
     const controller = new AbortController();

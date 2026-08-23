@@ -1,16 +1,10 @@
 const path = require('path');
-
-// ⭐ IMPORTANT : Remonter d'un niveau pour trouver .env
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-
-//require('dotenv').config();
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { config } = require('./config/index.js');
+const { Client, GatewayIntentBits, Collection, EmbedBuilder } = require('discord.js');
 const express = require('express');
 const fs = require('fs');
 const { buildPrompt, requestPrompt } = require("./config/daily_message_config.js");
-const { callResponseCustom } = require("./utils/openrouter.js")
-const { EmbedBuilder } = require('discord.js');
-
+const { callResponseCustom } = require("./utils/openrouter.js");
 
 const { logUserEvent, getUserEvents, getGlobalStats } = require("./database.js");
 const { loadCommands } = require("./utils/commandHandler.js");
@@ -29,13 +23,12 @@ const client = new Client({
     ]
 });
 
-
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const GUILD_ID = process.env.GUILD_ID;
-const CHANNEL_ID = '1492194866451583059';
+const BOT_TOKEN = config.discord?.token || process.env.BOT_TOKEN || process.env.DISCORD_TOKEN;
+const GUILD_ID = config.discord?.guild_id || process.env.GUILD_ID;
+const CHANNEL_ID = config.daily_message?.channel_id || '1492194866451583059';
 
 // Modèle par défaut pour OpenRouter
-const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'openai/gpt-5-nano';
+const DEFAULT_MODEL = config.openrouter?.default_model || config.openai?.default_model || process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'openai/gpt-4o-mini';
 
 // ============================================
 // CONNEXION DU BOT

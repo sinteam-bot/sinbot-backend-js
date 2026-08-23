@@ -1,4 +1,5 @@
 const { handleDailyMessageInteraction } = require("../utils/dailyMessageManager.js");
+const { checkCommandPermissions } = require("../utils/commandHandler.js");
 
 module.exports = {
     name: 'interactionCreate',
@@ -22,6 +23,16 @@ module.exports = {
             return;
         }
         
+        // Vérification de la configuration des permissions pour cette commande
+        const permCheck = checkCommandPermissions(interaction, interaction.commandName);
+        if (!permCheck.allowed) {
+            await interaction.reply({
+                content: permCheck.reason || '⛔ Vous n\'avez pas la permission d\'exécuter cette commande.',
+                ephemeral: true
+            });
+            return;
+        }
+
         // Vérifier si la commande a une méthode executeSlash
         if (!command.executeSlash) {
             await interaction.reply({

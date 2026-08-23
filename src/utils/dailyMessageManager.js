@@ -2,14 +2,15 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { saveOpenAIMessage, getBotState, setBotState } = require("../database.js");
 const { callResponseCustom } = require("./openrouter.js");
 const { requestPrompt, formatFinalPrompt } = require("../config/daily_message_config.js");
+const { config } = require("../config/index.js");
 
 // Cache en mémoire des brouillons de messages en attente de validation
 const pendingDrafts = new Map();
 
 // Configuration des salons
-const PREVIEW_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
-const TARGET_CHANNEL_ID = process.env.DAILY_MESSAGE_CHANNEL_ID;
-const TARGET_GUILD_ID = process.env.GUILD_ID;
+const PREVIEW_CHANNEL_ID = config.daily_message?.preview_channel_id || config.startup_notifier?.channel_id || process.env.LOG_CHANNEL_ID;
+const TARGET_CHANNEL_ID = config.daily_message?.channel_id || process.env.DAILY_MESSAGE_CHANNEL_ID;
+const TARGET_GUILD_ID = config.discord?.guild_id || process.env.GUILD_ID;
 
 /**
  * Récupère l'heure actuelle au fuseau horaire de Paris

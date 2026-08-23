@@ -6,7 +6,7 @@
 
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const { config } = require('./config/index.js');
 
 const {
     saveDumpUser,
@@ -25,8 +25,8 @@ const client = new Client({
     ]
 });
 
-const GUILD_ID = process.env.GUILD_ID;
-const DISCORD_TOKEN = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN;
+const GUILD_ID = config.discord?.guild_id || process.env.GUILD_ID;
+const DISCORD_TOKEN = config.discord?.token || process.env.DISCORD_TOKEN || process.env.BOT_TOKEN;
 
 /**
  * Récupérer tous les messages d'un salon ou d'un thread avec pagination (batchs de 100)

@@ -1,10 +1,10 @@
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const { config } = require('./config/index.js');
 const { REST, Routes } = require('discord.js');
 
-const TOKEN = process.env.DISCORD_TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+const TOKEN = config.discord?.token || process.env.DISCORD_TOKEN;
+const CLIENT_ID = config.discord?.client_id || process.env.CLIENT_ID;
+const GUILD_ID = config.discord?.guild_id || process.env.GUILD_ID;
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 

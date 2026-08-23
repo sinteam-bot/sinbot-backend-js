@@ -1,9 +1,6 @@
 const path = require('path');
-
-// ⭐ IMPORTANT : Remonter d'un niveau pour trouver .env
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const { config } = require('./config/index.js');
 const { REST, Routes } = require('discord.js');
-const OpenAI = require("./utils/openrouter.js");
 const fs = require('fs');
 
 

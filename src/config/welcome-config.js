@@ -1,60 +1,145 @@
 // Configuration du système d'accueil
-module.exports = {
-    // ID du channel où envoyer les messages de bienvenue
-    WELCOME_CHANNEL_ID: '',  // À configurer
-    
-    // IDs des rôles à attribuer automatiquement
-    // Pour obtenir les IDs : Mode développeur Discord → Clic droit sur rôle → Copier l'ID
-    AUTO_ROLES: [
-        // Exemple :
-        // '123456789012345678',  // Rôle "Membre"
-        // '234567890123456789',  // Rôle "Nouveau"
-    ],
-    
-    // Message de bienvenue (peut contenir des variables)
-    // {user} = mention de l'utilisateur
-    // {username} = nom de l'utilisateur
-    // {server} = nom du serveur
-    // {memberCount} = nombre de membres
-    WELCOME_MESSAGE: {
-        title: '🎉 Bienvenue sur {server} !',
-        description: 'Bienvenue {user} !\n\nNous sommes ravis de t\'accueillir parmi nous ! 🎊',
-        color: '#f2c7ce',
-        footer: 'Membre #{memberCount}',
-        fields: [
-            {
-                name: '📚 Pour commencer',
-                value: '• Lis les règles dans <#CHANNEL_REGLES_ID>\n• Présente-toi dans <#CHANNEL_PRESENTATION_ID>\n• N\'hésite pas à poser des questions !',
-                inline: false
-            },
-            {
-                name: '🎮 Commandes utiles',
-                value: '`/help` - Liste des commandes\n`/rank` - Voir ton niveau',
-                inline: true
-            }
-        ],
-        thumbnail: 'user',  // 'user' = avatar de l'utilisateur, ou URL d'une image
-        image: null  // URL d'une image de bannière (optionnel)
+// Connecté au système de configuration unifié (config.yml / variables d'environnement)
+const { getConfig, saveModuleConfig } = require('./index.js');
+
+function getWelcomeConfig() {
+    const fullConfig = getConfig();
+    const w = fullConfig.welcome || {};
+
+    return {
+        get WELCOME_CHANNEL_ID() {
+            return w.channel_id || '';
+        },
+        set WELCOME_CHANNEL_ID(val) {
+            w.channel_id = val;
+            saveModuleConfig('welcome', w);
+        },
+        get channel_id() {
+            return w.channel_id || '';
+        },
+        set channel_id(val) {
+            w.channel_id = val;
+            saveModuleConfig('welcome', w);
+        },
+
+        get welcome_channel_name() {
+            return w.welcome_channel_name || 'bienvenue';
+        },
+        get welcome_color() {
+            return w.welcome_color || '#f2c7ce';
+        },
+
+        get AUTO_ROLES() {
+            return w.AUTO_ROLES || w.auto_roles || [];
+        },
+        set AUTO_ROLES(val) {
+            w.AUTO_ROLES = val;
+            saveModuleConfig('welcome', w);
+        },
+        get auto_roles() {
+            return w.AUTO_ROLES || w.auto_roles || [];
+        },
+
+        get WELCOME_MESSAGE() {
+            return w.welcome_message || {
+                title: '🎉 Bienvenue sur {server} !',
+                description: 'Bienvenue {user} !\n\nNous sommes ravis de t\'accueillir parmi nous ! 🎊',
+                color: '#f2c7ce',
+                footer: 'Membre #{memberCount}',
+                thumbnail: 'user',
+                image: null,
+                fields: [
+                    {
+                        name: '📚 Pour commencer',
+                        value: '• Lis les règles dans <#CHANNEL_REGLES_ID>\n• Présente-toi dans <#CHANNEL_PRESENTATION_ID>\n• N\'hésite pas à poser des questions !',
+                        inline: false
+                    },
+                    {
+                        name: '🎮 Commandes utiles',
+                        value: '`/help` - Liste des commandes\n`/rank` - Voir ton niveau',
+                        inline: true
+                    }
+                ]
+            };
+        },
+        set WELCOME_MESSAGE(val) {
+            w.welcome_message = val;
+            saveModuleConfig('welcome', w);
+        },
+        get welcome_message() {
+            return this.WELCOME_MESSAGE;
+        },
+
+        get ENABLED() {
+            return w.enabled !== undefined ? w.enabled : true;
+        },
+        set ENABLED(val) {
+            w.enabled = val;
+            saveModuleConfig('welcome', w);
+        },
+        get enabled() {
+            return this.ENABLED;
+        },
+
+        get SEND_DM() {
+            return w.dm_message?.enabled !== undefined ? w.dm_message.enabled : (w.SEND_DM ?? true);
+        },
+        set SEND_DM(val) {
+            w.SEND_DM = val;
+            if (w.dm_message) w.dm_message.enabled = val;
+            saveModuleConfig('welcome', w);
+        },
+
+        get DM_MESSAGE() {
+            return w.dm_message || {
+                title: '👋 Bienvenue !',
+                description: 'Salut {username} !\n\nBienvenue sur **{server}** ! Nous espérons que tu vas t\'amuser avec nous. 😊',
+                color: '#f2c7ce',
+                fields: [
+                    {
+                        name: '💡 Conseil',
+                        value: 'N\'oublie pas de te présenter pour que la communauté apprenne à te connaître !',
+                        inline: false
+                    }
+                ]
+            };
+        },
+        set DM_MESSAGE(val) {
+            w.dm_message = val;
+            saveModuleConfig('welcome', w);
+        },
+        get dm_message() {
+            return this.DM_MESSAGE;
+        },
+
+        get LOG_TO_CONSOLE() {
+            return w.LOG_TO_CONSOLE !== undefined ? w.LOG_TO_CONSOLE : true;
+        }
+    };
+}
+
+module.exports = new Proxy({}, {
+    get(target, prop) {
+        const conf = getWelcomeConfig();
+        if (prop in conf) {
+            return conf[prop];
+        }
+        return getConfig().welcome?.[prop];
     },
-    
-    // Activer/désactiver le système
-    ENABLED: true,
-    
-    // Envoyer un message privé au nouveau membre
-    SEND_DM: true,
-    DM_MESSAGE: {
-        title: '👋 Bienvenue !',
-        description: 'Salut {username} !\n\nBienvenue sur **{server}** ! Nous espérons que tu vas t\'amuser avec nous. 😊',
-        color: '#f2c7ce',
-        fields: [
-            {
-                name: '💡 Conseil',
-                value: 'N\'oublie pas de te présenter pour que la communauté apprenne à te connaître !',
-                inline: false
-            }
-        ]
+    set(target, prop, value) {
+        const conf = getWelcomeConfig();
+        conf[prop] = value;
+        return true;
     },
-    
-    // Logs
-    LOG_TO_CONSOLE: true
-};
+    ownKeys() {
+        const conf = getWelcomeConfig();
+        return Array.from(new Set([...Object.keys(conf), ...Object.keys(getConfig().welcome || {})]));
+    },
+    getOwnPropertyDescriptor(target, prop) {
+        return {
+            enumerable: true,
+            configurable: true,
+            value: this.get(target, prop)
+        };
+    }
+});

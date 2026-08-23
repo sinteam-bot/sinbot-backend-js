@@ -6,6 +6,7 @@ const {
     autoValidateAndPublishDailyMessage,
     getParisHour 
 } = require("./dailyMessageManager.js");
+const { config } = require("../config/index.js");
 
 /**
  * Fonction de vérification et d'envoi des rappels de bump en attente
@@ -44,60 +45,87 @@ async function checkAndSendBumpReminders(client) {
 }
 
 function setupScheduledTasks(client) {
-    console.log('⏰ Configuration des tâches planifiées...');
+    const schedulerConfig = config.scheduler || { enabled: true, timezone: 'Europe/Paris', tasks: {} };
+    
+    if (schedulerConfig.enabled === false) {
+        console.log('⏸️ [Scheduler] Le planificateur de tâches est désactivé dans la configuration.');
+        return;
+    }
+
+    const timezone = schedulerConfig.timezone || 'Europe/Paris';
+    const tasks = schedulerConfig.tasks || {};
+
+    console.log(`⏰ Configuration des tâches planifiées (Fuseau: ${timezone})...`);
 
     // 1. Vérification immédiate au démarrage du bot (reboot recovery)
-    checkAndSendBumpReminders(client);
+    const bumpTask = tasks.bump_reminders ?? { enabled: true, cron: '* * * * *' };
+    if (bumpTask.enabled) {
+        checkAndSendBumpReminders(client);
+    }
 
     const currentHour = getParisHour();
-    if (currentHour >= 11) {
+    const autoValidateTask = tasks.daily_autovalidate ?? { enabled: true, cron: '0 11 * * *' };
+    const publishTask = tasks.daily_publish ?? { enabled: true, cron: '0 9 * * *' };
+    const previewTask = tasks.daily_preview ?? { enabled: true, cron: '0 21 * * *' };
+
+    if (autoValidateTask.enabled && currentHour >= 11) {
         autoValidateAndPublishDailyMessage(client);
-    } else if (currentHour >= 9) {
+    } else if (publishTask.enabled && currentHour >= 9) {
         publishScheduledDailyMessage(client);
     }
 
     // 2. Cron vérifiant toutes les minutes si un rappel de bump doit être envoyé
-    cron.schedule('* * * * *', async () => {
-        await checkAndSendBumpReminders(client);
-    });
+    if (bumpTask.enabled) {
+        const cronExpr = bumpTask.cron || '* * * * *';
+        cron.schedule(cronExpr, async () => {
+            await checkAndSendBumpReminders(client);
+        });
+        console.log(`   └─ 🔔 Bump Reminders: actif (${cronExpr})`);
+    }
 
     // 3. Cron pour la génération et prévisualisation du message du jour à 21:00 (Paris, la veille)
-    cron.schedule('0 21 * * *', async () => {
-        try {
-            console.log('🌅 [Cron 21:00] Déclenchement du pré-rendu du message du jour (pour demain)...');
-            await sendDailyMessagePreview(client);
-        } catch (error) {
-            console.error('❌ Erreur lors du déclenchement du pré-rendu du message du jour (21:00):', error.message);
-        }
-    }, {
-        timezone: "Europe/Paris"
-    });
+    if (previewTask.enabled) {
+        const cronExpr = previewTask.cron || '0 21 * * *';
+        cron.schedule(cronExpr, async () => {
+            try {
+                console.log('🌅 [Cron Preview] Déclenchement du pré-rendu du message du jour...');
+                await sendDailyMessagePreview(client);
+            } catch (error) {
+                console.error('❌ Erreur lors du déclenchement du pré-rendu du message du jour:', error.message);
+            }
+        }, { timezone });
+        console.log(`   └─ 🌅 Daily Message Preview: actif (${cronExpr})`);
+    }
 
     // 4. Cron pour la publication automatique du message validé à 09:00 (Paris)
-    cron.schedule('0 9 * * *', async () => {
-        try {
-            console.log('📢 [Cron 09:00] Déclenchement de la publication du message du jour...');
-            await publishScheduledDailyMessage(client);
-        } catch (error) {
-            console.error('❌ Erreur lors de la publication du message du jour (09:00):', error.message);
-        }
-    }, {
-        timezone: "Europe/Paris"
-    });
+    if (publishTask.enabled) {
+        const cronExpr = publishTask.cron || '0 9 * * *';
+        cron.schedule(cronExpr, async () => {
+            try {
+                console.log('📢 [Cron Publish] Déclenchement de la publication du message du jour...');
+                await publishScheduledDailyMessage(client);
+            } catch (error) {
+                console.error('❌ Erreur lors de la publication du message du jour:', error.message);
+            }
+        }, { timezone });
+        console.log(`   └─ 📢 Daily Message Publish: actif (${cronExpr})`);
+    }
 
     // 5. Cron pour la validation et publication automatique à 11:00 (Paris) si non validé manuellement
-    cron.schedule('0 11 * * *', async () => {
-        try {
-            console.log('🤖 [Cron 11:00] Vérification de la validation automatique du message du jour...');
-            await autoValidateAndPublishDailyMessage(client);
-        } catch (error) {
-            console.error('❌ Erreur lors de la validation automatique du message du jour (11:00):', error.message);
-        }
-    }, {
-        timezone: "Europe/Paris"
-    });
+    if (autoValidateTask.enabled) {
+        const cronExpr = autoValidateTask.cron || '0 11 * * *';
+        cron.schedule(cronExpr, async () => {
+            try {
+                console.log('🤖 [Cron AutoValidate] Vérification de la validation automatique du message du jour...');
+                await autoValidateAndPublishDailyMessage(client);
+            } catch (error) {
+                console.error('❌ Erreur lors de la validation automatique du message du jour:', error.message);
+            }
+        }, { timezone });
+        console.log(`   └─ 🤖 Daily Message AutoValidate: actif (${cronExpr})`);
+    }
 
-    console.log('✅ Tâches planifiées configurées (21:00 Preview, 09:00 Publish, 11:00 Auto-Validate)');
+    console.log('✅ Planificateur de tâches initialisé avec succès.');
 }
 
 module.exports = {

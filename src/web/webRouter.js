@@ -1047,25 +1047,34 @@ function createWebRouter(client) {
     // ============================================
     router.get('/config', async (req, res) => {
         try {
-            const welcomeConfigPath = path.join(__dirname, '../config/welcome-config.js');
-            const captchaConfigPath = path.join(__dirname, '../config/captcha-config.js');
-            const xpConfigPath = path.join(__dirname, '../config/xp-config.js');
-
-            let welcomeConfig = fs.existsSync(welcomeConfigPath) ? require(welcomeConfigPath) : {};
-            let captchaConfig = fs.existsSync(captchaConfigPath) ? require(captchaConfigPath) : {};
-            let xpConfig = fs.existsSync(xpConfigPath) ? require(xpConfigPath) : {};
+            const { getConfig } = require('../config/index.js');
+            const fullConfig = getConfig();
 
             res.json({
                 success: true,
                 data: {
-                    welcome: welcomeConfig,
-                    captcha: captchaConfig,
-                    xp: xpConfig,
+                    welcome: fullConfig.welcome || {},
+                    captcha: fullConfig.captcha || {},
+                    xp: fullConfig.welcome?.xp || fullConfig.xp || {},
+                    daily_message: fullConfig.daily_message || {},
+                    startup_notifier: fullConfig.startup_notifier || {},
+                    counter: fullConfig.counter || {},
+                    countdown: fullConfig.countdown || {},
+                    web: fullConfig.web || {},
+                    scheduler: fullConfig.scheduler || {},
+                    commands: fullConfig.discord?.commands || {},
+                    discord: {
+                        client_id: fullConfig.discord?.client_id || process.env.CLIENT_ID || '',
+                        guild_id: fullConfig.discord?.guild_id || process.env.GUILD_ID || '',
+                        default_color: fullConfig.discord?.default_color || process.env.BOT_COLOR || '#f2c7ce',
+                        commands: fullConfig.discord?.commands || {}
+                    },
                     env: {
-                        dailyMessageChannelId: process.env.DAILY_MESSAGE_CHANNEL_ID || '',
-                        notificationChannelId: process.env.LOG_CHANNEL_ID || '',
-                        openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini'
-                    }
+                        dailyMessageChannelId: fullConfig.daily_message?.channel_id || process.env.DAILY_MESSAGE_CHANNEL_ID || '',
+                        notificationChannelId: fullConfig.startup_notifier?.channel_id || process.env.LOG_CHANNEL_ID || '',
+                        openaiModel: fullConfig.openai?.default_model || process.env.OPENAI_MODEL || 'gpt-4o-mini'
+                    },
+                    fullConfig
                 }
             });
         } catch (error) {
@@ -1075,36 +1084,25 @@ function createWebRouter(client) {
     });
 
     router.post('/config', async (req, res) => {
-        const { module, config } = req.body;
+        const { module, config: moduleConfig } = req.body;
 
-        if (!module || !config) {
+        if (!module || !moduleConfig) {
             return res.status(400).json({ success: false, error: 'Module et configuration requis' });
         }
 
         try {
-            if (module === 'welcome') {
-                const configPath = path.join(__dirname, '../config/welcome-config.js');
-                const fileContent = `// Configuration du système d'accueil\nmodule.exports = ${JSON.stringify(config, null, 4)};\n`;
-                fs.writeFileSync(configPath, fileContent, 'utf-8');
-                delete require.cache[require.resolve(configPath)];
-                logger.info('Configuration Welcome mise à jour avec succès', 'CONFIG');
-            } else if (module === 'captcha') {
-                const configPath = path.join(__dirname, '../config/captcha-config.js');
-                const fileContent = `// Configuration du système de captcha\nmodule.exports = ${JSON.stringify(config, null, 4)};\n`;
-                fs.writeFileSync(configPath, fileContent, 'utf-8');
-                delete require.cache[require.resolve(configPath)];
-                logger.info('Configuration Captcha mise à jour avec succès', 'CONFIG');
-            } else if (module === 'xp') {
-                const configPath = path.join(__dirname, '../config/xp-config.js');
-                const fileContent = `// Configuration du système XP\nmodule.exports = ${JSON.stringify(config, null, 4)};\n`;
-                fs.writeFileSync(configPath, fileContent, 'utf-8');
-                delete require.cache[require.resolve(configPath)];
-                logger.info('Configuration XP mise à jour avec succès', 'CONFIG');
+            const { getConfig, saveModuleConfig } = require('../config/index.js');
+            if (module === 'commands') {
+                const conf = getConfig();
+                conf.discord = conf.discord || {};
+                conf.discord.commands = moduleConfig;
+                saveModuleConfig('discord', conf.discord);
             } else {
-                return res.status(400).json({ success: false, error: 'Module non reconnu' });
+                saveModuleConfig(module, moduleConfig);
             }
+            logger.info(`Configuration du module ${module} mise à jour avec succès dans config.yml`, 'CONFIG');
 
-            res.json({ success: true, message: `Configuration du module ${module} sauvegardée avec succès !` });
+            res.json({ success: true, message: `Configuration du module ${module} sauvegardée avec succès dans config.yml !` });
         } catch (error) {
             logger.error(`Erreur POST /api/config (${module}): ${error.message}`, 'CONFIG');
             res.status(500).json({ success: false, error: error.message });

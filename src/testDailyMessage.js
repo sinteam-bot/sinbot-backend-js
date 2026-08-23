@@ -12,9 +12,7 @@
 
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const path = require('path');
-
-// ⭐ IMPORTANT : Remonter d'un niveau pour trouver .env
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const { config } = require('./config/index.js');
 
 const { saveOpenAIMessage } = require("./database.js");
 const { callResponseCustom } = require("./utils/openrouter.js");
@@ -22,10 +20,10 @@ const { requestPrompt, formatFinalPrompt } = require("./config/daily_message_con
 
 // ⬇️ ⬇️ ⬇️ CONFIGURATION ⬇️ ⬇️ ⬇️
 // Modifie cette variable avec l'ID du channel Discord où tu veux envoyer le message de test
-const TEST_CHANNEL_ID = process.env.LOG_CHANNEL_ID; // Channel par défaut (même que scheduledTasks.js) 
+const TEST_CHANNEL_ID = config.startup_notifier?.channel_id || process.env.LOG_CHANNEL_ID; // Channel par défaut (même que scheduledTasks.js) 
 
 // Optionnel : Tu peux aussi surcharger l'ID du serveur si besoin
-const TEST_GUILD_ID = process.env.GUILD_ID; // Guild par défaut
+const TEST_GUILD_ID = config.discord?.guild_id || process.env.GUILD_ID; // Guild par défaut
 // ⬆️ ⬆️ ⬆️ CONFIGURATION ⬆️ ⬆️ ⬆️
 
 // ============================================

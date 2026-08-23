@@ -1,13 +1,8 @@
 const path = require('path');
-
-// ⭐ IMPORTANT : Remonter d'un niveau pour trouver .env
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-
-//require('dotenv').config();
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { config } = require('./config/index.js');
+const { Client, GatewayIntentBits, Collection, EmbedBuilder } = require('discord.js');
 const express = require('express');
 const fs = require('fs');
-const { EmbedBuilder } = require('discord.js');
 
 // ============================================
 // CONFIGURATION DU CLIENT DISCORD
@@ -23,9 +18,9 @@ const client = new Client({
     ]
 });
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const GUILD_ID = process.env.GUILD_ID;
-const CHANNEL_ID = process.env.LOG_CHANNEL_ID;
+const BOT_TOKEN = config.discord?.token || process.env.BOT_TOKEN || process.env.DISCORD_TOKEN;
+const GUILD_ID = config.discord?.guild_id || process.env.GUILD_ID;
+const CHANNEL_ID = config.startup_notifier?.channel_id || process.env.LOG_CHANNEL_ID;
 
 // ============================================
 // CONNEXION DU BOT

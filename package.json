@@ -20,6 +20,7 @@
     "express": "^5.2.1",
     "node-cron": "^4.6.0",
     "better-sqlite3": "^13.0.2",
+    "js-yaml": "^5.3.0",
     "openai": "^7.3.0"
   }
 }

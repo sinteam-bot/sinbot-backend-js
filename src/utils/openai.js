@@ -1,9 +1,9 @@
 const OpenAI = require('openai');
-require('dotenv').config();
+const { config } = require('../config/index.js');
 
 // Initialiser le client OpenAI
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: config.openai?.api_key || process.env.OPENAI_API_KEY
 });
 
 /**
@@ -24,9 +24,9 @@ const openai = new OpenAI({
  */
 async function callChatGPT(prompt, options = {}) {
     try {
-        const model = options.model || process.env.OPENAI_MODEL || 'gpt-4o-mini';
-        const maxTokens = options.maxTokens || parseInt(process.env.OPENAI_MAX_TOKENS) || 1000;
-        const temperature = options.temperature || parseFloat(process.env.OPENAI_TEMPERATURE) || 0.7;
+        const model = options.model || config.openai?.default_model || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+        const maxTokens = options.maxTokens || config.openai?.max_tokens || parseInt(process.env.OPENAI_MAX_TOKENS) || 1000;
+        const temperature = options.temperature || config.openai?.temperature || parseFloat(process.env.OPENAI_TEMPERATURE) || 0.7;
         
         // Construire les messages
         const messages = [];

@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-require('dotenv').config();
+const { config } = require('../config/index.js');
 const { callChatGPT, calculateCost, estimateTokens } = require("../utils/openrouter.js");
 const { getHumour, getEcriture, getNarratif, getContrainte } = require("../config/daily_message_config.js");
 
@@ -39,7 +39,8 @@ module.exports = {
 
     async executeSlash(interaction) {
         const subcommand = interaction.options.getSubcommand();
-        if (interaction.channel.id != process.env.LOG_CHANNEL_ID) {
+        const logChannelId = config.startup_notifier?.channel_id || process.env.LOG_CHANNEL_ID;
+        if (interaction.channel.id != logChannelId) {
             await interaction.reply({
                 content: `❌ Erreur : Vous n'avez pas accès à cette commande.`,
                 ephemeral: true

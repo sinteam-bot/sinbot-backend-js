@@ -1,8 +1,8 @@
 const OpenAI = require('openai');
-require('dotenv').config();
+const { config } = require('../config/index.js');
 
 // Initialiser le client OpenAI pour OpenRouter
-const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+const apiKey = config.openrouter?.api_key || config.openai?.api_key || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
 const baseURL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 
 const openai = new OpenAI({
@@ -15,7 +15,7 @@ const openai = new OpenAI({
 });
 
 // Modèle par défaut pour OpenRouter
-const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'openai/gpt-4o-mini';
+const DEFAULT_MODEL = config.openrouter?.default_model || config.openai?.default_model || process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'openai/gpt-4o-mini';
 
 /**
  * Appeler un LLM via OpenRouter avec un prompt simple
