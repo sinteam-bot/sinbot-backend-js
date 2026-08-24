@@ -6,6 +6,8 @@
     "start": "node src/index.js",
     "deploy": "node src/deploy-commands.js",
     "dump": "node src/dumpDiscord.js",
+    "build:ui": "cd frontend && npm install && npm run generate",
+    "dev:ui": "cd frontend && npm run dev",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
