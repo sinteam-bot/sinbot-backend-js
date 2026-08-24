@@ -100,8 +100,11 @@ async function runDailyMessageTest() {
         const date = new Date();
 
         // Options pour la génération du prompt
+        const aiConfig = config.daily_message?.ai_config || {};
+        const selectedModel = aiConfig.model || config.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
+
         const promptGenerationOptions = {
-            model: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            model: selectedModel,
             temperature: 1.2,
             maxTokens: 500
         };
@@ -144,10 +147,10 @@ async function runDailyMessageTest() {
 
         // Options pour la génération du message final
         const messageOptions = {
-            model: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            model: selectedModel,
             systemPrompt: finalInstruction,
-            temperature: 0.8,
-            maxTokens: 300
+            temperature: aiConfig.temperature !== undefined ? aiConfig.temperature : 0.8,
+            maxTokens: aiConfig.max_tokens || 300
         };
 
         console.log(`   - Modèle: ${messageOptions.model}`);

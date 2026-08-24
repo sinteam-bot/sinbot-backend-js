@@ -1,11 +1,13 @@
+// OpenRouter utilise l'API standard compatible OpenAI.
+// On utilise donc le SDK 'openai' en pointant sur l'URL d'OpenRouter (https://openrouter.ai/api/v1).
 const OpenAI = require('openai');
 const { config } = require('../config/index.js');
 
-// Initialiser le client OpenAI pour OpenRouter
-const apiKey = config.openrouter?.api_key || config.openai?.api_key || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+// Initialiser le client OpenRouter via le SDK OpenAI compatible
+const apiKey = config.openrouter?.api_key || process.env.OPENROUTER_API_KEY;
 const baseURL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 
-const openai = new OpenAI({
+const client = new OpenAI({
     apiKey: apiKey,
     baseURL: baseURL,
     defaultHeaders: {
@@ -15,14 +17,14 @@ const openai = new OpenAI({
 });
 
 // Modèle par défaut pour OpenRouter
-const DEFAULT_MODEL = config.openrouter?.default_model || config.openai?.default_model || process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'openai/gpt-4o-mini';
+const DEFAULT_MODEL = config.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
 /**
  * Appeler un LLM via OpenRouter avec un prompt simple
  * 
  * @param {string} prompt - Le message/question à envoyer
  * @param {object} options - Options supplémentaires
- * @param {string} options.model - Modèle à utiliser (ex: openai/gpt-4o-mini, anthropic/claude-3.5-haiku, google/gemini-2.5-flash)
+ * @param {string} options.model - Modèle à utiliser (ex: nvidia/nemotron-3-ultra-550b-a55b:free, openai/gpt-4o-mini, etc.)
  * @param {number} options.maxTokens - Nombre maximum de tokens
  * @param {number} options.temperature - Créativité 0-2 (défaut: 0.7)
  * @param {string} options.systemPrompt - Instructions système
@@ -32,8 +34,8 @@ const DEFAULT_MODEL = config.openrouter?.default_model || config.openai?.default
 async function callChatGPT(prompt, options = {}) {
     try {
         const model = options.model || DEFAULT_MODEL;
-        const maxTokens = options.maxTokens || parseInt(process.env.OPENAI_MAX_TOKENS) || 1000;
-        const temperature = options.temperature !== undefined ? options.temperature : (parseFloat(process.env.OPENAI_TEMPERATURE) || 0.7);
+        const maxTokens = options.maxTokens || parseInt(process.env.OPENROUTER_MAX_TOKENS) || 1000;
+        const temperature = options.temperature !== undefined ? options.temperature : (parseFloat(process.env.OPENROUTER_TEMPERATURE) || 0.7);
 
         const messages = [];
 
@@ -51,7 +53,7 @@ async function callChatGPT(prompt, options = {}) {
 
         console.log(`🤖 Appel OpenRouter (${model})...`);
 
-        const completion = await openai.chat.completions.create({
+        const completion = await client.chat.completions.create({
             model: model,
             messages: messages,
             max_tokens: maxTokens,
@@ -91,8 +93,8 @@ async function callChatGPT(prompt, options = {}) {
 async function callChatGPTWithHistory(conversationHistory, newMessage, options = {}) {
     try {
         const model = options.model || DEFAULT_MODEL;
-        const maxTokens = options.maxTokens || parseInt(process.env.OPENAI_MAX_TOKENS) || 1000;
-        const temperature = options.temperature !== undefined ? options.temperature : (parseFloat(process.env.OPENAI_TEMPERATURE) || 0.7);
+        const maxTokens = options.maxTokens || parseInt(process.env.OPENROUTER_MAX_TOKENS) || 1000;
+        const temperature = options.temperature !== undefined ? options.temperature : (parseFloat(process.env.OPENROUTER_TEMPERATURE) || 0.7);
 
         const messages = [];
 
@@ -111,7 +113,7 @@ async function callChatGPTWithHistory(conversationHistory, newMessage, options =
 
         console.log(`🤖 Appel OpenRouter avec historique (${conversationHistory.length} messages, modèle: ${model})...`);
 
-        const completion = await openai.chat.completions.create({
+        const completion = await client.chat.completions.create({
             model: model,
             messages: messages,
             max_tokens: maxTokens,
@@ -157,7 +159,7 @@ async function generateImage(prompt, options = {}) {
 
         console.log(`🎨 Génération d'image (${model})...`);
 
-        const response = await openai.images.generate({
+        const response = await client.images.generate({
             model: model,
             prompt: prompt,
             n: n,
@@ -186,7 +188,7 @@ async function analyzeImage(imageUrl, question, options = {}) {
 
         console.log(`👁️ Analyse d'image avec OpenRouter (${model})...`);
 
-        const completion = await openai.chat.completions.create({
+        const completion = await client.chat.completions.create({
             model: model,
             messages: [
                 {
@@ -224,7 +226,7 @@ async function analyzeImage(imageUrl, question, options = {}) {
 async function callResponseCustom(prompt, options = {}) {
     try {
         const model = options.model || DEFAULT_MODEL;
-        const maxTokens = options.maxTokens || parseInt(process.env.OPENAI_MAX_TOKENS) || 1000;
+        const maxTokens = options.maxTokens || parseInt(process.env.OPENROUTER_MAX_TOKENS) || 1000;
         const temperature = options.temperature !== undefined ? options.temperature : 0.7;
 
         const messages = [];
@@ -241,7 +243,7 @@ async function callResponseCustom(prompt, options = {}) {
 
         console.log(`🤖 Appel OpenRouter (callResponseCustom - ${model})...`);
 
-        const completion = await openai.chat.completions.create({
+        const completion = await client.chat.completions.create({
             model: model,
             messages: messages,
             max_tokens: maxTokens,

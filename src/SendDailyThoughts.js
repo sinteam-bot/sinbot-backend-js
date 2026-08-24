@@ -28,7 +28,7 @@ const GUILD_ID = config.discord?.guild_id || process.env.GUILD_ID;
 const CHANNEL_ID = config.daily_message?.channel_id || '1492194866451583059';
 
 // Modèle par défaut pour OpenRouter
-const DEFAULT_MODEL = config.openrouter?.default_model || config.openai?.default_model || process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'openai/gpt-4o-mini';
+const DEFAULT_MODEL = config.daily_message?.ai_config?.model || config.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
 // ============================================
 // CONNEXION DU BOT

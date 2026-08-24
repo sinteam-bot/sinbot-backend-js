@@ -1072,7 +1072,7 @@ function createWebRouter(client) {
                     env: {
                         dailyMessageChannelId: fullConfig.daily_message?.channel_id || process.env.DAILY_MESSAGE_CHANNEL_ID || '',
                         notificationChannelId: fullConfig.startup_notifier?.channel_id || process.env.LOG_CHANNEL_ID || '',
-                        openaiModel: fullConfig.openai?.default_model || process.env.OPENAI_MODEL || 'gpt-4o-mini'
+                        openrouterModel: fullConfig.openrouter?.default_model || fullConfig.daily_message?.ai_config?.model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free'
                     },
                     fullConfig
                 }

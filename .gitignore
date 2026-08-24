@@ -8,3 +8,6 @@ data/
 logs/
 .deno_lsp/
 config.yml
+public/_nuxt/
+public/200.html
+public/404.html

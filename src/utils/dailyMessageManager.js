@@ -73,10 +73,13 @@ async function generateDailyMessageContent(date = null) {
     const targetDate = date || getTargetDailyDate();
     console.log(`🌅 [DailyMessage] Début de la génération pour le ${getParisDateString(targetDate)}...`);
 
+    const aiConfig = config.daily_message?.ai_config || {};
+    const selectedModel = aiConfig.model || config.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
+
     // ÉTAPE 1: Générer le méta-prompt créatif
     console.log('🔄 [DailyMessage] Étape 1/2: Génération du méta-prompt...');
     const promptGenerationOptions = {
-        model: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        model: selectedModel,
         temperature: 1.2,
         maxTokens: 500
     };
@@ -107,10 +110,10 @@ async function generateDailyMessageContent(date = null) {
     const { prompt: finalPrompt, instruction: finalInstruction } = formatFinalPrompt(promptResponse.text, targetDate);
 
     const messageOptions = {
-        model: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        model: selectedModel,
         systemPrompt: finalInstruction,
-        temperature: 0.8,
-        maxTokens: 300
+        temperature: aiConfig.temperature !== undefined ? aiConfig.temperature : 0.8,
+        maxTokens: aiConfig.max_tokens || 300
     };
 
     const messageResponse = await callResponseCustom(finalPrompt, messageOptions);
