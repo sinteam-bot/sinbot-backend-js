@@ -175,6 +175,12 @@ app.use(express.static(publicPath));
 // Monter le routeur API Discord Web
 app.use('/api', createWebRouter(client));
 
+// Initialiser et monter l'architecture modulaire & EventBus (style NestJS / Angular)
+const { moduleManager } = require('./core/index.js');
+const { appModules } = require('./modules/index.js');
+moduleManager.init(client, app);
+moduleManager.registerModules(appModules);
+
 // Endpoint pour envoyer un message depuis n8n
 app.post('/webhook/send-message', async (req, res) => {
     const { channelId, message, embed } = req.body;
