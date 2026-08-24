@@ -65,6 +65,16 @@ async function handleCaptchaResponse(message) {
                 console.error('❌ Erreur lors de l\'ajout du rôle vérifié:', error);
             }
 
+            // Déclencher le système d'accueil
+            try {
+                const { handleWelcome } = require('./guildMemberAdd.js');
+                if (handleWelcome && message.member) {
+                    await handleWelcome(message.member);
+                }
+            } catch (error) {
+                console.error('❌ Erreur déclenchement accueil après captcha:', error);
+            }
+
             // Supprimer le canal captcha après succès
             try {
                 await message.channel.delete();
@@ -147,30 +157,42 @@ module.exports = {
 
     async execute(message) {
         // Ignorer les messages du bot lui-même
-        if (!message.author.bot) {
-            //return false; //to deactivate the captcha
-            // Vérifier si c'est une réponse au captcha
-            const isCaptchaResponse = await handleCaptchaResponse(message);
+        if (message.author.bot) return;
 
-            // Si ce n'est pas une réponse au captcha, continuer avec le traitement normal
-            if (!isCaptchaResponse) {
-                // Log de l'événement utilisateur
-                await logUserEvent(
-                    message.author.id,
-                    message.author.username,
-                    'message',
-                    {
-                        channelId: message.channelId,
-                        channelName: message.channel.name,
-                        contentLength: message.content.length,
-                        guildId: message.guildId,
-                        guildName: message.guild?.name
-                    }
-                );
-
-                // Ajouter de l'XP pour le message
-                await addMessageXP(message.author.id, message.author.username);
+        // 1. Vérifier si c'est une commande préfixe (!)
+        if (message.content.startsWith('!')) {
+            const args = message.content.slice(1).trim().split(/ +/);
+            const commandName = args.shift()?.toLowerCase();
+            if (commandName && message.client.commands) {
+                const handled = await executeCommand(commandName, message, args, message.client.commands);
+                if (handled) return;
             }
+        }
+
+        // 2. Vérifier si le captcha est actif et si c'est une réponse au captcha
+        let isCaptchaResponse = false;
+        if (CAPTCHA_CONFIG.ENABLED) {
+            isCaptchaResponse = await handleCaptchaResponse(message);
+        }
+
+        // 3. Si ce n'est pas une réponse au captcha, traitement normal (log & XP)
+        if (!isCaptchaResponse) {
+            // Log de l'événement utilisateur
+            await logUserEvent(
+                message.author.id,
+                message.author.username,
+                'message',
+                {
+                    channelId: message.channelId,
+                    channelName: message.channel.name,
+                    contentLength: message.content.length,
+                    guildId: message.guildId,
+                    guildName: message.guild?.name
+                }
+            );
+
+            // Ajouter de l'XP pour le message (si le module XP est activé)
+            await addMessageXP(message.author.id, message.author.username);
         }
     }
 };

@@ -167,6 +167,10 @@ function buildPreviewEmbed(dailyData, options = {}) {
  * @param {Date|null} date
  */
 async function sendDailyMessagePreview(client, date = null) {
+    if (config.daily_message?.enabled === false) {
+        console.log('ℹ️ [DailyMessage] Module de message du jour désactivé dans la configuration.');
+        return null;
+    }
     console.log(`📤 [DailyMessage] Envoi du pré-rendu dans le salon ${PREVIEW_CHANNEL_ID}...`);
 
     try {
@@ -256,6 +260,9 @@ async function executePublicPublication(client, draftData) {
  * @param {import('discord.js').Client} client
  */
 async function publishScheduledDailyMessage(client) {
+    if (config.daily_message?.enabled === false) {
+        return;
+    }
     console.log('⏰ [DailyMessage 09:00] Vérification de la publication planifiée...');
 
     try {
@@ -339,6 +346,9 @@ async function publishScheduledDailyMessage(client) {
  * @param {import('discord.js').Client} client
  */
 async function autoValidateAndPublishDailyMessage(client) {
+    if (config.daily_message?.enabled === false) {
+        return;
+    }
     console.log('⏰ [DailyMessage 11:00] Vérification de la validation/publication automatique...');
 
     try {

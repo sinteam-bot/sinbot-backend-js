@@ -64,14 +64,17 @@ function setupScheduledTasks(client) {
     }
 
     const currentHour = getParisHour();
+    const isDailyMessageEnabled = config.daily_message?.enabled !== false;
     const autoValidateTask = tasks.daily_autovalidate ?? { enabled: true, cron: '0 11 * * *' };
     const publishTask = tasks.daily_publish ?? { enabled: true, cron: '0 9 * * *' };
     const previewTask = tasks.daily_preview ?? { enabled: true, cron: '0 21 * * *' };
 
-    if (autoValidateTask.enabled && currentHour >= 11) {
-        autoValidateAndPublishDailyMessage(client);
-    } else if (publishTask.enabled && currentHour >= 9) {
-        publishScheduledDailyMessage(client);
+    if (isDailyMessageEnabled) {
+        if (autoValidateTask.enabled && currentHour >= 11) {
+            autoValidateAndPublishDailyMessage(client);
+        } else if (publishTask.enabled && currentHour >= 9) {
+            publishScheduledDailyMessage(client);
+        }
     }
 
     // 2. Cron vérifiant toutes les minutes si un rappel de bump doit être envoyé
@@ -84,7 +87,7 @@ function setupScheduledTasks(client) {
     }
 
     // 3. Cron pour la génération et prévisualisation du message du jour à 21:00 (Paris, la veille)
-    if (previewTask.enabled) {
+    if (isDailyMessageEnabled && previewTask.enabled) {
         const cronExpr = previewTask.cron || '0 21 * * *';
         cron.schedule(cronExpr, async () => {
             try {
@@ -98,7 +101,7 @@ function setupScheduledTasks(client) {
     }
 
     // 4. Cron pour la publication automatique du message validé à 09:00 (Paris)
-    if (publishTask.enabled) {
+    if (isDailyMessageEnabled && publishTask.enabled) {
         const cronExpr = publishTask.cron || '0 9 * * *';
         cron.schedule(cronExpr, async () => {
             try {
@@ -112,7 +115,7 @@ function setupScheduledTasks(client) {
     }
 
     // 5. Cron pour la validation et publication automatique à 11:00 (Paris) si non validé manuellement
-    if (autoValidateTask.enabled) {
+    if (isDailyMessageEnabled && autoValidateTask.enabled) {
         const cronExpr = autoValidateTask.cron || '0 11 * * *';
         cron.schedule(cronExpr, async () => {
             try {

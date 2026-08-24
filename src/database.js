@@ -658,6 +658,9 @@ async function getOrCreateUserXP(userId, username) {
 }
 
 async function addXP(userId, username, xpAmount, xpType = 'message', description = null, metadata = {}) {
+    if (XP_CONFIG.ENABLED === false) {
+        return null;
+    }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -726,6 +729,9 @@ async function addXP(userId, username, xpAmount, xpType = 'message', description
 }
 
 async function addMessageXP(userId, username) {
+    if (XP_CONFIG.ENABLED === false) {
+        return { success: false, reason: 'disabled' };
+    }
     try {
         const user = await getOrCreateUserXP(userId, username);
 
@@ -758,6 +764,9 @@ async function addMessageXP(userId, username) {
 }
 
 async function startVoiceSession(userId, username, channelId, channelName) {
+    if (XP_CONFIG.ENABLED === false) {
+        return null;
+    }
     const query = `
         INSERT INTO voice_sessions (user_id, username, channel_id, channel_name, join_time)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -774,6 +783,9 @@ async function startVoiceSession(userId, username, channelId, channelName) {
 }
 
 async function endVoiceSession(userId, username) {
+    if (XP_CONFIG.ENABLED === false) {
+        return null;
+    }
     const client = await pool.connect();
     try {
         await client.query('BEGIN');

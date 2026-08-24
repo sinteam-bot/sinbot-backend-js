@@ -1,5 +1,7 @@
+const { EmbedBuilder } = require('discord.js');
 const { createCaptcha, isUserVerified, getCaptchaConfig } = require("../database.js");
 const CAPTCHA_CONFIG = require("../config/captcha-config.js");
+const WELCOME_CONFIG = require("../config/welcome-config.js");
 const { sendCaptchaLog } = require("../utils/captchaLogger.js");
 
 // Générer une question mathématique aléatoire
@@ -192,21 +194,109 @@ async function createUserCaptchaChannel(member) {
     }
 }
 
+/**
+ * Gère l'attribution des rôles automatiques et l'envoi du message de bienvenue
+ */
+async function handleWelcome(member) {
+    if (!WELCOME_CONFIG.ENABLED) return;
+
+    // 1. Attribuer les rôles automatiques
+    const autoRoles = WELCOME_CONFIG.AUTO_ROLES || [];
+    if (Array.isArray(autoRoles) && autoRoles.length > 0) {
+        for (const roleId of autoRoles) {
+            try {
+                if (roleId) await member.roles.add(roleId);
+            } catch (err) {
+                console.error(`❌ Erreur ajout rôle auto (${roleId}):`, err.message);
+            }
+        }
+    }
+
+    // 2. Message de bienvenue dans le salon public
+    const welcomeMsgConf = WELCOME_CONFIG.WELCOME_MESSAGE;
+    const channelId = WELCOME_CONFIG.WELCOME_CHANNEL_ID;
+    if (welcomeMsgConf && welcomeMsgConf.enabled !== false && channelId) {
+        try {
+            const channel = await member.guild.channels.fetch(channelId);
+            if (channel && channel.isTextBased()) {
+                const embed = new EmbedBuilder()
+                    .setColor(welcomeMsgConf.color || WELCOME_CONFIG.welcome_color || '#f2c7ce')
+                    .setTitle(welcomeMsgConf.title?.replace('{server}', member.guild.name) || `🎉 Bienvenue sur ${member.guild.name} !`)
+                    .setDescription(
+                        welcomeMsgConf.description
+                            ?.replace('{user}', `<@${member.id}>`)
+                            ?.replace('{username}', member.user.username)
+                            ?.replace('{server}', member.guild.name)
+                            ?.replace('{memberCount}', member.guild.memberCount) || `Bienvenue <@${member.id}> !`
+                    )
+                    .setFooter({ text: welcomeMsgConf.footer?.replace('{memberCount}', member.guild.memberCount) || `Membre #${member.guild.memberCount}` })
+                    .setTimestamp();
+
+                if (welcomeMsgConf.thumbnail === 'user') {
+                    embed.setThumbnail(member.user.displayAvatarURL({ dynamic: true }));
+                } else if (welcomeMsgConf.thumbnail) {
+                    embed.setThumbnail(welcomeMsgConf.thumbnail);
+                }
+
+                if (welcomeMsgConf.image) {
+                    embed.setImage(welcomeMsgConf.image);
+                }
+
+                if (Array.isArray(welcomeMsgConf.fields)) {
+                    for (const f of welcomeMsgConf.fields) {
+                        embed.addFields({ name: f.name, value: f.value, inline: !!f.inline });
+                    }
+                }
+
+                await channel.send({ embeds: [embed] });
+            }
+        } catch (err) {
+            console.error('❌ Erreur envoi message de bienvenue:', err.message);
+        }
+    }
+
+    // 3. Message privé (DM)
+    const dmConf = WELCOME_CONFIG.DM_MESSAGE;
+    if (WELCOME_CONFIG.SEND_DM && dmConf && dmConf.enabled !== false) {
+        try {
+            const dmEmbed = new EmbedBuilder()
+                .setColor(dmConf.color || '#f2c7ce')
+                .setTitle(dmConf.title?.replace('{server}', member.guild.name) || '👋 Bienvenue !')
+                .setDescription(
+                    dmConf.description
+                        ?.replace('{user}', `<@${member.id}>`)
+                        ?.replace('{username}', member.user.username)
+                        ?.replace('{server}', member.guild.name) || `Salut ${member.user.username} !`
+                );
+
+            if (Array.isArray(dmConf.fields)) {
+                for (const f of dmConf.fields) {
+                    dmEmbed.addFields({ name: f.name, value: f.value, inline: !!f.inline });
+                }
+            }
+
+            await member.send({ embeds: [dmEmbed] });
+        } catch (err) {
+            console.warn(`⚠️ Impossible d'envoyer un DM de bienvenue à ${member.user.tag}:`, err.message);
+        }
+    }
+}
 
 module.exports = {
     name: 'guildMemberAdd',
+    handleWelcome,
 
     async execute(member) {
-        //return false; //To deactivate
-        // Vérifier si le système de captcha est activé
-        if (!CAPTCHA_CONFIG.ENABLED) {
-            console.log(`ℹ️ Captcha désactivé - ${member.user.tag} rejoint sans vérification`);
-            return;
-        }
-
         // Ignorer les bots
         if (member.user.bot) {
             console.log(`ℹ️ Bot détecté - ${member.user.tag} ignoré`);
+            return;
+        }
+
+        // Vérifier si le système de captcha est activé
+        if (!CAPTCHA_CONFIG.ENABLED) {
+            console.log(`ℹ️ Captcha désactivé - ${member.user.tag} rejoint sans vérification`);
+            await handleWelcome(member);
             return;
         }
 
@@ -228,6 +318,7 @@ module.exports = {
                 } catch (error) {
                     console.error('❌ Erreur lors de l\'ajout du rôle vérifié:', error);
                 }
+                await handleWelcome(member);
                 return;
             }
 

@@ -1,9 +1,13 @@
 const { saveBump } = require("../database.js");
+const { config } = require("../config/index.js");
 
 module.exports = {
     name: 'messageCreate',
 
     async execute(message) {
+        const isBumpEnabled = (config.scheduler?.enabled !== false) && (config.scheduler?.tasks?.bump_reminders?.enabled !== false);
+        if (!isBumpEnabled) return;
+
         // Détecter les messages du bot Disboard ('302050872383242240')
         if (message.author.bot && message.author.id === '302050872383242240') {
             if (!message.embeds || message.embeds.length === 0) return;

@@ -95,8 +95,18 @@ function cleanCommitMessage(msg) {
  * @param {import('discord.js').Client} client
  */
 async function checkAndSendStartupNotification(client) {
-    const channelId = process.env.LOG_CHANNEL_ID;
-    const repo = process.env.GITHUB_REPO || 'sinteam-bot/chienne-bot';
+    if (config.startup_notifier?.enabled === false) {
+        console.log('ℹ️ [StartupNotifier] Notifications de démarrage désactivées dans la configuration.');
+        return;
+    }
+
+    const channelId = config.startup_notifier?.channel_id || process.env.LOG_CHANNEL_ID;
+    if (!channelId) {
+        console.log('ℹ️ [StartupNotifier] Aucun salon de notification configuré.');
+        return;
+    }
+
+    const repo = config.startup_notifier?.github?.repo || process.env.GITHUB_REPO || 'sinteam-bot/chienne-bot';
     const repoUrl = `https://github.com/${repo}`;
 
     console.log('🔄 Vérification des modifications et version de démarrage...');
