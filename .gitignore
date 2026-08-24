@@ -11,3 +11,8 @@ config.yml
 public/_nuxt/
 public/200.html
 public/404.html
+frontend/dist/
+frontend/.nuxt/
+frontend/.output/
+frontend/node_modules/
+frontend/.nitro/
