@@ -1,4 +1,7 @@
 node_modules
+frontend/node_modules
+frontend/.nuxt
+frontend/.output
 npm-debug.log
 .git
 .gitignore
@@ -6,3 +9,6 @@ npm-debug.log
 Dockerfile
 docker-compose*.yml
 README.md
+data/*.db
+data/*.db-journal
+data/*.db-wal
