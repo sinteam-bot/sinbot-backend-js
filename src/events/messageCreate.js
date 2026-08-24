@@ -1,6 +1,5 @@
-const { logUserEvent, addMessageXP } = require("../database.js");
+const { logUserEvent } = require("../database.js");
 const { executeCommand } = require("../utils/commandHandler.js");
-const { config } = require("../config/index.js");
 
 module.exports = {
     name: 'messageCreate',
@@ -19,7 +18,7 @@ module.exports = {
             }
         }
 
-        // 2. Vérifier si c'est un canal captcha pour ne pas logger l'XP ni l'activité standard
+        // 2. Vérifier si c'est un canal captcha pour ne pas logger l'activité standard
         const isCaptchaChannel = message.channel.name?.includes('verification') ||
             message.channel.name?.includes('captcha') ||
             message.channel.topic?.includes('vérification') ||
@@ -29,7 +28,7 @@ module.exports = {
             return;
         }
 
-        // 3. Traitement normal (log d'activité & gain d'XP)
+        // 3. Log d'activité utilisateur (l'attribution d'XP est gérée par XPLevelModule via l'EventBus)
         await logUserEvent(
             message.author.id,
             message.author.username,
@@ -42,8 +41,5 @@ module.exports = {
                 guildName: message.guild?.name
             }
         );
-
-        // Ajouter de l'XP pour le message (si le module XP est activé)
-        await addMessageXP(message.author.id, message.author.username);
     }
 };

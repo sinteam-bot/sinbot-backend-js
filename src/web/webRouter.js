@@ -1224,8 +1224,10 @@ function createWebRouter(client) {
 
     router.post('/daily-messages/generate-preview', async (req, res) => {
         try {
-            const { generateDailyMessageContent } = require('../utils/dailyMessageManager.js');
-            const dailyData = await generateDailyMessageContent(new Date());
+            const { container } = require('../core/container.js');
+            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const dailyService = container.resolve(DailyMessageService);
+            const dailyData = await dailyService.generateDailyMessageContent(new Date());
             res.json({
                 success: true,
                 data: {

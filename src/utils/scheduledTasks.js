@@ -1,83 +1,17 @@
 const cron = require('node-cron');
-const { getPendingBumpReminders, markBumpReminderSent } = require("../database.js");
-const { 
-    sendDailyMessagePreview, 
-    publishScheduledDailyMessage, 
-    autoValidateAndPublishDailyMessage,
-    getParisHour 
-} = require("./dailyMessageManager.js");
-const { toDateSafe } = require("./dateUtils.js");
+const { getParisHour } = require("./dateUtils.js");
 const { config } = require("../config/index.js");
-
-// Cache mémoire des rappels de bump actuellement planifiés par setTimeout
-const activeScheduledBumpIds = new Set();
+const { container } = require("../core/container.js");
+const { BumpReminderService } = require("../modules/service_bump-reminder/bump-reminder.service.js");
+const { DailyMessageService } = require("../modules/feature_daily-message/daily-message.service.js");
 
 /**
  * Fonction de vérification et d'envoi des rappels de bump en attente
  */
 async function checkAndSendBumpReminders(client) {
     try {
-        const pendingBumps = await getPendingBumpReminders();
-        const now = Date.now();
-
-        for (const bump of pendingBumps) {
-            if (activeScheduledBumpIds.has(bump.id)) {
-                continue; // Déjà planifié en mémoire pour s'exécuter dans quelques secondes
-            }
-
-            try {
-                const bumpDate = toDateSafe(bump.bumped_at);
-                if (!bumpDate) {
-                    console.warn(`[BUMP] Date de bump invalide pour l'ID ${bump.id} (${bump.bumped_at}), bump ignoré.`);
-                    await markBumpReminderSent(bump.id);
-                    continue;
-                }
-
-                // 2 heures en millisecondes = 7 200 000 ms
-                const targetTimestamp = bumpDate.getTime() + (2 * 60 * 60 * 1000);
-                const remainingMs = targetTimestamp - now;
-
-                const sendReminderNow = async () => {
-                    try {
-                        const guild = await client.guilds.fetch(bump.guild_id);
-                        if (guild) {
-                            const channel = await guild.channels.fetch(bump.channel_id);
-                            if (channel) {
-                                const userText = bump.username ? `@${bump.username}` : (bump.user_id ? `<@${bump.user_id}>` : null);
-                                const userMentionInfo = userText ? ` (Dernier bump par <@${bump.user_id}>)` : '';
-                                await channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544> ${userMentionInfo}`);
-                                const heureParis = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
-                                console.log(`[BUMP] 2 heures se sont écoulées, le rappel a été envoyé à ${heureParis} (Bump ID: ${bump.id}) !`);
-                            }
-                        }
-                    } catch (err) {
-                        console.error(`❌ Erreur lors de l'envoi du message de rappel de bump (ID ${bump.id}):`, err.message);
-                    } finally {
-                        activeScheduledBumpIds.delete(bump.id);
-                        await markBumpReminderSent(bump.id);
-                    }
-                };
-
-                // Cas 1 : 2 heures ou plus se sont déjà écoulées (ex: redémarrage après l'heure)
-                if (remainingMs <= 0) {
-                    await sendReminderNow();
-                }
-                // Cas 2 : Moins d'une minute restante avant l'échéance des 2 heures
-                else if (remainingMs <= 60 * 1000) {
-                    activeScheduledBumpIds.add(bump.id);
-                    console.log(`[BUMP] Bientôt 2 heures écoulées depuis le bump (ID: ${bump.id}), envoi dans ${Math.ceil(remainingMs / 1000)}s.`);
-                    setTimeout(sendReminderNow, remainingMs);
-                }
-                // Cas 3 : Plus d'une minute restante, la prochaine exécution du cron s'en chargera
-                else {
-                    // On laisse le cron périodique (chaque minute) s'en occuper
-                }
-            } catch (err) {
-                console.error(`❌ Erreur lors du traitement du rappel de bump (ID ${bump.id}):`, err);
-                activeScheduledBumpIds.delete(bump.id);
-                await markBumpReminderSent(bump.id);
-            }
-        }
+        const bumpService = container.resolve(BumpReminderService);
+        await bumpService.checkAndSendReminders(client);
     } catch (error) {
         console.error('❌ Erreur checkAndSendBumpReminders:', error);
     }
@@ -105,47 +39,50 @@ function setupScheduledTasks(client) {
     const currentHour = getParisHour();
     const isDailyMessageEnabled = config.daily_message?.enabled !== false;
     const autoValidateTask = tasks.daily_autovalidate ?? { enabled: true, cron: '0 11 * * *' };
-    const publishTask = tasks.daily_publish ?? { enabled: true, cron: '0 9 * * *' };
-    const previewTask = tasks.daily_preview ?? { enabled: true, cron: '0 21 * * *' };
 
-    if (isDailyMessageEnabled) {
-        if (autoValidateTask.enabled && currentHour >= 11) {
-            autoValidateAndPublishDailyMessage(client);
-        } else if (publishTask.enabled && currentHour >= 9) {
-            publishScheduledDailyMessage(client);
-        }
+    // Si le bot démarre après 11h et que le message n'a pas encore été publié aujourd'hui
+    if (isDailyMessageEnabled && autoValidateTask.enabled && currentHour >= 11) {
+        console.log('⏰ [DailyMessage 11:00] Vérification de la validation/publication automatique...');
+        const dailyService = container.resolve(DailyMessageService);
+        dailyService.autoValidateAndPublish(client).catch(err => {
+            console.error('❌ Erreur lors de l\'auto-validation au démarrage:', err.message);
+        });
     }
 
-    // 2. Cron vérifiant toutes les minutes si un rappel de bump doit être envoyé
+    // 2. Cron pour les rappels de bump (par défaut toutes les minutes)
     if (bumpTask.enabled) {
         const cronExpr = bumpTask.cron || '* * * * *';
         cron.schedule(cronExpr, async () => {
             await checkAndSendBumpReminders(client);
-        });
+        }, { timezone });
         console.log(`   └─ 🔔 Bump Reminders: actif (${cronExpr})`);
     }
 
-    // 3. Cron pour la génération et prévisualisation du message du jour à 21:00 (Paris, la veille)
+    // 3. Cron pour l'envoi du pré-rendu à 21:00 (Paris)
+    const previewTask = tasks.daily_preview ?? { enabled: true, cron: '0 21 * * *' };
     if (isDailyMessageEnabled && previewTask.enabled) {
         const cronExpr = previewTask.cron || '0 21 * * *';
         cron.schedule(cronExpr, async () => {
             try {
-                console.log('🌅 [Cron Preview] Déclenchement du pré-rendu du message du jour...');
-                await sendDailyMessagePreview(client);
+                console.log('🌙 [Cron Preview] Déclenchement du pré-rendu du message du jour...');
+                const dailyService = container.resolve(DailyMessageService);
+                await dailyService.sendPreview(client);
             } catch (error) {
-                console.error('❌ Erreur lors du déclenchement du pré-rendu du message du jour:', error.message);
+                console.error('❌ Erreur lors du pré-rendu du message du jour:', error.message);
             }
         }, { timezone });
         console.log(`   └─ 🌅 Daily Message Preview: actif (${cronExpr})`);
     }
 
-    // 4. Cron pour la publication automatique du message validé à 09:00 (Paris)
+    // 4. Cron pour la publication programmée à 09:00 (Paris)
+    const publishTask = tasks.daily_publish ?? { enabled: true, cron: '0 9 * * *' };
     if (isDailyMessageEnabled && publishTask.enabled) {
         const cronExpr = publishTask.cron || '0 9 * * *';
         cron.schedule(cronExpr, async () => {
             try {
                 console.log('📢 [Cron Publish] Déclenchement de la publication du message du jour...');
-                await publishScheduledDailyMessage(client);
+                const dailyService = container.resolve(DailyMessageService);
+                await dailyService.publishScheduled(client);
             } catch (error) {
                 console.error('❌ Erreur lors de la publication du message du jour:', error.message);
             }
@@ -159,7 +96,8 @@ function setupScheduledTasks(client) {
         cron.schedule(cronExpr, async () => {
             try {
                 console.log('🤖 [Cron AutoValidate] Vérification de la validation automatique du message du jour...');
-                await autoValidateAndPublishDailyMessage(client);
+                const dailyService = container.resolve(DailyMessageService);
+                await dailyService.autoValidateAndPublish(client);
             } catch (error) {
                 console.error('❌ Erreur lors de la validation automatique du message du jour:', error.message);
             }

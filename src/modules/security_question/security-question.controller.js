@@ -14,11 +14,12 @@ class SecurityQuestionController {
     }
 
     async getStatus(req) {
-        const userId = req.query.user_id;
-        const guildId = req.query.guild_id;
+        const userId = req?.query?.user_id;
+        const guildId = req?.query?.guild_id;
 
         if (!userId || !guildId) {
-            return { success: false, error: 'Paramètres user_id et guild_id requis.' };
+            const overview = await this.service.getCaptchaOverview();
+            return { success: true, data: overview.stats, config: overview.config };
         }
 
         const captcha = await this.service.repo.getUserCaptcha(userId, guildId);
@@ -33,7 +34,7 @@ class SecurityQuestionController {
     }
 
     async verifyUser(req) {
-        const { userId, guildId } = req.body || {};
+        const { userId, guildId } = req?.body || {};
         if (!userId || !guildId) {
             return { success: false, error: 'userId et guildId requis.' };
         }

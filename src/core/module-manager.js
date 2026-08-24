@@ -31,6 +31,14 @@ class ModuleManager {
     }
 
     /**
+     * Enregistre un module unique
+     * @param {Function} ModuleClass
+     */
+    registerModule(ModuleClass) {
+        this._loadModule(ModuleClass);
+    }
+
+    /**
      * Enregistre et initialise un ou plusieurs modules
      * @param {Array<Function>|Function} moduleClasses
      */

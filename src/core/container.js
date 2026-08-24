@@ -14,6 +14,7 @@ class Container {
      * @param {Object} [instance] - Instance existante optionnelle
      */
     register(token, instance = null) {
+        if (!token) throw new Error('[Container] Dépendance invalide ou nulle');
         const key = typeof token === 'string' ? token : token.name;
         if (instance) {
             this.services.set(key, instance);
@@ -28,6 +29,10 @@ class Container {
      * @returns {Object}
      */
     resolve(token) {
+        if (!token) {
+            throw new Error('[Container] Dépendance invalide ou nulle');
+        }
+
         const key = typeof token === 'string' ? token : token.name;
 
         // 1. Déjà instancié (Singleton)
@@ -39,7 +44,7 @@ class Container {
         if (this.factories.has(key)) {
             const TargetClass = this.factories.get(key);
             
-            // Résolution automatique des dépendances déclarées dans constructor dependencies si spécifié
+            // Résolution automatique des dépendances déclarées dans inject ou dependencies
             const paramTypes = TargetClass.inject || TargetClass.dependencies || [];
             const dependencies = paramTypes.map(dep => this.resolve(dep));
 
@@ -63,6 +68,7 @@ class Container {
      * @returns {boolean}
      */
     has(token) {
+        if (!token) return false;
         const key = typeof token === 'string' ? token : token.name;
         return this.services.has(key) || this.factories.has(key);
     }

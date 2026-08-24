@@ -1,5 +1,4 @@
 const { setupScheduledTasks } = require("../utils/scheduledTasks.js");
-const { checkAndSendStartupNotification } = require("../utils/startupNotifier.js");
 const { printStartupModulesTable } = require("../utils/modulesSummary.js");
 
 module.exports = {
@@ -25,8 +24,5 @@ module.exports = {
         
         // Démarrer les tâches planifiées
         setupScheduledTasks(client);
-
-        // Envoyer la notification de démarrage avec état des commits et changements
-        checkAndSendStartupNotification(client);
     }
 };

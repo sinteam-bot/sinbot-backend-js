@@ -1,5 +1,6 @@
-const { handleDailyMessageInteraction } = require("../utils/dailyMessageManager.js");
 const { checkCommandPermissions } = require("../utils/commandHandler.js");
+const { container } = require("../core/container.js");
+const { DailyMessageService } = require("../modules/feature_daily-message/daily-message.service.js");
 
 module.exports = {
     name: 'interactionCreate',
@@ -8,7 +9,8 @@ module.exports = {
         // 1. Gestion des interactions de type Bouton
         if (interaction.isButton()) {
             if (interaction.customId.startsWith('daily_msg_')) {
-                return await handleDailyMessageInteraction(interaction);
+                const dailyService = container.resolve(DailyMessageService);
+                return await dailyService.handleButtonInteraction(interaction);
             }
             return;
         }
