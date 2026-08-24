@@ -288,130 +288,15 @@ module.exports = {
 
     async execute(member) {
         // Ignorer les bots
-        if (member.user.bot) {
-            console.log(`ℹ️ Bot détecté - ${member.user.tag} ignoré`);
-            return;
-        }
+        if (member.user.bot) return;
 
-        // Vérifier si le système de captcha est activé
-        if (!CAPTCHA_CONFIG.ENABLED) {
-            console.log(`ℹ️ Captcha désactivé - ${member.user.tag} rejoint sans vérification`);
+        // Si le captcha est activé, SecurityQuestionModule gère la création du captcha et déclenchera handleWelcome ensuite
+        const { config, getConfig } = require('../config/index.js');
+        const currentConf = getConfig ? getConfig() : config;
+        const isCaptchaActive = currentConf.captcha && currentConf.captcha.enabled !== false;
+
+        if (!isCaptchaActive) {
             await handleWelcome(member);
-            return;
-        }
-
-        try {
-            // Vérifier si l'utilisateur est déjà vérifié
-            const alreadyVerified = await isUserVerified(member.id, member.guild.id);
-
-            if (alreadyVerified) {
-                await sendCaptchaLog(member.guild, 'Déjà vérifié', `**${member.user.tag}** est déjà vérifié`, "#3498db");
-                // Donner le rôle vérifié
-                try {
-                    const verifiedRole = await getVerifiedRole(member.guild);
-                    if (verifiedRole) {
-                        await member.roles.add(verifiedRole.id);
-                        await sendCaptchaLog(member.guild, 'Succès captcha', `**${member.user.tag}** a validé le captcha - Rôle vérifié donné`, '#3498db');
-                    } else {
-                        console.error('❌ Rôle vérifié introuvable. Le captcha est validé mais aucun rôle attribué.');
-                    }
-                } catch (error) {
-                    console.error('❌ Erreur lors de l\'ajout du rôle vérifié:', error);
-                }
-                await handleWelcome(member);
-                return;
-            }
-
-            // Obtenir ou créer le canal captcha
-            //const captchaChannel = await getOrCreateCaptchaChannel(member.guild);
-            const captchaChannel = await createUserCaptchaChannel(member);
-
-            // Générer une question mathématique
-            const mathQuestion = generateMathQuestion();
-
-            // Créer le captcha dans la base de données
-            await createCaptcha(
-                member.id,
-                member.user.username,
-                member.guild.id,
-                mathQuestion.question,
-                mathQuestion.answer,
-                captchaChannel.id,
-                CAPTCHA_CONFIG.CAPTCHA_TIMEOUT
-            );
-
-            // Envoyer le message de bienvenue avec le captcha
-            const welcomeMessage = CAPTCHA_CONFIG.MESSAGES.WELCOME_MESSAGE;
-            const instructions = CAPTCHA_CONFIG.MESSAGES.INSTRUCTIONS;
-
-            const message = `${member.user}, ${welcomeMessage}
-
-**${mathQuestion.question}**
-
-${instructions}`;
-
-            // Donner les permissions au membre pour voir et écrire dans le canal
-            try {
-                await captchaChannel.permissionOverwrites.create(member.id, {
-                    ViewChannel: true,
-                    SendMessages: true,
-                    ReadMessageHistory: true
-                });
-            } catch (error) {
-                console.error('❌ Erreur lors de l\'ajout des permissions:', error);
-            }
-
-            // Envoyer le message
-            const sentMessage = await captchaChannel.send({
-                content: message,
-                embeds: [{
-                    description: `**${mathQuestion.question}**`,
-                    color: 0x3498db,
-                    footer: { text: 'Réponds avec le nombre en chiffres uniquement' }
-                }]
-            });
-
-            await sendCaptchaLog(member.guild, 'Captcha envoyé', `Captcha envoyé à **${member.user.tag}** (ID: ${member.id}) - Question: ${mathQuestion.question}`, "#3498db");
-
-            // Démarrer un timeout pour supprimer le captcha après expiration
-            const timeoutMinutes = CAPTCHA_CONFIG.CAPTCHA_TIMEOUT;
-            setTimeout(async () => {
-                try {
-                    const currentCaptcha = await require("../database.js").getUserCaptcha(member.id, member.guild.id);
-                    if (currentCaptcha && !currentCaptcha.is_verified) {
-                        // Marquer comme expiré (sans incrémenter les tentatives)
-                        await require("../database.js").expireCaptcha(member.id, member.guild.id, false);
-
-                        // Envoyer un message d'expiration
-                        await captchaChannel.send({
-                            content: `${member.user}, ${CAPTCHA_CONFIG.MESSAGES.TIMEOUT_MESSAGE}`
-                        });
-
-                        // Kicker immédiatement après le premier timeout
-                        try {
-                            await member.kick('Captcha non validé à temps');
-                            await sendCaptchaLog(member.guild, 'Kick utilisateur', `**${member.user.tag}** kické - Timeout captcha (10 minutes écoulées)`, '#ff0000');
-                        } catch (error) {
-                            console.error('❌ Erreur kick timeout:', error);
-                        }
-
-                        // Supprimer le canal après un délai pour laisser le temps de lire le message
-                        setTimeout(async () => {
-                            try {
-                                await captchaChannel.delete();
-                                await sendCaptchaLog(member.guild, 'Suppression canal', `Canal captcha de **${member.user.tag}** supprimé (timeout)`, "#3498db");
-                            } catch (error) {
-                                console.error('❌ Erreur suppression canal timeout:', error);
-                            }
-                        }, 5000); // Attend 5 secondes
-                    }
-                } catch (error) {
-                    console.error('❌ Erreur lors du timeout du captcha:', error);
-                }
-            }, timeoutMinutes * 60 * 1000);
-
-        } catch (error) {
-            console.error(`❌ Erreur lors de la création du captcha pour ${member.user.tag}:`, error);
         }
     }
 };

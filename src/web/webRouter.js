@@ -1249,124 +1249,13 @@ function createWebRouter(client) {
     // ============================================
     router.get('/captcha-logs', async (req, res) => {
         try {
-            const guild = await getGuild();
-            const captchaConfigPath = path.join(__dirname, '../config/captcha-config.js');
-            let captchaConfig = fs.existsSync(captchaConfigPath) ? require(captchaConfigPath) : {};
-
-            // 1. Récupérer l'historique complet de user_captchas
-            const query = `
-                SELECT * FROM user_captchas 
-                ORDER BY created_at DESC 
-                LIMIT 200
-            `;
-            const result = await db.pool.query(query);
-            const rawCaptchas = result.rows || [];
-
-            const now = new Date();
-            const maxAttempts = captchaConfig.MAX_ATTEMPTS || 3;
-
-            const captchas = rawCaptchas.map(c => {
-                const createdAt = c.created_at ? new Date(c.created_at) : null;
-                const verifiedAt = c.verified_at ? new Date(c.verified_at) : null;
-                const expiresAt = c.expires_at ? new Date(c.expires_at) : null;
-                const expiredAt = c.expired_at ? new Date(c.expired_at) : null;
-
-                let status = 'pending';
-                let statusLabel = 'En cours';
-
-                if (c.is_verified === 1) {
-                    status = 'verified';
-                    statusLabel = 'Vérifié avec succès';
-                } else if (c.attempts >= maxAttempts) {
-                    status = 'failed';
-                    statusLabel = 'Échec (Max tentatives)';
-                } else if (expiredAt || (expiresAt && expiresAt < now)) {
-                    status = 'expired';
-                    statusLabel = 'Expiré (Non répondu)';
-                }
-
-                // Calculer la durée de réponse si vérifié
-                let durationMs = null;
-                let durationFormatted = null;
-                if (verifiedAt && createdAt) {
-                    durationMs = verifiedAt.getTime() - createdAt.getTime();
-                    const seconds = Math.floor(durationMs / 1000);
-                    if (seconds < 60) {
-                        durationFormatted = `${seconds}s`;
-                    } else {
-                        const mins = Math.floor(seconds / 60);
-                        const remSec = seconds % 60;
-                        durationFormatted = `${mins}m ${remSec}s`;
-                    }
-                }
-
-                return {
-                    id: c.id,
-                    userId: c.user_id,
-                    username: c.username,
-                    guildId: c.guild_id,
-                    question: c.question,
-                    answer: c.answer,
-                    channelId: c.channel_id,
-                    attempts: c.attempts || 0,
-                    maxAttempts,
-                    isVerified: !!c.is_verified,
-                    status,
-                    statusLabel,
-                    durationFormatted,
-                    createdAt: c.created_at,
-                    expiresAt: c.expires_at,
-                    verifiedAt: c.verified_at,
-                    expiredAt: c.expired_at,
-                    updatedAt: c.updated_at
-                };
-            });
-
-            // 2. Extraire les logs en mémoire pour le tag CAPTCHA
-            const memoryLogs = logger.getMemoryLogs ? logger.getMemoryLogs() : [];
-            const captchaLogs = memoryLogs.filter(l => 
-                l.tag === 'CAPTCHA' || 
-                (l.message && (l.message.toLowerCase().includes('captcha') || l.message.toLowerCase().includes('vérif')))
-            ).slice(-50).reverse();
-
-            // 3. Calculer les statistiques
-            const total = captchas.length;
-            const verifiedCount = captchas.filter(c => c.status === 'verified').length;
-            const pendingCount = captchas.filter(c => c.status === 'pending').length;
-            const failedCount = captchas.filter(c => c.status === 'failed' || c.status === 'expired').length;
-            const successRate = total > 0 ? Math.round((verifiedCount / (total - pendingCount || 1)) * 100) : 100;
-
-            // Rôle et salon names
-            let verifiedRoleName = 'Non défini';
-            if (guild && captchaConfig.VERIFIED_ROLE_ID) {
-                const role = guild.roles.cache.get(captchaConfig.VERIFIED_ROLE_ID);
-                if (role) verifiedRoleName = `@${role.name}`;
-            }
-
-            let logChannelName = 'Non défini';
-            if (guild && captchaConfig.CAPTCHA_LOG_CHANNEL) {
-                const channel = guild.channels.cache.get(captchaConfig.CAPTCHA_LOG_CHANNEL);
-                if (channel) logChannelName = `#${channel.name}`;
-            }
-
+            const { container } = require('../core/container.js');
+            const { SecurityQuestionService } = require('../modules/security_question/security-question.service.js');
+            const service = container.resolve(SecurityQuestionService);
+            const overview = await service.getCaptchaOverview();
             res.json({
                 success: true,
-                data: {
-                    stats: {
-                        total,
-                        verifiedCount,
-                        pendingCount,
-                        failedCount,
-                        successRate,
-                        isEnabled: !!captchaConfig.ENABLED,
-                        timeoutMinutes: captchaConfig.CAPTCHA_TIMEOUT || 10,
-                        maxAttempts,
-                        verifiedRoleName,
-                        logChannelName
-                    },
-                    captchas,
-                    logs: captchaLogs
-                }
+                data: overview
             });
         } catch (error) {
             logger.error(`Erreur GET /api/captcha-logs: ${error.message}`, 'WEB');
