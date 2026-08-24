@@ -28,13 +28,13 @@ class BumpReminderRepository {
 
         return {
             ...created,
-            id: created.id,
-            guild_id: created.guildId,
-            channel_id: created.channelId,
-            bumper_id: created.userId,
-            bumper_username: created.username,
-            bumped_at: created.bumpedAt,
-            reminder_sent: created.reminderSent
+            id: created?.id,
+            guild_id: created?.guildId ?? created?.guild_id ?? guildId,
+            channel_id: created?.channelId ?? created?.channel_id ?? channelId,
+            bumper_id: created?.userId ?? created?.user_id ?? userId,
+            bumper_username: created?.username ?? username,
+            bumped_at: created?.bumpedAt ?? created?.bumped_at,
+            reminder_sent: created?.reminderSent ?? created?.reminder_sent ?? 0
         };
     }
 

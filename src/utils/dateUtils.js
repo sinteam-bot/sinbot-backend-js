@@ -85,6 +85,13 @@ function toDateSafe(val, fallback = null) {
 }
 
 /**
+ * Retourne l'ISO timestamp actuel.
+ */
+function getCurrentTimestamp() {
+    return new Date().toISOString();
+}
+
+/**
  * Retourne l'heure courante (0-23) au fuseau horaire de Paris.
  * 
  * @param {Date|string|number} [date=new Date()]
@@ -126,9 +133,70 @@ function getParisDateString(date = new Date()) {
     }
 }
 
+/**
+ * Formate une date en chaîne française (DD/MM/YYYY) au fuseau horaire de Paris.
+ */
+function formatToParisDate(date = new Date()) {
+    const d = toDateSafe(date, new Date());
+    return new Intl.DateTimeFormat('fr-FR', {
+        timeZone: 'Europe/Paris',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    }).format(d);
+}
+
+/**
+ * Formate une heure en chaîne française (HH:mm:ss) au fuseau horaire de Paris.
+ */
+function formatToParisTime(date = new Date()) {
+    const d = toDateSafe(date, new Date());
+    return new Intl.DateTimeFormat('fr-FR', {
+        timeZone: 'Europe/Paris',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).format(d);
+}
+
+/**
+ * Calcule la durée en minutes entre deux dates.
+ */
+function calculateDurationMinutes(startDate, endDate = new Date()) {
+    const start = toDateSafe(startDate);
+    const end = toDateSafe(endDate);
+    if (!start || !end) return 0;
+    const diffMs = end.getTime() - start.getTime();
+    if (diffMs <= 0) return 0;
+    return Math.floor(diffMs / (1000 * 60));
+}
+
+/**
+ * Convertit en timestamp numérique en millisecondes.
+ */
+function toTimestamp(val) {
+    const d = toDateSafe(val);
+    return d ? d.getTime() : Date.now();
+}
+
+/**
+ * Alias pour toDateSafe
+ */
+function parseToDate(val, fallback = null) {
+    return toDateSafe(val, fallback);
+}
+
 module.exports = {
     toISOStringSafe,
     toDateSafe,
+    parseToDate,
+    getCurrentTimestamp,
     getParisHour,
-    getParisDateString
+    getParisDateString,
+    getCurrentParisDateString: getParisDateString,
+    formatToParisDate,
+    formatToParisTime,
+    calculateDurationMinutes,
+    toTimestamp
 };

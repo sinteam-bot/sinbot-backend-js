@@ -292,6 +292,7 @@ function estimateTokens(text) {
 }
 
 module.exports = {
+    client,
     callChatGPT,
     callChatGPTWithHistory,
     generateImage,

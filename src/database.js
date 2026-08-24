@@ -7,58 +7,14 @@ const XP_CONFIG = require("./modules/feature_xp-level/xp.config.js");
 const CAPTCHA_CONFIG = require("./modules/security_question/captcha.config.js");
 
 // ============================================
-// ADAPTATEUR DE COMPATIBILITÉ POOL
+// ADAPTATEUR DE COMPATIBILITÉ POOL POSTGRESQL
 // ============================================
 const pool = {
     query: async (sqlText, params = []) => {
-        if (isPostgres) {
-            return rawClient.query(sqlText, params);
-        } else {
-            let cleanSql = sqlText.replace(/::[a-zA-Z]+/g, '').replace(/\$\d+/g, '?');
-            const trimmed = cleanSql.trim().toUpperCase();
-            if (trimmed.startsWith('SELECT') || trimmed.startsWith('WITH')) {
-                const stmt = rawClient.prepare(cleanSql);
-                const rows = stmt.all(...params);
-                return { rows };
-            } else {
-                const stmt = rawClient.prepare(cleanSql);
-                if (cleanSql.toUpperCase().includes('RETURNING')) {
-                    const rows = stmt.all(...params);
-                    return { rows };
-                } else {
-                    const info = stmt.run(...params);
-                    return { rows: [{ id: info.lastInsertRowid }], changes: info.changes };
-                }
-            }
-        }
+        return rawClient.query(sqlText, params);
     },
     connect: async () => {
-        if (isPostgres) {
-            return rawClient.connect();
-        } else {
-            let inTx = false;
-            return {
-                query: async (sqlText, params = []) => {
-                    const trimmed = sqlText.trim().toUpperCase();
-                    if (trimmed === 'BEGIN') {
-                        rawClient.exec('BEGIN TRANSACTION');
-                        inTx = true;
-                        return { rows: [] };
-                    } else if (trimmed === 'COMMIT') {
-                        if (inTx) rawClient.exec('COMMIT');
-                        inTx = false;
-                        return { rows: [] };
-                    } else if (trimmed === 'ROLLBACK') {
-                        if (inTx) rawClient.exec('ROLLBACK');
-                        inTx = false;
-                        return { rows: [] };
-                    } else {
-                        return pool.query(sqlText, params);
-                    }
-                },
-                release: () => {}
-            };
-        }
+        return rawClient.connect();
     }
 };
 
