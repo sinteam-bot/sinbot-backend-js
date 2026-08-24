@@ -1044,16 +1044,31 @@ function createWebRouter(client) {
     });
 
     // ============================================
-    // 7. SALON VIRTUEL : CONFIGURATION DU BOT
+    // 7. SALON VIRTUEL : CONFIGURATION DU BOT & MODULES
     // ============================================
+    router.get('/modules/status', (req, res) => {
+        try {
+            const { getModulesStatusList } = require('../utils/modulesSummary.js');
+            res.json({
+                success: true,
+                data: getModulesStatusList()
+            });
+        } catch (error) {
+            logger.error(`Erreur GET /api/modules/status: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
     router.get('/config', async (req, res) => {
         try {
             const { getConfig } = require('../config/index.js');
+            const { getModulesStatusList } = require('../utils/modulesSummary.js');
             const fullConfig = getConfig();
 
             res.json({
                 success: true,
                 data: {
+                    modules: getModulesStatusList(),
                     welcome: fullConfig.welcome || {},
                     captcha: fullConfig.captcha || {},
                     xp: fullConfig.welcome?.xp || fullConfig.xp || {},

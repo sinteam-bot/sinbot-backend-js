@@ -1,6 +1,7 @@
 const { setupScheduledTasks } = require("../utils/scheduledTasks.js");
 const { checkAndInitCountDown } = require("./messageCreate.CountDown.js");
 const { checkAndSendStartupNotification } = require("../utils/startupNotifier.js");
+const { printStartupModulesTable } = require("../utils/modulesSummary.js");
 
 module.exports = {
     name: 'clientReady',
@@ -16,6 +17,9 @@ module.exports = {
         console.log(`📊 Serveurs: ${client.guilds.cache.size}`);
         console.log(`👥 Utilisateurs: ${client.users.cache.size}`);
         console.log('');
+
+        // Afficher l'état de tous les modules
+        printStartupModulesTable();
         
         // Définir le statut du bot
         client.user.setActivity('les commandes !help', { type: 'LISTENING' });
