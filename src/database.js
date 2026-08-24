@@ -300,6 +300,35 @@ function initDb() {
             value TEXT,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS discord_roles (
+            role_id TEXT PRIMARY KEY,
+            guild_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            color INTEGER DEFAULT 0,
+            hoist INTEGER DEFAULT 0,
+            position INTEGER DEFAULT 0,
+            permissions TEXT,
+            managed INTEGER DEFAULT 0,
+            mentionable INTEGER DEFAULT 0,
+            created_at DATETIME,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS discord_events_archive (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_name TEXT NOT NULL,
+            guild_id TEXT,
+            target_id TEXT,
+            user_id TEXT,
+            username TEXT,
+            summary TEXT,
+            data_json TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_events_name ON discord_events_archive(event_name);
+        CREATE INDEX IF NOT EXISTS idx_events_created ON discord_events_archive(created_at);
     `);
     console.log('✅ Base de donnees SQLite initialisee avec succes (' + dbPath + ')');
 }
@@ -1639,7 +1668,18 @@ module.exports = {
     resetCountdownScores,
     // État du bot et suivi de version
     getBotState,
-    setBotState
+    setBotState,
+    // Archivage des Événements Discord & Synchronisation
+    archiveDiscordEvent,
+    getDiscordEventsArchive,
+    upsertDiscordChannel,
+    deleteDiscordChannel,
+    upsertDiscordRole,
+    deleteDiscordRole,
+    upsertDiscordThread,
+    deleteDiscordThread,
+    updateDiscordMessage,
+    deleteDiscordMessage
 };
 
 // ============================================
@@ -1935,5 +1975,238 @@ async function setBotState(key, value) {
     } catch (error) {
         console.error(`❌ Erreur setBotState(${key}):`, error);
         return false;
+    }
+}
+
+// ============================================
+// ARCHIVAGE DES ÉVÉNEMENTS DISCORD & SYNCHRONISATION
+// ============================================
+
+async function archiveDiscordEvent(eventName, { guildId = null, targetId = null, userId = null, username = null, summary = '', data = null } = {}) {
+    const query = `
+        INSERT INTO discord_events_archive (event_name, guild_id, target_id, user_id, username, summary, data_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `;
+    try {
+        const dataJson = data ? JSON.stringify(data) : null;
+        await pool.query(query, [eventName, guildId, targetId, userId, username, summary, dataJson]);
+        return true;
+    } catch (error) {
+        console.error(`❌ Erreur archiveDiscordEvent(${eventName}):`, error);
+        return false;
+    }
+}
+
+async function getDiscordEventsArchive({ limit = 100, offset = 0, eventName = null, search = null } = {}) {
+    try {
+        let conditions = [];
+        let params = [];
+
+        if (eventName && eventName !== 'ALL') {
+            conditions.push('event_name = ?');
+            params.push(eventName);
+        }
+
+        if (search) {
+            conditions.push('(summary LIKE ? OR username LIKE ? OR target_id LIKE ?)');
+            const s = `%${search}%`;
+            params.push(s, s, s);
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const countQuery = `SELECT COUNT(*) as total FROM discord_events_archive ${whereClause}`;
+        const countRes = await pool.query(countQuery, params);
+        const total = countRes.rows[0]?.total || 0;
+
+        const dataQuery = `
+            SELECT * FROM discord_events_archive 
+            ${whereClause} 
+            ORDER BY created_at DESC, id DESC 
+            LIMIT ? OFFSET ?
+        `;
+        const dataRes = await pool.query(dataQuery, [...params, limit, offset]);
+
+        return {
+            total,
+            events: dataRes.rows.map(r => ({
+                ...r,
+                data: r.data_json ? JSON.parse(r.data_json) : null
+            }))
+        };
+    } catch (error) {
+        console.error('❌ Erreur getDiscordEventsArchive:', error);
+        return { total: 0, events: [] };
+    }
+}
+
+async function upsertDiscordChannel(channel) {
+    if (!channel || !channel.id) return;
+    const query = `
+        INSERT INTO discord_channels (channel_id, guild_id, name, type, parent_id, position, topic, is_nsfw, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(channel_id) DO UPDATE SET
+            name = excluded.name,
+            type = excluded.type,
+            parent_id = excluded.parent_id,
+            position = excluded.position,
+            topic = excluded.topic,
+            is_nsfw = excluded.is_nsfw,
+            updated_at = CURRENT_TIMESTAMP
+    `;
+    try {
+        await pool.query(query, [
+            channel.id,
+            channel.guildId || channel.guild?.id || 'unknown',
+            channel.name,
+            String(channel.type),
+            channel.parentId || null,
+            channel.position || 0,
+            channel.topic || null,
+            channel.nsfw ? 1 : 0,
+            channel.createdAt ? channel.createdAt.toISOString() : new Date().toISOString()
+        ]);
+    } catch (e) {
+        console.error(`❌ Erreur upsertDiscordChannel(${channel.id}):`, e);
+    }
+}
+
+async function deleteDiscordChannel(channelId) {
+    try {
+        await pool.query(`DELETE FROM discord_channels WHERE channel_id = ?`, [channelId]);
+    } catch (e) {
+        console.error(`❌ Erreur deleteDiscordChannel(${channelId}):`, e);
+    }
+}
+
+async function upsertDiscordRole(role) {
+    if (!role || !role.id) return;
+    const query = `
+        INSERT INTO discord_roles (role_id, guild_id, name, color, hoist, position, permissions, managed, mentionable, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(role_id) DO UPDATE SET
+            name = excluded.name,
+            color = excluded.color,
+            hoist = excluded.hoist,
+            position = excluded.position,
+            permissions = excluded.permissions,
+            managed = excluded.managed,
+            mentionable = excluded.mentionable,
+            updated_at = CURRENT_TIMESTAMP
+    `;
+    try {
+        await pool.query(query, [
+            role.id,
+            role.guild?.id || 'unknown',
+            role.name,
+            role.color || 0,
+            role.hoist ? 1 : 0,
+            role.position || 0,
+            role.permissions?.bitfield?.toString() || '0',
+            role.managed ? 1 : 0,
+            role.mentionable ? 1 : 0,
+            role.createdAt ? role.createdAt.toISOString() : new Date().toISOString()
+        ]);
+    } catch (e) {
+        console.error(`❌ Erreur upsertDiscordRole(${role.id}):`, e);
+    }
+}
+
+async function deleteDiscordRole(roleId) {
+    try {
+        await pool.query(`DELETE FROM discord_roles WHERE role_id = ?`, [roleId]);
+    } catch (e) {
+        console.error(`❌ Erreur deleteDiscordRole(${roleId}):`, e);
+    }
+}
+
+async function upsertDiscordThread(thread) {
+    if (!thread || !thread.id) return;
+    const query = `
+        INSERT INTO discord_threads (thread_id, guild_id, parent_id, name, owner_id, archived, locked, message_count, member_count, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(thread_id) DO UPDATE SET
+            name = excluded.name,
+            archived = excluded.archived,
+            locked = excluded.locked,
+            message_count = excluded.message_count,
+            member_count = excluded.member_count,
+            updated_at = CURRENT_TIMESTAMP
+    `;
+    try {
+        await pool.query(query, [
+            thread.id,
+            thread.guildId || thread.guild?.id || 'unknown',
+            thread.parentId || thread.parent?.id || 'unknown',
+            thread.name,
+            thread.ownerId || null,
+            thread.archived ? 1 : 0,
+            thread.locked ? 1 : 0,
+            thread.messageCount || 0,
+            thread.memberCount || 0,
+            thread.createdAt ? thread.createdAt.toISOString() : new Date().toISOString()
+        ]);
+    } catch (e) {
+        console.error(`❌ Erreur upsertDiscordThread(${thread.id}):`, e);
+    }
+}
+
+async function deleteDiscordThread(threadId) {
+    try {
+        await pool.query(`DELETE FROM discord_threads WHERE thread_id = ?`, [threadId]);
+    } catch (e) {
+        console.error(`❌ Erreur deleteDiscordThread(${threadId}):`, e);
+    }
+}
+
+async function updateDiscordMessage(message) {
+    if (!message || !message.id) return;
+    const query = `
+        INSERT INTO discord_messages (message_id, channel_id, thread_id, guild_id, author_id, author_username, content, pinned, embeds_json, attachments_json, reactions_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(message_id) DO UPDATE SET
+            content = excluded.content,
+            pinned = excluded.pinned,
+            embeds_json = excluded.embeds_json,
+            attachments_json = excluded.attachments_json,
+            reactions_json = excluded.reactions_json,
+            updated_at = CURRENT_TIMESTAMP
+    `;
+    try {
+        const embeds = (message.embeds || []).map(e => e.toJSON ? e.toJSON() : e);
+        const attachments = Array.from(message.attachments?.values() || []).map(a => ({
+            id: a.id,
+            name: a.name,
+            url: a.url,
+            contentType: a.contentType
+        }));
+        const reactions = Array.from(message.reactions?.cache?.values() || []).map(r => ({
+            emoji: r.emoji?.name,
+            count: r.count
+        }));
+
+        await pool.query(query, [
+            message.id,
+            message.channelId,
+            message.channel?.isThread?.() ? message.channel.id : null,
+            message.guildId || 'unknown',
+            message.author?.id || 'unknown',
+            message.author?.username || message.author?.tag || 'Unknown',
+            message.content || '',
+            message.pinned ? 1 : 0,
+            JSON.stringify(embeds),
+            JSON.stringify(attachments),
+            JSON.stringify(reactions),
+            message.createdAt ? message.createdAt.toISOString() : new Date().toISOString()
+        ]);
+    } catch (e) {
+        console.error(`❌ Erreur updateDiscordMessage(${message.id}):`, e);
+    }
+}
+
+async function deleteDiscordMessage(messageId) {
+    try {
+        await pool.query(`DELETE FROM discord_messages WHERE message_id = ?`, [messageId]);
+    } catch (e) {
+        console.error(`❌ Erreur deleteDiscordMessage(${messageId}):`, e);
     }
 }

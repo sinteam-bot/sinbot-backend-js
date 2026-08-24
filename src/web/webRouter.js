@@ -1358,6 +1358,109 @@ function createWebRouter(client) {
         }
     });
 
+    // ============================================
+    // 8. JEUX : COMPTEUR & COUNTDOWN
+    // ============================================
+    router.get('/games/counter', async (req, res) => {
+        try {
+            const { getConfig } = require('../config/index.js');
+            const conf = getConfig();
+            const channelId = conf.counter?.channel_id || '1533492692825276598';
+            const state = await db.getCounterState(channelId);
+            const scores = await db.getCountdownScores(channelId);
+            res.json({
+                success: true,
+                data: {
+                    channelId,
+                    state: state || { current_number: 0, last_user_id: null },
+                    scores: scores || [],
+                    config: conf.counter || {}
+                }
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.get('/games/countdown', async (req, res) => {
+        try {
+            const { getConfig } = require('../config/index.js');
+            const conf = getConfig();
+            const channelId = conf.countdown?.channel_id || '1533492760697503805';
+            const state = await db.getCountdownState(channelId);
+            const scores = await db.getCountdownScores(channelId);
+            res.json({
+                success: true,
+                data: {
+                    channelId,
+                    state: state || { current_number: conf.countdown?.start_number || 900, is_trap_active: 0 },
+                    scores: scores || [],
+                    config: conf.countdown || {}
+                }
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ============================================
+    // 9. COMMANDES DU BOT & PERMISSIONS
+    // ============================================
+    router.get('/commands', async (req, res) => {
+        try {
+            const { getConfig } = require('../config/index.js');
+            const conf = getConfig();
+            const cmdConfig = conf.discord?.commands || {};
+            const commandsList = [];
+
+            if (client.commands) {
+                client.commands.forEach((cmd, name) => {
+                    commandsList.push({
+                        name: cmd.data?.name || name,
+                        description: cmd.data?.description || cmd.description || 'Pas de description',
+                        options: cmd.data?.options || [],
+                        type: cmd.executeSlash ? 'Slash Command' : 'Prefix Command',
+                        adminOnly: !!cmdConfig.permissions?.[name]?.admin_only,
+                        allowedRoles: cmdConfig.permissions?.[name]?.allowed_roles || [],
+                        allowedChannels: cmdConfig.permissions?.[name]?.allowed_channels || []
+                    });
+                });
+            }
+
+            res.json({
+                success: true,
+                data: {
+                    globalEnabled: cmdConfig.enabled !== false,
+                    commands: commandsList,
+                    config: cmdConfig
+                }
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ============================================
+    // 10. ARCHIVE DES ÉVÉNEMENTS DISCORD
+    // ============================================
+    router.get('/events/archive', async (req, res) => {
+        try {
+            const limit = parseInt(req.query.limit) || 100;
+            const offset = parseInt(req.query.offset) || 0;
+            const eventName = req.query.eventName || null;
+            const search = req.query.search || null;
+
+            const data = await db.getDiscordEventsArchive({ limit, offset, eventName, search });
+            res.json({
+                success: true,
+                data
+            });
+        } catch (error) {
+            logger.error(`Erreur GET /api/events/archive: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
     return router;
 }
 

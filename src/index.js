@@ -8,6 +8,7 @@ const { logUserEvent, getUserEvents, getGlobalStats } = require("./database.js")
 const { loadCommands } = require("./utils/commandHandler.js");
 const logger = require("./utils/logger.js");
 const createWebRouter = require("./web/webRouter.js");
+const { initDiscordEventTracker } = require("./utils/discordEventTracker.js");
 
 // Activer la capture des logs console pour le salon virtuel Logs
 logger.initConsoleInterceptor();
@@ -22,12 +23,22 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.GuildEmojisAndStickers,
+        GatewayIntentBits.GuildInvites,
+        GatewayIntentBits.GuildScheduledEvents,
+        GatewayIntentBits.GuildModeration,
+        GatewayIntentBits.AutoModerationConfiguration,
+        GatewayIntentBits.AutoModerationExecution
     ]
 });
 
 // Charger les commandes
 client.commands = loadCommands(client);
+
+// Initialiser le suivi et l'archivage universel de tous les événements Discord
+initDiscordEventTracker(client);
 
 // ============================================
 // CHARGEMENT DES ÉVÉNEMENTS
