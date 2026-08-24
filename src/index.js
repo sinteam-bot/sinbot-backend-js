@@ -259,6 +259,20 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString()
     });
 });
+// SPA Fallback pour le routage des pages Nuxt
+app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/webhook') || req.path === '/health') {
+        return next();
+    }
+    const indexPath = path.join(publicPath, 'index.html');
+    const fallback200 = path.join(publicPath, '200.html');
+    if (fs.existsSync(indexPath)) {
+        return res.sendFile(indexPath);
+    } else if (fs.existsSync(fallback200)) {
+        return res.sendFile(fallback200);
+    }
+    next();
+});
 
 // Démarrer le serveur Express
 const PORT = process.env.PORT || 3000;

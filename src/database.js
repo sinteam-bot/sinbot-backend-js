@@ -11,7 +11,16 @@ const CAPTCHA_CONFIG = require("./modules/security_question/captcha.config.js");
 // ============================================
 const pool = {
     query: async (sqlText, params = []) => {
-        return rawClient.query(sqlText, params);
+        let text = typeof sqlText === 'string' ? sqlText : (sqlText.text || '');
+        let values = typeof sqlText === 'object' && sqlText.values ? sqlText.values : params;
+
+        // Convertir les placeholders ? en $1, $2, ... pour PostgreSQL
+        if (typeof text === 'string' && text.includes('?')) {
+            let pIdx = 1;
+            text = text.replace(/\?/g, () => `$${pIdx++}`);
+        }
+
+        return rawClient.query(text, values);
     },
     connect: async () => {
         return rawClient.connect();
@@ -1704,12 +1713,51 @@ async function getDiscordEventsArchive(options = {}) {
     try {
         const limit = parseInt(options.limit, 10) || 50;
         const page = parseInt(options.page, 10) || 1;
-        const offset = (page - 1) * limit;
+        const offset = options.offset !== undefined ? parseInt(options.offset, 10) : (page - 1) * limit;
 
-        let query = db.select().from(schema.discordEventsArchive);
+        const conditions = [];
 
         if (options.eventName) {
-            query = query.where(eq(schema.discordEventsArchive.eventName, options.eventName));
+            if (options.eventName.endsWith('%')) {
+                const prefix = options.eventName.replace('%', '');
+                conditions.push(sql`${schema.discordEventsArchive.eventName} LIKE ${prefix + '%'}`);
+            } else {
+                conditions.push(eq(schema.discordEventsArchive.eventName, options.eventName));
+            }
+        }
+
+        if (options.category) {
+            const catMap = {
+                channel: ['channelCreate', 'channelDelete', 'channelUpdate', 'channelPinsUpdate'],
+                role: ['roleCreate', 'roleDelete', 'roleUpdate'],
+                message: ['messageDelete', 'messageDeleteBulk', 'messageUpdate', 'messageReactionAdd', 'messageReactionRemove'],
+                guildMember: ['guildMemberAdd', 'guildMemberRemove', 'guildMemberUpdate', 'guildBanAdd', 'guildBanRemove'],
+                mod: ['guildBanAdd', 'guildBanRemove', 'guildMemberRemove', 'guildAuditLogEntryCreate'],
+                emoji: ['emojiCreate', 'emojiDelete', 'emojiUpdate', 'stickerCreate', 'stickerDelete', 'stickerUpdate'],
+                thread: ['threadCreate', 'threadDelete', 'threadUpdate', 'threadListSync', 'threadMembersUpdate']
+            };
+            const events = catMap[options.category];
+            if (events && events.length > 0) {
+                conditions.push(inArray(schema.discordEventsArchive.eventName, events));
+            }
+        }
+
+        if (options.search) {
+            const searchPattern = `%${options.search}%`;
+            conditions.push(
+                or(
+                    sql`LOWER(${schema.discordEventsArchive.summary}) LIKE LOWER(${searchPattern})`,
+                    sql`LOWER(${schema.discordEventsArchive.username}) LIKE LOWER(${searchPattern})`,
+                    sql`LOWER(${schema.discordEventsArchive.eventName}) LIKE LOWER(${searchPattern})`
+                )
+            );
+        }
+
+        const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+        let query = db.select().from(schema.discordEventsArchive);
+        if (whereClause) {
+            query = query.where(whereClause);
         }
 
         const rows = await query
@@ -1717,7 +1765,11 @@ async function getDiscordEventsArchive(options = {}) {
             .limit(limit)
             .offset(offset);
 
-        const [totalCountResult] = await db.select({ total: count() }).from(schema.discordEventsArchive);
+        let countQuery = db.select({ total: count() }).from(schema.discordEventsArchive);
+        if (whereClause) {
+            countQuery = countQuery.where(whereClause);
+        }
+        const [totalCountResult] = await countQuery;
         const total = Number(totalCountResult?.total) || 0;
 
         return {
@@ -1743,8 +1795,9 @@ async function getDiscordEventsArchive(options = {}) {
                 };
             }),
             total,
-            page,
+            offset,
             limit,
+            page,
             totalPages: Math.ceil(total / limit)
         };
     } catch (e) {

@@ -263,7 +263,13 @@ function createWebRouter(client) {
                 }
             }
 
-            res.json({ success: true, data: categories });
+            const allFlatChannels = categories.flatMap(c => c.channels || []);
+            res.json({
+                success: true,
+                data: categories,
+                categories: categories,
+                channels: allFlatChannels
+            });
         } catch (error) {
             logger.error(`Erreur GET /api/channels: ${error.message}`, 'WEB');
             res.status(500).json({ success: false, error: error.message });
@@ -388,57 +394,61 @@ function createWebRouter(client) {
                 // Trier par date croissante (du plus ancien au plus récent)
                 messagesList.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
             } else {
-                // Fallback BDD SQLite
-                let sql = `
-                    SELECT m.*, u.global_name, u.avatar_url, u.bot
-                    FROM discord_messages m
-                    LEFT JOIN discord_users u ON m.author_id = u.user_id
-                    WHERE m.channel_id = ?
-                `;
-                const params = [channelId];
+                if (channelId.startsWith('cat-') || channelId.startsWith('virtual-')) {
+                    messagesList = [];
+                    hasMore = false;
+                } else {
+                    // Fallback BDD
+                    let sql = `
+                        SELECT m.*, u.global_name, u.avatar_url, u.bot
+                        FROM discord_messages m
+                        LEFT JOIN discord_users u ON m.author_id = u.user_id
+                        WHERE m.channel_id = $1
+                    `;
+                    const params = [channelId];
 
-                if (before) {
-                    sql += ` AND m.created_at < (SELECT created_at FROM discord_messages WHERE message_id = ?)`;
-                    params.push(before);
+                    if (before) {
+                        params.push(before);
+                        sql += ` AND m.created_at < (SELECT created_at FROM discord_messages WHERE message_id = $${params.length})`;
+                    }
+
+                    params.push(limit);
+                    sql += ` ORDER BY m.created_at DESC LIMIT $${params.length}`;
+
+                    const dbRes = await db.pool.query(sql, params);
+                    hasMore = dbRes.rows.length >= limit;
+
+                    messagesList = dbRes.rows.map(row => {
+                        let embeds = [];
+                        let attachments = [];
+                        let reactions = [];
+                        try { embeds = JSON.parse(row.embeds_json || '[]'); } catch (e) { }
+                        try { attachments = JSON.parse(row.attachments_json || '[]'); } catch (e) { }
+                        try { reactions = JSON.parse(row.reactions_json || '[]'); } catch (e) { }
+
+                        return {
+                            id: row.message_id,
+                            channelId: row.channel_id,
+                            author: {
+                                id: row.author_id,
+                                username: row.author_username,
+                                globalName: row.global_name || row.author_username,
+                                displayName: row.global_name || row.author_username,
+                                avatar: row.avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png',
+                                bot: !!row.bot,
+                                roleColor: null
+                            },
+                            content: row.content || '',
+                            createdAt: row.created_at,
+                            pinned: !!row.pinned,
+                            attachments,
+                            embeds,
+                            reactions,
+                            thread: null
+                        };
+                    });
+                    messagesList.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
                 }
-
-                sql += ` ORDER BY m.created_at DESC LIMIT ?`;
-                params.push(limit);
-
-                const dbRes = await db.pool.query(sql, params);
-                hasMore = dbRes.rows.length >= limit;
-
-                messagesList = dbRes.rows.map(row => {
-                    let embeds = [];
-                    let attachments = [];
-                    let reactions = [];
-                    try { embeds = JSON.parse(row.embeds_json || '[]'); } catch (e) { }
-                    try { attachments = JSON.parse(row.attachments_json || '[]'); } catch (e) { }
-                    try { reactions = JSON.parse(row.reactions_json || '[]'); } catch (e) { }
-
-                    return {
-                        id: row.message_id,
-                        channelId: row.channel_id,
-                        author: {
-                            id: row.author_id,
-                            username: row.author_username,
-                            globalName: row.global_name || row.author_username,
-                            displayName: row.global_name || row.author_username,
-                            avatar: row.avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png',
-                            bot: !!row.bot,
-                            roleColor: null
-                        },
-                        content: row.content || '',
-                        createdAt: row.created_at,
-                        pinned: !!row.pinned,
-                        attachments,
-                        embeds,
-                        reactions,
-                        thread: null
-                    };
-                });
-
-                messagesList.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
             }
 
             const isThread = channelObj ? (channelObj.isThread ? channelObj.isThread() : false) : false;
@@ -1355,9 +1365,10 @@ function createWebRouter(client) {
             const limit = parseInt(req.query.limit) || 100;
             const offset = parseInt(req.query.offset) || 0;
             const eventName = req.query.eventName || null;
+            const category = req.query.category || null;
             const search = req.query.search || null;
 
-            const data = await db.getDiscordEventsArchive({ limit, offset, eventName, search });
+            const data = await db.getDiscordEventsArchive({ limit, offset, eventName, category, search });
             res.json({
                 success: true,
                 data
