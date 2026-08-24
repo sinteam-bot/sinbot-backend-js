@@ -1,627 +1,290 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
-const { config } = require('./config/index.js');
+const { eq, and, or, sql, desc, asc, count, gt, gte, lt, lte, inArray } = require('drizzle-orm');
+const { db, schema, rawClient, isPostgres, isSqlite, dialect } = require('./db/index.js');
 const { toISOStringSafe } = require('./utils/dateUtils.js');
 
-// Configuration du captcha
+// Configuration XP et Captcha
+const XP_CONFIG = require("./config/xp-config.js");
 const CAPTCHA_CONFIG = require("./config/captcha-config.js");
 
-// Repertoire et chemin de la base de donnees SQLite
-const dbDir = process.env.DB_DIR || path.join(__dirname, '../data');
-if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-}
-
-const dbPath = config.db_path || process.env.DB_PATH || path.join(dbDir, 'bot.db');
-const db = new Database(dbPath);
-
-// Activer le mode WAL pour de meilleures performances
-db.pragma('journal_mode = WAL');
-
-// Initialisation automatique des tables SQLite au démarrage
-function initDb() {
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS user_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            event_data TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS form_responses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
-            form_name TEXT NOT NULL,
-            responses TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS user_birthdays (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT UNIQUE NOT NULL,
-            username TEXT NOT NULL,
-            birthdate DATE NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS user_xp (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT UNIQUE NOT NULL,
-            username TEXT NOT NULL,
-            xp INTEGER DEFAULT 0,
-            level INTEGER DEFAULT 1,
-            total_xp_earned INTEGER DEFAULT 0,
-            messages_count INTEGER DEFAULT 0,
-            voice_minutes INTEGER DEFAULT 0,
-            events_participated INTEGER DEFAULT 0,
-            last_message_xp DATETIME,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS xp_transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
-            xp_amount INTEGER NOT NULL,
-            xp_type TEXT NOT NULL,
-            description TEXT,
-            metadata TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS voice_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
-            channel_id TEXT NOT NULL,
-            channel_name TEXT NOT NULL,
-            join_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-            leave_time DATETIME,
-            duration_minutes INTEGER DEFAULT 0,
-            xp_earned INTEGER DEFAULT 0
-        );
-
-        CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_name TEXT NOT NULL,
-            event_description TEXT,
-            event_date DATETIME,
-            xp_reward INTEGER DEFAULT 0,
-            created_by TEXT,
-            is_active INTEGER DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS event_participants (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_id INTEGER NOT NULL,
-            user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
-            xp_earned INTEGER DEFAULT 0,
-            joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(event_id, user_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS server_members (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT UNIQUE NOT NULL,
-            username TEXT NOT NULL,
-            discriminator TEXT,
-            tag TEXT,
-            display_name TEXT,
-            avatar_url TEXT,
-            joined_at DATETIME,
-            account_created_at DATETIME,
-            is_bot INTEGER DEFAULT 0,
-            rejoin_count INTEGER DEFAULT 0,
-            left_at DATETIME,
-            roles TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS member_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
-            action TEXT NOT NULL,
-            guild_id TEXT NOT NULL,
-            metadata TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS welcome_config (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            guild_id TEXT UNIQUE NOT NULL,
-            welcome_channel_id TEXT,
-            welcome_message TEXT,
-            auto_roles TEXT,
-            is_enabled INTEGER DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS openaimessages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            msgid TEXT UNIQUE NOT NULL,
-            prompt TEXT,
-            instruction TEXT,
-            model TEXT,
-            tokeninput INTEGER,
-            tokenoutput INTEGER,
-            content TEXT,
-            previousmsgid TEXT,
-            rawdata TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS guild_members (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT UNIQUE NOT NULL,
-            username TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS grognement (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT UNIQUE NOT NULL,
-            username TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS user_captchas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
-            guild_id TEXT NOT NULL,
-            question TEXT NOT NULL,
-            answer TEXT NOT NULL,
-            channel_id TEXT NOT NULL,
-            attempts INTEGER DEFAULT 0,
-            is_verified INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            expires_at DATETIME,
-            verified_at DATETIME,
-            expired_at DATETIME,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, guild_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS captcha_config (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            guild_id TEXT UNIQUE NOT NULL,
-            channel_id TEXT,
-            verified_role_id TEXT,
-            timeout_minutes INTEGER DEFAULT 10,
-            max_attempts INTEGER DEFAULT 3,
-            is_enabled INTEGER DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS bump_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            guild_id TEXT NOT NULL,
-            channel_id TEXT NOT NULL,
-            user_id TEXT,
-            username TEXT,
-            bumped_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            reminder_sent INTEGER DEFAULT 0,
-            reminder_sent_at DATETIME
-        );
-
-        CREATE TABLE IF NOT EXISTS discord_channels (
-            channel_id TEXT PRIMARY KEY,
-            guild_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            type TEXT NOT NULL,
-            parent_id TEXT,
-            position INTEGER DEFAULT 0,
-            topic TEXT,
-            is_nsfw INTEGER DEFAULT 0,
-            created_at DATETIME,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS discord_threads (
-            thread_id TEXT PRIMARY KEY,
-            guild_id TEXT NOT NULL,
-            parent_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            owner_id TEXT,
-            archived INTEGER DEFAULT 0,
-            locked INTEGER DEFAULT 0,
-            message_count INTEGER DEFAULT 0,
-            member_count INTEGER DEFAULT 0,
-            created_at DATETIME,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS discord_users (
-            user_id TEXT PRIMARY KEY,
-            username TEXT NOT NULL,
-            global_name TEXT,
-            discriminator TEXT,
-            bot INTEGER DEFAULT 0,
-            avatar_url TEXT,
-            banner_url TEXT,
-            created_at DATETIME,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS discord_messages (
-            message_id TEXT PRIMARY KEY,
-            channel_id TEXT NOT NULL,
-            thread_id TEXT,
-            guild_id TEXT NOT NULL,
-            author_id TEXT NOT NULL,
-            author_username TEXT NOT NULL,
-            content TEXT,
-            pinned INTEGER DEFAULT 0,
-            embeds_json TEXT,
-            attachments_json TEXT,
-            reactions_json TEXT,
-            created_at DATETIME NOT NULL,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS counter_state (
-            channel_id TEXT PRIMARY KEY,
-            current_number INTEGER DEFAULT 0,
-            last_user_id TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS countdown_state (
-            channel_id TEXT PRIMARY KEY,
-            current_number INTEGER DEFAULT 90,
-            is_trap_active INTEGER DEFAULT 0,
-            trap_number INTEGER,
-            last_user_id TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS countdown_scores (
-            channel_id TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
-            score INTEGER DEFAULT 0,
-            PRIMARY KEY (channel_id, user_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS bot_version_state (
-            key TEXT PRIMARY KEY,
-            value TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS discord_roles (
-            role_id TEXT PRIMARY KEY,
-            guild_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            color INTEGER DEFAULT 0,
-            hoist INTEGER DEFAULT 0,
-            position INTEGER DEFAULT 0,
-            permissions TEXT,
-            managed INTEGER DEFAULT 0,
-            mentionable INTEGER DEFAULT 0,
-            created_at DATETIME,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS discord_events_archive (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_name TEXT NOT NULL,
-            guild_id TEXT,
-            target_id TEXT,
-            user_id TEXT,
-            username TEXT,
-            summary TEXT,
-            data_json TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_events_name ON discord_events_archive(event_name);
-        CREATE INDEX IF NOT EXISTS idx_events_created ON discord_events_archive(created_at);
-    `);
-    console.log('✅ Base de donnees SQLite initialisee avec succes (' + dbPath + ')');
-}
-
-initDb();
-
-function adaptQuery(sql) {
-    let cleanSql = sql;
-    cleanSql = cleanSql.replace(/::[a-zA-Z]+/g, '');
-    cleanSql = cleanSql.replace(/\$\d+/g, '?');
-    return cleanSql;
-}
-
-function queryDb(sql, params = []) {
-    const cleanSql = adaptQuery(sql);
-    const trimmed = cleanSql.trim().toUpperCase();
-
-    if (trimmed.startsWith('SELECT') || trimmed.startsWith('WITH')) {
-        const stmt = db.prepare(cleanSql);
-        const rows = stmt.all(...params);
-        return { rows };
-    } else {
-        const stmt = db.prepare(cleanSql);
-        if (cleanSql.toUpperCase().includes('RETURNING')) {
-            const rows = stmt.all(...params);
-            return { rows };
-        } else {
-            const info = stmt.run(...params);
-            return { rows: [{ id: info.lastInsertRowid }], changes: info.changes };
-        }
-    }
-}
-
+// ============================================
+// ADAPTATEUR DE COMPATIBILITÉ POOL
+// ============================================
 const pool = {
-    query: async (sql, params = []) => {
-        return queryDb(sql, params);
+    query: async (sqlText, params = []) => {
+        if (isPostgres) {
+            return rawClient.query(sqlText, params);
+        } else {
+            let cleanSql = sqlText.replace(/::[a-zA-Z]+/g, '').replace(/\$\d+/g, '?');
+            const trimmed = cleanSql.trim().toUpperCase();
+            if (trimmed.startsWith('SELECT') || trimmed.startsWith('WITH')) {
+                const stmt = rawClient.prepare(cleanSql);
+                const rows = stmt.all(...params);
+                return { rows };
+            } else {
+                const stmt = rawClient.prepare(cleanSql);
+                if (cleanSql.toUpperCase().includes('RETURNING')) {
+                    const rows = stmt.all(...params);
+                    return { rows };
+                } else {
+                    const info = stmt.run(...params);
+                    return { rows: [{ id: info.lastInsertRowid }], changes: info.changes };
+                }
+            }
+        }
     },
     connect: async () => {
-        let inTx = false;
-        return {
-            query: async (sql, params = []) => {
-                const trimmed = sql.trim().toUpperCase();
-                if (trimmed === 'BEGIN') {
-                    db.exec('BEGIN TRANSACTION');
-                    inTx = true;
-                    return { rows: [] };
-                } else if (trimmed === 'COMMIT') {
-                    if (inTx) db.exec('COMMIT');
-                    inTx = false;
-                    return { rows: [] };
-                } else if (trimmed === 'ROLLBACK') {
-                    if (inTx) db.exec('ROLLBACK');
-                    inTx = false;
-                    return { rows: [] };
-                } else {
-                    return queryDb(sql, params);
-                }
-            },
-            release: () => { }
-        };
+        if (isPostgres) {
+            return rawClient.connect();
+        } else {
+            let inTx = false;
+            return {
+                query: async (sqlText, params = []) => {
+                    const trimmed = sqlText.trim().toUpperCase();
+                    if (trimmed === 'BEGIN') {
+                        rawClient.exec('BEGIN TRANSACTION');
+                        inTx = true;
+                        return { rows: [] };
+                    } else if (trimmed === 'COMMIT') {
+                        if (inTx) rawClient.exec('COMMIT');
+                        inTx = false;
+                        return { rows: [] };
+                    } else if (trimmed === 'ROLLBACK') {
+                        if (inTx) rawClient.exec('ROLLBACK');
+                        inTx = false;
+                        return { rows: [] };
+                    } else {
+                        return pool.query(sqlText, params);
+                    }
+                },
+                release: () => {}
+            };
+        }
     }
 };
 
-/**
- * Enregistrer un événement utilisateur
- */
-async function logUserEvent(userId, username, eventType, eventData = {}) {
-    const query = `
-        INSERT INTO user_events (user_id, username, event_type, event_data)
-        VALUES (?, ?, ?, ?)
-        RETURNING id, created_at
-    `;
+// ============================================
+// FONCTIONS ÉVÉNEMENTS UTILISATEURS
+// ============================================
+
+async function logUserEvent(userId, username, eventType, eventData = null) {
     try {
-        const result = await pool.query(query, [
-            userId,
-            username,
-            eventType,
-            JSON.stringify(eventData)
-        ]);
-        console.log(`📝 Événement enregistré: ${eventType} pour ${username}`);
-        return result.rows[0];
+        const payload = typeof eventData === 'object' && eventData !== null
+            ? JSON.stringify(eventData)
+            : (eventData ? String(eventData) : null);
+
+        const [inserted] = await db.insert(schema.userEvents)
+            .values({
+                userId,
+                username,
+                eventType,
+                eventData: payload
+            })
+            .returning();
+
+        return inserted;
     } catch (error) {
-        console.error('❌ Erreur lors de l\'enregistrement:', error);
+        console.error('❌ Erreur logUserEvent:', error);
         throw error;
     }
 }
 
-/**
- * Récupérer les événements d'un utilisateur
- */
-async function getUserEvents(userId, limit = 10) {
-    const query = `
-        SELECT * FROM user_events
-        WHERE user_id = ?
-        ORDER BY created_at DESC
-        LIMIT ?
-    `;
+async function getUserEvents(userId, limit = 50) {
     try {
-        const result = await pool.query(query, [userId, limit]);
-        return result.rows;
+        const rows = await db.select()
+            .from(schema.userEvents)
+            .where(eq(schema.userEvents.userId, userId))
+            .orderBy(desc(schema.userEvents.createdAt))
+            .limit(limit);
+
+        return rows.map(event => {
+            let parsedData = event.eventData;
+            if (parsedData && typeof parsedData === 'string') {
+                try {
+                    parsedData = JSON.parse(parsedData);
+                } catch {
+                    // Laisser tel quel si non JSON
+                }
+            }
+            return {
+                ...event,
+                event_data: parsedData,
+                user_id: event.userId,
+                event_type: event.eventType,
+                created_at: event.createdAt
+            };
+        });
     } catch (error) {
-        console.error('❌ Erreur lors de la récupération:', error);
+        console.error('❌ Erreur getUserEvents:', error);
         throw error;
     }
 }
 
-/**
- * Enregistrer une réponse de formulaire
- */
 async function saveFormResponse(userId, username, formName, responses) {
-    const query = `
-        INSERT INTO form_responses (user_id, username, form_name, responses)
-        VALUES (?, ?, ?, ?)
-        RETURNING id
-    `;
     try {
-        const result = await pool.query(query, [
-            userId,
-            username,
-            formName,
-            JSON.stringify(responses)
-        ]);
-        return result.rows[0];
+        const payload = typeof responses === 'object' && responses !== null
+            ? JSON.stringify(responses)
+            : String(responses);
+
+        const [inserted] = await db.insert(schema.formResponses)
+            .values({
+                userId,
+                username,
+                formName,
+                responses: payload
+            })
+            .returning();
+
+        return inserted;
     } catch (error) {
-        console.error('❌ Erreur lors de la sauvegarde du formulaire:', error);
+        console.error('❌ Erreur saveFormResponse:', error);
         throw error;
     }
 }
 
-/**
- * Récupérer les statistiques globales
- */
 async function getGlobalStats() {
-    const query = `
-        SELECT 
-            COUNT(DISTINCT user_id) as total_users,
-            COUNT(*) as total_events,
-            event_type,
-            COUNT(*) as count
-        FROM user_events
-        GROUP BY event_type
-        ORDER BY count DESC
-    `;
     try {
-        const result = await pool.query(query);
-        return result.rows;
+        const result = await db.select({
+            eventType: schema.userEvents.eventType,
+            event_type: schema.userEvents.eventType,
+            count: count(),
+            total_events: count(),
+            total_users: sql`count(distinct ${schema.userEvents.userId})`
+        })
+        .from(schema.userEvents)
+        .groupBy(schema.userEvents.eventType)
+        .orderBy(desc(count()));
+
+        return result;
     } catch (error) {
-        console.error('❌ Erreur lors de la récupération des stats:', error);
+        console.error('❌ Erreur getGlobalStats:', error);
         throw error;
     }
 }
 
-/**
- * Enregistrer ou mettre à jour la date de naissance d'un utilisateur
- */
+// ============================================
+// FONCTIONS ANNIVERSAIRES (BIRTHDAYS)
+// ============================================
+
 async function setBirthday(userId, username, birthdate) {
-    const query = `
-        INSERT INTO user_birthdays (user_id, username, birthdate)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id) 
-        DO UPDATE SET 
-            username = excluded.username,
-            birthdate = excluded.birthdate,
-            updated_at = CURRENT_TIMESTAMP
-        RETURNING id, birthdate
-    `;
     try {
-        const result = await pool.query(query, [userId, username, birthdate]);
-        console.log(`🎂 Date de naissance enregistrée pour ${username}`);
-        return { ...result.rows[0], action: 'saved' };
-    } catch (error) {
-        console.error('❌ Erreur lors de l\'enregistrement de la date de naissance:', error);
-        throw error;
-    }
-}
-
-/**
- * Récupérer la date de naissance d'un utilisateur
- */
-async function getBirthday(userId) {
-    const query = `
-        SELECT 
-            user_id,
-            username,
-            birthdate,
-            CAST((strftime('%Y', 'now') - strftime('%Y', birthdate)) AS INTEGER) as age,
-            strftime('%d/%m/%Y', birthdate) as formatted_date,
-            created_at,
-            updated_at
-        FROM user_birthdays
-        WHERE user_id = ?
-    `;
-    try {
-        const result = await pool.query(query, [userId]);
-        return result.rows[0] || null;
-    } catch (error) {
-        console.error('❌ Erreur lors de la récupération de la date de naissance:', error);
-        throw error;
-    }
-}
-
-/**
- * Supprimer la date de naissance d'un utilisateur
- */
-async function deleteBirthday(userId) {
-    const query = `
-        DELETE FROM user_birthdays
-        WHERE user_id = ?
-        RETURNING username
-    `;
-    try {
-        const result = await pool.query(query, [userId]);
-        if (result.rows.length > 0) {
-            console.log(`🗑️  Date de naissance supprimée pour ${result.rows[0].username}`);
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.error('❌ Erreur lors de la suppression:', error);
-        throw error;
-    }
-}
-
-/**
- * Récupérer tous les anniversaires du jour
- */
-async function getTodayBirthdays() {
-    const query = `
-        SELECT 
-            user_id,
-            username,
-            birthdate,
-            CAST((strftime('%Y', 'now') - strftime('%Y', birthdate)) AS INTEGER) as age
-        FROM user_birthdays
-        WHERE 
-            strftime('%m', birthdate) = strftime('%m', 'now')
-            AND strftime('%d', birthdate) = strftime('%d', 'now')
-    `;
-    try {
-        const result = await pool.query(query);
-        return result.rows;
-    } catch (error) {
-        console.error('❌ Erreur lors de la récupération des anniversaires du jour:', error);
-        throw error;
-    }
-}
-
-/**
- * Récupérer les prochains anniversaires (dans les N jours)
- */
-async function getUpcomingBirthdays(days = 7) {
-    try {
-        const result = await pool.query(`
-            SELECT 
-                user_id,
+        const [row] = await db.insert(schema.userBirthdays)
+            .values({
+                userId,
                 username,
                 birthdate,
-                strftime('%d/%m', birthdate) as birthday_date
-            FROM user_birthdays
-        `);
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.userBirthdays.userId,
+                set: {
+                    username,
+                    birthdate,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            })
+            .returning();
 
-        const now = new Date();
-        const upcoming = result.rows.map(b => {
-            const bdate = new Date(b.birthdate);
-            let nextBirthday = new Date(now.getFullYear(), bdate.getMonth(), bdate.getDate());
-            if (nextBirthday < now) {
-                nextBirthday.setFullYear(now.getFullYear() + 1);
-            }
-            const diffTime = nextBirthday - now;
-            const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            let age = now.getFullYear() - bdate.getFullYear();
-            return {
-                ...b,
-                current_age: age,
-                days_until: daysUntil
-            };
-        })
-            .filter(b => b.days_until <= days)
-            .sort((a, b) => a.days_until - b.days_until);
-
-        return upcoming;
+        return row;
     } catch (error) {
-        console.error('❌ Erreur lors de la récupération des anniversaires à venir:', error);
+        console.error('❌ Erreur setBirthday:', error);
+        throw error;
+    }
+}
+
+async function getBirthday(userId) {
+    try {
+        const [row] = await db.select()
+            .from(schema.userBirthdays)
+            .where(eq(schema.userBirthdays.userId, userId))
+            .limit(1);
+
+        if (!row) return null;
+        return {
+            ...row,
+            user_id: row.userId,
+            created_at: row.createdAt,
+            updated_at: row.updatedAt
+        };
+    } catch (error) {
+        console.error('❌ Erreur getBirthday:', error);
+        throw error;
+    }
+}
+
+async function deleteBirthday(userId) {
+    try {
+        const [deleted] = await db.delete(schema.userBirthdays)
+            .where(eq(schema.userBirthdays.userId, userId))
+            .returning();
+
+        return deleted || null;
+    } catch (error) {
+        console.error('❌ Erreur deleteBirthday:', error);
+        throw error;
+    }
+}
+
+async function getTodayBirthdays() {
+    try {
+        const rows = await db.select()
+            .from(schema.userBirthdays)
+            .where(
+                isPostgres
+                    ? sql`to_char(cast(${schema.userBirthdays.birthdate} as date), 'MM-DD') = to_char(CURRENT_DATE, 'MM-DD')`
+                    : sql`strftime('%m-%d', ${schema.userBirthdays.birthdate}) = strftime('%m-%d', 'now')`
+            );
+
+        return rows.map(r => ({
+            ...r,
+            user_id: r.userId,
+            created_at: r.createdAt,
+            updated_at: r.updatedAt
+        }));
+    } catch (error) {
+        console.error('❌ Erreur getTodayBirthdays:', error);
+        throw error;
+    }
+}
+
+async function getUpcomingBirthdays(days = 7) {
+    try {
+        // Sélection de tous les anniversaires et calcul en JS pour une robustesse parfaite multi-dialectes
+        const rows = await db.select().from(schema.userBirthdays);
+        const today = new Date();
+        const thisYear = today.getFullYear();
+
+        const upcoming = [];
+        for (const user of rows) {
+            if (!user.birthdate) continue;
+            const bDate = new Date(user.birthdate);
+            if (isNaN(bDate.getTime())) continue;
+
+            let nextBday = new Date(thisYear, bDate.getMonth(), bDate.getDate());
+            if (nextBday < today) {
+                nextBday = new Date(thisYear + 1, bDate.getMonth(), bDate.getDate());
+            }
+
+            const diffDays = Math.ceil((nextBday - today) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 0 && diffDays <= days) {
+                upcoming.push({
+                    ...user,
+                    user_id: user.userId,
+                    days_until: diffDays,
+                    age: thisYear - bDate.getFullYear()
+                });
+            }
+        }
+
+        return upcoming.sort((a, b) => a.days_until - b.days_until);
+    } catch (error) {
+        console.error('❌ Erreur getUpcomingBirthdays:', error);
         throw error;
     }
 }
 
 // ============================================
-// FONCTIONS XP & LEVELS
+// FONCTIONS XP & NIVEAUX
 // ============================================
-
-const XP_CONFIG = require("./config/xp-config.js");
 
 function calculateXPForLevel(level) {
     return Math.floor(XP_CONFIG.LEVEL.BASE_XP * Math.pow(level, XP_CONFIG.LEVEL.MULTIPLIER));
@@ -638,19 +301,51 @@ function calculateLevel(totalXP) {
 }
 
 async function getOrCreateUserXP(userId, username) {
-    const selectQuery = 'SELECT * FROM user_xp WHERE user_id = ?';
-    const insertQuery = `
-        INSERT INTO user_xp (user_id, username, xp, level)
-        VALUES (?, ?, 0, 1)
-        RETURNING *
-    `;
     try {
-        let result = await pool.query(selectQuery, [userId]);
-        if (result.rows.length === 0) {
-            result = await pool.query(insertQuery, [userId, username]);
-            console.log(`✨ Nouvel utilisateur XP créé: ${username}`);
+        const [existing] = await db.select()
+            .from(schema.userXp)
+            .where(eq(schema.userXp.userId, userId))
+            .limit(1);
+
+        if (existing) {
+            return {
+                ...existing,
+                user_id: existing.userId,
+                total_xp_earned: existing.totalXpEarned,
+                messages_count: existing.messagesCount,
+                voice_minutes: existing.voiceMinutes,
+                events_participated: existing.eventsParticipated,
+                last_message_xp: existing.lastMessageXp,
+                created_at: existing.createdAt,
+                updated_at: existing.updatedAt
+            };
         }
-        return result.rows[0];
+
+        const [created] = await db.insert(schema.userXp)
+            .values({
+                userId,
+                username,
+                xp: 0,
+                level: 1,
+                totalXpEarned: 0,
+                messagesCount: 0,
+                voiceMinutes: 0,
+                eventsParticipated: 0
+            })
+            .returning();
+
+        console.log(`✨ Nouvel utilisateur XP créé: ${username}`);
+        return {
+            ...created,
+            user_id: created.userId,
+            total_xp_earned: created.totalXpEarned,
+            messages_count: created.messagesCount,
+            voice_minutes: created.voiceMinutes,
+            events_participated: created.eventsParticipated,
+            last_message_xp: created.lastMessageXp,
+            created_at: created.createdAt,
+            updated_at: created.updatedAt
+        };
     } catch (error) {
         console.error('❌ Erreur getOrCreateUserXP:', error);
         throw error;
@@ -661,70 +356,51 @@ async function addXP(userId, username, xpAmount, xpType = 'message', description
     if (XP_CONFIG.ENABLED === false) {
         return null;
     }
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
 
-        let user = await getOrCreateUserXP(userId, username);
+    try {
+        const user = await getOrCreateUserXP(userId, username);
         const xpToAdd = parseInt(xpAmount, 10);
         const currentXP = parseInt(user.xp, 10) || 0;
         const newTotalXP = currentXP + xpToAdd;
         const oldLevel = user.level;
         const newLevel = calculateLevel(newTotalXP);
 
-        const updateQuery = `
-            UPDATE user_xp 
-            SET xp = ?, 
-                level = ?, 
-                total_xp_earned = total_xp_earned + ?,
-                username = ?,
-                messages_count = CASE WHEN ? = 'message' THEN messages_count + 1 ELSE messages_count END,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = ?
-            RETURNING *
-        `;
+        const isMessage = xpType === 'message';
 
-        const updateResult = await client.query(updateQuery, [
-            newTotalXP,
-            newLevel,
-            xpToAdd,
-            username,
-            xpType,
-            userId
-        ]);
+        const [updatedUser] = await db.update(schema.userXp)
+            .set({
+                xp: newTotalXP,
+                level: newLevel,
+                totalXpEarned: sql`${schema.userXp.totalXpEarned} + ${xpToAdd}`,
+                username: username,
+                messagesCount: isMessage ? sql`${schema.userXp.messagesCount} + 1` : schema.userXp.messagesCount,
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .where(eq(schema.userXp.userId, userId))
+            .returning();
 
-        const transactionQuery = `
-            INSERT INTO xp_transactions (user_id, username, xp_amount, xp_type, description, metadata)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `;
-
-        await client.query(transactionQuery, [
-            userId,
-            username,
-            xpToAdd,
-            xpType,
-            description,
-            JSON.stringify(metadata)
-        ]);
-
-        await client.query('COMMIT');
+        await db.insert(schema.xpTransactions)
+            .values({
+                userId,
+                username,
+                xpAmount: xpToAdd,
+                xpType,
+                description,
+                metadata: JSON.stringify(metadata)
+            });
 
         console.log(`⭐ +${xpToAdd} XP pour ${username} (${xpType}) - Total: ${newTotalXP} XP`);
 
         return {
-            user: updateResult.rows[0],
+            user: updatedUser,
             leveledUp: newLevel > oldLevel,
             oldLevel: oldLevel,
             newLevel: newLevel,
             xpGained: xpToAdd
         };
-
     } catch (error) {
-        await client.query('ROLLBACK');
         console.error('❌ Erreur addXP:', error);
         throw error;
-    } finally {
-        client.release();
     }
 }
 
@@ -749,14 +425,12 @@ async function addMessageXP(userId, username) {
             Math.random() * (XP_CONFIG.MESSAGE_XP.MAX - XP_CONFIG.MESSAGE_XP.MIN + 1)
         ) + XP_CONFIG.MESSAGE_XP.MIN;
 
-        await pool.query(
-            'UPDATE user_xp SET last_message_xp = CURRENT_TIMESTAMP WHERE user_id = ?',
-            [userId]
-        );
+        await db.update(schema.userXp)
+            .set({ lastMessageXp: sql`CURRENT_TIMESTAMP` })
+            .where(eq(schema.userXp.userId, userId));
 
         const result = await addXP(userId, username, xpAmount, 'message', 'Message XP');
         return { success: true, ...result };
-
     } catch (error) {
         console.error('❌ Erreur addMessageXP:', error);
         return { success: false, reason: 'error' };
@@ -767,15 +441,19 @@ async function startVoiceSession(userId, username, channelId, channelName) {
     if (XP_CONFIG.ENABLED === false) {
         return null;
     }
-    const query = `
-        INSERT INTO voice_sessions (user_id, username, channel_id, channel_name, join_time)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-        RETURNING id
-    `;
     try {
-        const result = await pool.query(query, [userId, username, channelId, channelName]);
+        const [session] = await db.insert(schema.voiceSessions)
+            .values({
+                userId,
+                username,
+                channelId,
+                channelName,
+                joinTime: sql`CURRENT_TIMESTAMP`
+            })
+            .returning();
+
         console.log(`🎤 ${username} a rejoint le vocal ${channelName}`);
-        return result.rows[0];
+        return session;
     } catch (error) {
         console.error('❌ Erreur startVoiceSession:', error);
         throw error;
@@ -786,38 +464,31 @@ async function endVoiceSession(userId, username) {
     if (XP_CONFIG.ENABLED === false) {
         return null;
     }
-    const client = await pool.connect();
+
     try {
-        await client.query('BEGIN');
+        const [session] = await db.select()
+            .from(schema.voiceSessions)
+            .where(and(
+                eq(schema.voiceSessions.userId, userId),
+                sql`${schema.voiceSessions.leaveTime} IS NULL`
+            ))
+            .orderBy(desc(schema.voiceSessions.joinTime))
+            .limit(1);
 
-        const findQuery = `
-            SELECT * FROM voice_sessions 
-            WHERE user_id = ? AND leave_time IS NULL
-            ORDER BY join_time DESC
-            LIMIT 1
-        `;
+        if (!session) return null;
 
-        const session = await client.query(findQuery, [userId]);
-        if (session.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return null;
-        }
-
-        const sessionData = session.rows[0];
-        const joinTime = new Date(sessionData.join_time);
+        const joinTime = new Date(session.joinTime);
         const leaveTime = new Date();
         const durationMinutes = Math.floor((leaveTime - joinTime) / (1000 * 60));
         const xpEarned = durationMinutes * XP_CONFIG.VOICE_XP.PER_MINUTE;
 
-        const updateQuery = `
-            UPDATE voice_sessions 
-            SET leave_time = CURRENT_TIMESTAMP,
-                duration_minutes = ?,
-                xp_earned = ?
-            WHERE id = ?
-        `;
-
-        await client.query(updateQuery, [durationMinutes, xpEarned, sessionData.id]);
+        await db.update(schema.voiceSessions)
+            .set({
+                leaveTime: toISOStringSafe(leaveTime, new Date().toISOString()),
+                durationMinutes: durationMinutes,
+                xpEarned: xpEarned
+            })
+            .where(eq(schema.voiceSessions.id, session.id));
 
         if (durationMinutes >= XP_CONFIG.VOICE_XP.MIN_DURATION && xpEarned > 0) {
             await addXP(
@@ -826,54 +497,46 @@ async function endVoiceSession(userId, username) {
                 xpEarned,
                 'voice',
                 `${durationMinutes} minutes en vocal`,
-                { channel: sessionData.channel_name, duration: durationMinutes }
+                { channel: session.channelName, duration: durationMinutes }
             );
 
-            await client.query(
-                'UPDATE user_xp SET voice_minutes = voice_minutes + ? WHERE user_id = ?',
-                [durationMinutes, userId]
-            );
+            await db.update(schema.userXp)
+                .set({ voiceMinutes: sql`${schema.userXp.voiceMinutes} + ${durationMinutes}` })
+                .where(eq(schema.userXp.userId, userId));
         }
-
-        await client.query('COMMIT');
 
         console.log(`🎤 ${username} a quitté le vocal - ${durationMinutes}min = ${xpEarned} XP`);
 
         return {
             duration: durationMinutes,
             xpEarned: xpEarned,
-            channel: sessionData.channel_name
+            channel: session.channelName
         };
-
     } catch (error) {
-        await client.query('ROLLBACK');
         console.error('❌ Erreur endVoiceSession:', error);
         throw error;
-    } finally {
-        client.release();
     }
 }
 
 async function getUserXPInfo(userId) {
     try {
         const user = await getOrCreateUserXP(userId, 'Unknown');
-        const currentLevel = user.level;
-        const currentXP = user.xp;
-        const xpForCurrentLevel = calculateXPForLevel(currentLevel);
-        const xpForNextLevel = calculateXPForLevel(currentLevel + 1);
-        const xpNeeded = xpForNextLevel - currentXP;
-        const xpProgress = currentXP - xpForCurrentLevel;
-        const xpToNextLevel = xpForNextLevel - xpForCurrentLevel;
-        const progressPercentage = Math.floor((xpProgress / xpToNextLevel) * 100);
+        const rank = await getUserRank(userId);
+        const currentLevelXP = calculateXPForLevel(user.level);
+        const nextLevelXP = calculateXPForLevel(user.level + 1);
+        const xpInCurrentLevel = user.xp - currentLevelXP;
+        const xpNeededForNextLevel = nextLevelXP - currentLevelXP;
+        const progressPercent = Math.min(100, Math.max(0, Math.floor((xpInCurrentLevel / xpNeededForNextLevel) * 100)));
 
         return {
             ...user,
-            xpForCurrentLevel,
-            xpForNextLevel,
-            xpNeeded,
-            xpProgress,
-            xpToNextLevel,
-            progressPercentage
+            user_id: user.userId,
+            rank,
+            currentLevelXP,
+            nextLevelXP,
+            xpInCurrentLevel,
+            xpNeededForNextLevel,
+            progressPercent
         };
     } catch (error) {
         console.error('❌ Erreur getUserXPInfo:', error);
@@ -882,23 +545,17 @@ async function getUserXPInfo(userId) {
 }
 
 async function getLeaderboard(limit = 10) {
-    const query = `
-        SELECT 
-            user_id,
-            username,
-            xp,
-            level,
-            messages_count,
-            voice_minutes,
-            total_xp_earned,
-            ROW_NUMBER() OVER (ORDER BY xp DESC) as rank
-        FROM user_xp
-        ORDER BY xp DESC
-        LIMIT ?
-    `;
     try {
-        const result = await pool.query(query, [limit]);
-        return result.rows;
+        const rows = await db.select()
+            .from(schema.userXp)
+            .orderBy(desc(schema.userXp.xp))
+            .limit(limit);
+
+        return rows.map((user, index) => ({
+            ...user,
+            user_id: user.userId,
+            rank: index + 1
+        }));
     } catch (error) {
         console.error('❌ Erreur getLeaderboard:', error);
         throw error;
@@ -906,34 +563,43 @@ async function getLeaderboard(limit = 10) {
 }
 
 async function getUserRank(userId) {
-    const query = `
-        WITH ranked_users AS (
-            SELECT 
-                user_id,
-                ROW_NUMBER() OVER (ORDER BY xp DESC) as rank
-            FROM user_xp
-        )
-        SELECT rank FROM ranked_users WHERE user_id = ?
-    `;
     try {
-        const result = await pool.query(query, [userId]);
-        return result.rows[0]?.rank || null;
+        const [currentUser] = await db.select({ xp: schema.userXp.xp })
+            .from(schema.userXp)
+            .where(eq(schema.userXp.userId, userId))
+            .limit(1);
+
+        if (!currentUser) return null;
+
+        const [higherUsers] = await db.select({ higherCount: count() })
+            .from(schema.userXp)
+            .where(gt(schema.userXp.xp, currentUser.xp));
+
+        return (Number(higherUsers.higherCount) || 0) + 1;
     } catch (error) {
         console.error('❌ Erreur getUserRank:', error);
         throw error;
     }
 }
 
+// ============================================
+// FONCTIONS ÉVÉNEMENTS COMMUNAUTAIRES
+// ============================================
+
 async function createEvent(eventName, eventDescription, eventDate, xpReward, createdBy) {
-    const query = `
-        INSERT INTO events (event_name, event_description, event_date, xp_reward, created_by)
-        VALUES (?, ?, ?, ?, ?)
-        RETURNING *
-    `;
     try {
-        const result = await pool.query(query, [eventName, eventDescription, eventDate, xpReward, createdBy]);
-        console.log(`🎉 Événement créé: ${eventName}`);
-        return result.rows[0];
+        const [event] = await db.insert(schema.events)
+            .values({
+                eventName,
+                eventDescription,
+                eventDate: toISOStringSafe(eventDate, new Date().toISOString()),
+                xpReward: parseInt(xpReward, 10) || 0,
+                createdBy,
+                isActive: 1
+            })
+            .returning();
+
+        return event;
     } catch (error) {
         console.error('❌ Erreur createEvent:', error);
         throw error;
@@ -941,61 +607,34 @@ async function createEvent(eventName, eventDescription, eventDate, xpReward, cre
 }
 
 async function addEventParticipant(eventId, userId, username) {
-    const client = await pool.connect();
     try {
-        await client.query('BEGIN');
+        const [event] = await db.select()
+            .from(schema.events)
+            .where(eq(schema.events.id, eventId))
+            .limit(1);
 
-        const eventQuery = 'SELECT * FROM events WHERE id = ? AND is_active = 1';
-        const event = await client.query(eventQuery, [eventId]);
+        if (!event) throw new Error('Événement introuvable');
 
-        if (event.rows.length === 0) {
-            throw new Error('Événement introuvable ou inactif');
-        }
-
-        const eventData = event.rows[0];
-
-        const participantQuery = `
-            INSERT INTO event_participants (event_id, user_id, username, xp_earned)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(event_id, user_id) DO NOTHING
-            RETURNING *
-        `;
-
-        const participant = await client.query(participantQuery, [
-            eventId,
-            userId,
-            username,
-            eventData.xp_reward
-        ]);
-
-        if (participant.rows.length > 0) {
-            await addXP(
+        const [participant] = await db.insert(schema.eventParticipants)
+            .values({
+                eventId,
                 userId,
                 username,
-                eventData.xp_reward,
-                'event',
-                `Participation à: ${eventData.event_name}`,
-                { event_id: eventId, event_name: eventData.event_name }
-            );
+                xpEarned: event.xpReward || 0
+            })
+            .returning();
 
-            await client.query(
-                'UPDATE user_xp SET events_participated = events_participated + 1 WHERE user_id = ?',
-                [userId]
-            );
+        if (event.xpReward && event.xpReward > 0) {
+            await addXP(userId, username, event.xpReward, 'event', `Participation à: ${event.eventName}`);
+            await db.update(schema.userXp)
+                .set({ eventsParticipated: sql`${schema.userXp.eventsParticipated} + 1` })
+                .where(eq(schema.userXp.userId, userId));
         }
 
-        await client.query('COMMIT');
-        return {
-            success: participant.rows.length > 0,
-            xpEarned: eventData.xp_reward,
-            eventName: eventData.event_name
-        };
+        return participant;
     } catch (error) {
-        await client.query('ROLLBACK');
         console.error('❌ Erreur addEventParticipant:', error);
         throw error;
-    } finally {
-        client.release();
     }
 }
 
@@ -1003,38 +642,58 @@ async function addEventParticipant(eventId, userId, username) {
 // FONCTIONS GESTION DES MEMBRES
 // ============================================
 
-async function registerNewMember(member) {
-    const query = `
-        INSERT INTO server_members (
-            user_id, username, discriminator, tag, display_name, avatar_url, joined_at, account_created_at, is_bot
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(user_id) 
-        DO UPDATE SET
-            username = excluded.username,
-            discriminator = excluded.discriminator,
-            tag = excluded.tag,
-            display_name = excluded.display_name,
-            avatar_url = excluded.avatar_url,
-            rejoin_count = server_members.rejoin_count + 1,
-            joined_at = excluded.joined_at,
-            left_at = NULL,
-            updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-    `;
+async function registerNewMember(memberData) {
     try {
-        const result = await pool.query(query, [
-            member.id,
-            member.user.username,
-            member.user.discriminator || '0',
-            member.user.tag,
-            member.displayName || member.user.username,
-            member.user.displayAvatarURL({ size: 512 }),
-            toISOStringSafe(member.joinedAt),
-            toISOStringSafe(member.user.createdAt),
-            member.user.bot ? 1 : 0
-        ]);
-        console.log(`👤 Membre enregistré: ${member.user.tag}`);
-        return result.rows[0];
+        const joinedAtStr = toISOStringSafe(memberData.joined_at, new Date().toISOString());
+        const accountCreatedAtStr = toISOStringSafe(memberData.account_created_at, null);
+        const rolesPayload = Array.isArray(memberData.roles) ? JSON.stringify(memberData.roles) : memberData.roles;
+
+        const [existing] = await db.select()
+            .from(schema.serverMembers)
+            .where(eq(schema.serverMembers.userId, memberData.user_id))
+            .limit(1);
+
+        let member;
+        if (existing) {
+            [member] = await db.update(schema.serverMembers)
+                .set({
+                    username: memberData.username,
+                    discriminator: memberData.discriminator,
+                    tag: memberData.tag,
+                    displayName: memberData.display_name,
+                    avatarUrl: memberData.avatar_url,
+                    joinedAt: joinedAtStr,
+                    isBot: memberData.is_bot ? 1 : 0,
+                    rejoinCount: sql`${schema.serverMembers.rejoinCount} + 1`,
+                    leftAt: null,
+                    roles: rolesPayload,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                })
+                .where(eq(schema.serverMembers.userId, memberData.user_id))
+                .returning();
+        } else {
+            [member] = await db.insert(schema.serverMembers)
+                .values({
+                    userId: memberData.user_id,
+                    username: memberData.username,
+                    discriminator: memberData.discriminator,
+                    tag: memberData.tag,
+                    displayName: memberData.display_name,
+                    avatarUrl: memberData.avatar_url,
+                    joinedAt: joinedAtStr,
+                    accountCreatedAt: accountCreatedAtStr,
+                    isBot: memberData.is_bot ? 1 : 0,
+                    roles: rolesPayload
+                })
+                .returning();
+        }
+
+        await logMemberEvent(memberData.user_id, memberData.username, 'join', memberData.guild_id, {
+            is_rejoin: !!existing,
+            rejoin_count: member?.rejoinCount || (existing ? existing.rejoinCount + 1 : 0)
+        });
+
+        return member;
     } catch (error) {
         console.error('❌ Erreur registerNewMember:', error);
         throw error;
@@ -1042,21 +701,18 @@ async function registerNewMember(member) {
 }
 
 async function logMemberEvent(userId, username, action, guildId, metadata = {}) {
-    const query = `
-        INSERT INTO member_history (user_id, username, action, guild_id, metadata)
-        VALUES (?, ?, ?, ?, ?)
-        RETURNING *
-    `;
     try {
-        const result = await pool.query(query, [
-            userId,
-            username,
-            action,
-            guildId,
-            JSON.stringify(metadata)
-        ]);
-        console.log(`📝 Événement membre: ${username} - ${action}`);
-        return result.rows[0];
+        const [entry] = await db.insert(schema.memberHistory)
+            .values({
+                userId,
+                username,
+                action,
+                guildId,
+                metadata: JSON.stringify(metadata)
+            })
+            .returning();
+
+        return entry;
     } catch (error) {
         console.error('❌ Erreur logMemberEvent:', error);
         throw error;
@@ -1064,39 +720,35 @@ async function logMemberEvent(userId, username, action, guildId, metadata = {}) 
 }
 
 async function updateMemberRoles(userId, roles) {
-    const rolesArray = roles.map(role => ({
-        id: role.id,
-        name: role.name,
-        color: role.hexColor
-    }));
-    const query = `
-        UPDATE server_members 
-        SET roles = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = ?
-        RETURNING *
-    `;
     try {
-        const result = await pool.query(query, [
-            JSON.stringify(rolesArray),
-            userId
-        ]);
-        return result.rows[0];
+        const rolesPayload = Array.isArray(roles) ? JSON.stringify(roles) : roles;
+        const [updated] = await db.update(schema.serverMembers)
+            .set({
+                roles: rolesPayload,
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .where(eq(schema.serverMembers.userId, userId))
+            .returning();
+
+        return updated;
     } catch (error) {
         console.error('❌ Erreur updateMemberRoles:', error);
         throw error;
     }
 }
 
-async function markMemberLeft(userId) {
-    const query = `
-        UPDATE server_members 
-        SET left_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = ?
-        RETURNING *
-    `;
+async function markMemberLeft(userId, username, guildId) {
     try {
-        const result = await pool.query(query, [userId]);
-        return result.rows[0];
+        const [updated] = await db.update(schema.serverMembers)
+            .set({
+                leftAt: sql`CURRENT_TIMESTAMP`,
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .where(eq(schema.serverMembers.userId, userId))
+            .returning();
+
+        await logMemberEvent(userId, username, 'leave', guildId);
+        return updated;
     } catch (error) {
         console.error('❌ Erreur markMemberLeft:', error);
         throw error;
@@ -1104,193 +756,271 @@ async function markMemberLeft(userId) {
 }
 
 async function getMemberInfo(userId) {
-    const query = `SELECT * FROM server_members WHERE user_id = ?`;
     try {
-        const result = await pool.query(query, [userId]);
-        return result.rows[0] || null;
+        const [member] = await db.select()
+            .from(schema.serverMembers)
+            .where(eq(schema.serverMembers.userId, userId))
+            .limit(1);
+
+        if (!member) return null;
+
+        let parsedRoles = [];
+        if (member.roles) {
+            try {
+                parsedRoles = JSON.parse(member.roles);
+            } catch {
+                parsedRoles = member.roles.split(',');
+            }
+        }
+
+        return {
+            ...member,
+            user_id: member.userId,
+            display_name: member.displayName,
+            avatar_url: member.avatarUrl,
+            joined_at: member.joinedAt,
+            account_created_at: member.accountCreatedAt,
+            is_bot: member.isBot,
+            rejoin_count: member.rejoinCount,
+            left_at: member.leftAt,
+            roles: parsedRoles
+        };
     } catch (error) {
         console.error('❌ Erreur getMemberInfo:', error);
         throw error;
     }
 }
 
-async function getRecentMembers(limit = 10) {
-    const query = `
-        SELECT * FROM server_members 
-        WHERE left_at IS NULL
-        ORDER BY joined_at DESC 
-        LIMIT ?
-    `;
+async function getRecentMembers(limit = 20) {
     try {
-        const result = await pool.query(query, [limit]);
-        return result.rows;
+        const rows = await db.select()
+            .from(schema.serverMembers)
+            .orderBy(desc(schema.serverMembers.joinedAt))
+            .limit(limit);
+
+        return rows.map(m => {
+            let parsedRoles = [];
+            if (m.roles) {
+                try {
+                    parsedRoles = JSON.parse(m.roles);
+                } catch {
+                    parsedRoles = m.roles.split(',');
+                }
+            }
+            return {
+                ...m,
+                user_id: m.userId,
+                display_name: m.displayName,
+                avatar_url: m.avatarUrl,
+                joined_at: m.joinedAt,
+                account_created_at: m.accountCreatedAt,
+                is_bot: m.isBot,
+                rejoin_count: m.rejoinCount,
+                left_at: m.leftAt,
+                roles: parsedRoles
+            };
+        });
     } catch (error) {
         console.error('❌ Erreur getRecentMembers:', error);
         throw error;
     }
 }
 
-async function getMemberHistory(userId, limit = 20) {
-    const query = `
-        SELECT * FROM member_history 
-        WHERE user_id = ? 
-        ORDER BY created_at DESC 
-        LIMIT ?
-    `;
+async function getMemberHistory(userId, limit = 50) {
     try {
-        const result = await pool.query(query, [userId, limit]);
-        return result.rows;
+        const rows = await db.select()
+            .from(schema.memberHistory)
+            .where(eq(schema.memberHistory.userId, userId))
+            .orderBy(desc(schema.memberHistory.createdAt))
+            .limit(limit);
+
+        return rows.map(h => ({
+            ...h,
+            user_id: h.userId,
+            guild_id: h.guildId,
+            metadata: h.metadata ? JSON.parse(h.metadata) : null
+        }));
     } catch (error) {
         console.error('❌ Erreur getMemberHistory:', error);
         throw error;
     }
 }
 
+// ============================================
+// FONCTIONS CONFIG ACCUEIL (WELCOME)
+// ============================================
+
 async function getWelcomeConfig(guildId) {
-    const query = `SELECT * FROM welcome_config WHERE guild_id = ?`;
     try {
-        const result = await pool.query(query, [guildId]);
-        return result.rows[0] || null;
+        const [cfg] = await db.select()
+            .from(schema.welcomeConfig)
+            .where(eq(schema.welcomeConfig.guildId, guildId))
+            .limit(1);
+
+        if (!cfg) return null;
+
+        let parsedRoles = [];
+        if (cfg.autoRoles) {
+            try {
+                parsedRoles = JSON.parse(cfg.autoRoles);
+            } catch {
+                parsedRoles = cfg.autoRoles.split(',');
+            }
+        }
+
+        return {
+            ...cfg,
+            guild_id: cfg.guildId,
+            welcome_channel_id: cfg.welcomeChannelId,
+            welcome_message: cfg.welcomeMessage,
+            auto_roles: parsedRoles,
+            is_enabled: cfg.isEnabled
+        };
     } catch (error) {
         console.error('❌ Erreur getWelcomeConfig:', error);
         throw error;
     }
 }
 
-async function saveWelcomeConfig(guildId, config) {
-    const query = `
-        INSERT INTO welcome_config (guild_id, welcome_channel_id, welcome_message, auto_roles, is_enabled)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(guild_id) 
-        DO UPDATE SET
-            welcome_channel_id = excluded.welcome_channel_id,
-            welcome_message = excluded.welcome_message,
-            auto_roles = excluded.auto_roles,
-            is_enabled = excluded.is_enabled,
-            updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-    `;
+async function saveWelcomeConfig(guildId, welcomeChannelId, welcomeMessage, autoRoles = [], isEnabled = 1) {
     try {
-        const result = await pool.query(query, [
-            guildId,
-            config.channelId,
-            config.message,
-            JSON.stringify(config.autoRoles),
-            config.enabled ? 1 : 0
-        ]);
-        console.log(`⚙️ Configuration d'accueil mise à jour pour le serveur ${guildId}`);
-        return result.rows[0];
+        const rolesPayload = Array.isArray(autoRoles) ? JSON.stringify(autoRoles) : autoRoles;
+
+        const [saved] = await db.insert(schema.welcomeConfig)
+            .values({
+                guildId,
+                welcomeChannelId,
+                welcomeMessage,
+                autoRoles: rolesPayload,
+                isEnabled: isEnabled ? 1 : 0,
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.welcomeConfig.guildId,
+                set: {
+                    welcomeChannelId,
+                    welcomeMessage,
+                    autoRoles: rolesPayload,
+                    isEnabled: isEnabled ? 1 : 0,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            })
+            .returning();
+
+        return saved;
     } catch (error) {
         console.error('❌ Erreur saveWelcomeConfig:', error);
         throw error;
     }
 }
 
-async function saveOpenAIMessage(config) {
-    const query = `
-        INSERT INTO openaimessages (
-            msgid, prompt, instruction, model, tokeninput, tokenoutput, content, previousmsgid, created_at, rawdata
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
-        ON CONFLICT(msgid) 
-        DO UPDATE SET
-            prompt = excluded.prompt,
-            instruction = excluded.instruction,
-            model = excluded.model,
-            tokeninput = excluded.tokeninput,
-            tokenoutput = excluded.tokenoutput,
-            content = excluded.content,
-            previousmsgid = excluded.previousmsgid,
-            updated_at = CURRENT_TIMESTAMP,
-            rawdata = excluded.rawdata
-        RETURNING *
-    `;
+// ============================================
+// FONCTIONS OPENAI / OPENROUTER MESSAGES
+// ============================================
+
+async function saveOpenAIMessage(data) {
     try {
-        const result = await pool.query(query, [
-            config.msgid,
-            config.prompt,
-            config.instruction,
-            config.model,
-            config.tokeninput,
-            config.tokenoutput,
-            config.content,
-            config.previousmsgid || '',
-            config.rawData
-        ]);
-        console.log(`👤 Call OpenAI registered: ${config.msgid}`);
-        return result.rows[0];
+        const [saved] = await db.insert(schema.openaimessages)
+            .values({
+                msgid: data.msgid,
+                prompt: data.prompt,
+                instruction: data.instruction || null,
+                model: data.model || 'gpt-4o-mini',
+                tokeninput: parseInt(data.tokeninput, 10) || 0,
+                tokenoutput: parseInt(data.tokenoutput, 10) || 0,
+                content: data.content,
+                previousmsgid: data.previousMsgId || null,
+                rawdata: data.rawData ? JSON.stringify(data.rawData) : null,
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.openaimessages.msgid,
+                set: {
+                    prompt: data.prompt,
+                    instruction: data.instruction || null,
+                    model: data.model || 'gpt-4o-mini',
+                    tokeninput: parseInt(data.tokeninput, 10) || 0,
+                    tokenoutput: parseInt(data.tokenoutput, 10) || 0,
+                    content: data.content,
+                    previousmsgid: data.previousMsgId || null,
+                    rawdata: data.rawData ? JSON.stringify(data.rawData) : null,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            })
+            .returning();
+
+        return saved;
     } catch (error) {
-        console.error('❌ Erreur save callOpenAI:', error);
+        console.error('❌ Erreur saveOpenAIMessage:', error);
         throw error;
     }
 }
 
 async function getLastOpenAIMessageId() {
-    const query = `
-        SELECT msgid
-        FROM openaimessages
-        ORDER BY created_at DESC
-        LIMIT 1
-    `;
     try {
-        const result = await pool.query(query);
-        return result.rows[0] ? result.rows[0]['msgid'] : 0;
+        const [latest] = await db.select({ msgid: schema.openaimessages.msgid })
+            .from(schema.openaimessages)
+            .orderBy(desc(schema.openaimessages.id))
+            .limit(1);
+
+        return latest ? latest.msgid : null;
     } catch (error) {
-        console.error('❌ Erreur get Last openAiMessage:', error);
+        console.error('❌ Erreur getLastOpenAIMessageId:', error);
         throw error;
     }
 }
 
-async function getMemberForGrognement() {
-    const query = `
-        SELECT user_id
-        FROM guild_members gm
-        WHERE NOT EXISTS (
-            SELECT user_id
-            FROM grognement gr
-            WHERE gm.user_id = gr.user_id
-        )
-        ORDER BY RANDOM()  
-        LIMIT 1
-    `;
-    try {
-        const result = await pool.query(query);
-        return result.rows[0] ? result.rows[0]['user_id'] : 0;
-    } catch (error) {
-        console.error('❌ Erreur getMemberForGrognement:', error);
-        throw error;
-    }
-}
+// ============================================
+// FONCTIONS GUILD MEMBERS & GROGNEMENT
+// ============================================
 
-async function addGuildMember(user) {
-    const query = `
-        INSERT INTO guild_members (user_id, username)
-        VALUES (?, ?)
-        ON CONFLICT(user_id) 
-        DO UPDATE SET username = excluded.username
-        RETURNING *
-    `;
+async function addGuildMember(userId, username) {
     try {
-        const result = await pool.query(query, [user.id, user.name]);
-        return result.rows[0];
+        const [member] = await db.insert(schema.guildMembers)
+            .values({ userId, username })
+            .onConflictDoUpdate({
+                target: schema.guildMembers.userId,
+                set: { username }
+            })
+            .returning();
+
+        return member;
     } catch (error) {
         console.error('❌ Erreur addGuildMember:', error);
         throw error;
     }
 }
 
-async function addGrognement(user) {
-    const query = `
-        INSERT INTO grognement (user_id, username)
-        VALUES (?, ?)
-        ON CONFLICT(user_id) 
-        DO UPDATE SET username = excluded.username
-        RETURNING *
-    `;
+async function addGrognement(userId, username) {
     try {
-        const result = await pool.query(query, [user.id, user.name]);
-        return result.rows[0];
+        const [grog] = await db.insert(schema.grognement)
+            .values({ userId, username })
+            .onConflictDoUpdate({
+                target: schema.grognement.userId,
+                set: { username }
+            })
+            .returning();
+
+        return grog;
     } catch (error) {
         console.error('❌ Erreur addGrognement:', error);
+        throw error;
+    }
+}
+
+async function getMemberForGrognement() {
+    try {
+        const grogMembers = await db.select().from(schema.grognement);
+        if (grogMembers.length > 0) {
+            return grogMembers[Math.floor(Math.random() * grogMembers.length)];
+        }
+        const guildMems = await db.select().from(schema.guildMembers);
+        if (guildMems.length > 0) {
+            return guildMems[Math.floor(Math.random() * guildMems.length)];
+        }
+        return null;
+    } catch (error) {
+        console.error('❌ Erreur getMemberForGrognement:', error);
         throw error;
     }
 }
@@ -1300,34 +1030,41 @@ async function addGrognement(user) {
 // ============================================
 
 async function createCaptcha(userId, username, guildId, question, answer, channelId, timeoutMinutes = 10) {
-    const query = `
-        INSERT INTO user_captchas (
-            user_id, username, guild_id, question, answer, channel_id, attempts, created_at, expires_at, is_verified
-        ) VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, datetime('now', '+' || ? || ' minutes'), 0)
-        ON CONFLICT(user_id, guild_id) 
-        DO UPDATE SET
-            question = excluded.question,
-            answer = excluded.answer,
-            channel_id = excluded.channel_id,
-            attempts = 0,
-            created_at = CURRENT_TIMESTAMP,
-            expires_at = excluded.expires_at,
-            is_verified = 0,
-            updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-    `;
     try {
-        const result = await pool.query(query, [
-            userId,
-            username,
-            guildId,
-            question,
-            answer,
-            channelId,
-            timeoutMinutes
-        ]);
-        console.log(`🔒 Captcha créé pour ${username} (${userId}) dans le serveur ${guildId}`);
-        return result.rows[0];
+        const expiresAt = new Date(Date.now() + timeoutMinutes * 60 * 1000);
+        const expiresAtStr = toISOStringSafe(expiresAt, new Date().toISOString());
+
+        const [captcha] = await db.insert(schema.userCaptchas)
+            .values({
+                userId,
+                username,
+                guildId,
+                question,
+                answer,
+                channelId,
+                attempts: 0,
+                isVerified: 0,
+                expiresAt: expiresAtStr,
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: [schema.userCaptchas.userId, schema.userCaptchas.guildId],
+                set: {
+                    username,
+                    question,
+                    answer,
+                    channelId,
+                    attempts: 0,
+                    isVerified: 0,
+                    expiresAt: expiresAtStr,
+                    verifiedAt: null,
+                    expiredAt: null,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            })
+            .returning();
+
+        return captcha;
     } catch (error) {
         console.error('❌ Erreur createCaptcha:', error);
         throw error;
@@ -1335,16 +1072,28 @@ async function createCaptcha(userId, username, guildId, question, answer, channe
 }
 
 async function getUserCaptcha(userId, guildId) {
-    const query = `
-        SELECT * FROM user_captchas 
-        WHERE user_id = ? AND guild_id = ? 
-        AND (is_verified = 0 OR expires_at > CURRENT_TIMESTAMP)
-        ORDER BY created_at DESC
-        LIMIT 1
-    `;
     try {
-        const result = await pool.query(query, [userId, guildId]);
-        return result.rows[0] || null;
+        const [captcha] = await db.select()
+            .from(schema.userCaptchas)
+            .where(and(
+                eq(schema.userCaptchas.userId, userId),
+                eq(schema.userCaptchas.guildId, guildId)
+            ))
+            .limit(1);
+
+        if (!captcha) return null;
+        return {
+            ...captcha,
+            user_id: captcha.userId,
+            guild_id: captcha.guildId,
+            channel_id: captcha.channelId,
+            is_verified: captcha.isVerified,
+            expires_at: captcha.expiresAt,
+            verified_at: captcha.verifiedAt,
+            expired_at: captcha.expiredAt,
+            created_at: captcha.createdAt,
+            updated_at: captcha.updatedAt
+        };
     } catch (error) {
         console.error('❌ Erreur getUserCaptcha:', error);
         throw error;
@@ -1352,184 +1101,141 @@ async function getUserCaptcha(userId, guildId) {
 }
 
 async function verifyCaptchaAnswer(userId, guildId, userAnswer) {
-    const client = await pool.connect();
     try {
-        await client.query('BEGIN');
-
         const captcha = await getUserCaptcha(userId, guildId);
         if (!captcha) {
-            await client.query('ROLLBACK');
-            return { success: false, reason: 'no_captcha_found' };
+            return { success: false, reason: 'not_found' };
         }
 
         if (captcha.is_verified) {
-            await client.query('ROLLBACK');
-            return { success: false, reason: 'already_verified' };
+            return { success: true, reason: 'already_verified' };
         }
 
-        if (new Date(captcha.expires_at) < new Date()) {
-            await client.query('ROLLBACK');
+        const now = new Date();
+        const expiresAt = new Date(captcha.expires_at);
+        if (now > expiresAt) {
+            await expireCaptcha(userId, guildId, false);
             return { success: false, reason: 'expired' };
         }
 
-        const correctAnswer = parseInt(captcha.answer, 10);
-        const userAnswerInt = parseInt(userAnswer, 10);
+        const cleanUserAnswer = userAnswer.trim().toLowerCase();
+        const cleanAnswer = captcha.answer.trim().toLowerCase();
 
-        if (userAnswerInt === correctAnswer) {
-            const updateQuery = `
-                UPDATE user_captchas 
-                SET is_verified = 1, 
-                    verified_at = CURRENT_TIMESTAMP,
-                    attempts = attempts + 1,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                RETURNING *
-            `;
-            const result = await client.query(updateQuery, [captcha.id]);
-            await client.query('COMMIT');
-            console.log(`✅ Captcha validé pour ${captcha.username} (${userId})`);
-            return { success: true, captcha: result.rows[0] };
+        if (cleanUserAnswer === cleanAnswer) {
+            await db.update(schema.userCaptchas)
+                .set({
+                    isVerified: 1,
+                    verifiedAt: sql`CURRENT_TIMESTAMP`,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                })
+                .where(and(
+                    eq(schema.userCaptchas.userId, userId),
+                    eq(schema.userCaptchas.guildId, guildId)
+                ));
+
+            return { success: true, attempts: captcha.attempts + 1 };
         } else {
             const newAttempts = captcha.attempts + 1;
-            const updateQuery = `
-                UPDATE user_captchas 
-                SET attempts = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                RETURNING *
-            `;
-            await client.query(updateQuery, [newAttempts, captcha.id]);
-            await client.query('COMMIT');
-            console.log(`❌ Captcha échoué pour ${captcha.username} (${userId}) - Tentative ${newAttempts}`);
-            if (newAttempts >= 3) {
+            const maxAttempts = CAPTCHA_CONFIG.MAX_ATTEMPTS || 3;
+
+            if (newAttempts >= maxAttempts) {
+                await expireCaptcha(userId, guildId, false);
                 return { success: false, reason: 'max_attempts_reached', attempts: newAttempts };
+            } else {
+                await db.update(schema.userCaptchas)
+                    .set({
+                        attempts: newAttempts,
+                        updatedAt: sql`CURRENT_TIMESTAMP`
+                    })
+                    .where(and(
+                        eq(schema.userCaptchas.userId, userId),
+                        eq(schema.userCaptchas.guildId, guildId)
+                    ));
+
+                return { success: false, reason: 'wrong_answer', attempts: newAttempts };
             }
-            return { success: false, reason: 'wrong_answer', attempts: newAttempts };
         }
     } catch (error) {
-        await client.query('ROLLBACK');
         console.error('❌ Erreur verifyCaptchaAnswer:', error);
         throw error;
-    } finally {
-        client.release();
     }
 }
 
-async function expireCaptcha(userId, guildId, incrementAttempts = false) {
-    const client = await pool.connect();
+async function expireCaptcha(userId, guildId, incrementAttempts = true) {
     try {
-        await client.query('BEGIN');
-        let result;
+        const updates = {
+            expiredAt: sql`CURRENT_TIMESTAMP`,
+            updatedAt: sql`CURRENT_TIMESTAMP`
+        };
         if (incrementAttempts) {
-            const captchaQuery = `
-                SELECT attempts FROM user_captchas 
-                WHERE user_id = ? AND guild_id = ? AND is_verified = 0
-            `;
-            const captcha = await client.query(captchaQuery, [userId, guildId]);
-            if (captcha.rows.length > 0) {
-                const currentAttempts = captcha.rows[0].attempts;
-                const newAttempts = currentAttempts + 1;
-                const maxAttempts = CAPTCHA_CONFIG.MAX_ATTEMPTS || 3;
-
-                const updateQuery = `
-                    UPDATE user_captchas 
-                    SET is_verified = 0,
-                        attempts = ?,
-                        expired_at = CURRENT_TIMESTAMP,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE user_id = ? AND guild_id = ? AND is_verified = 0
-                    RETURNING *
-                `;
-                result = await client.query(updateQuery, [newAttempts, userId, guildId]);
-                await client.query('COMMIT');
-                if (result.rows.length > 0) {
-                    console.log(`⏰ Captcha expiré pour ${result.rows[0].username} (${userId}) - Tentatives: ${newAttempts}/${maxAttempts}`);
-                    return { captcha: result.rows[0], shouldKick: newAttempts >= maxAttempts };
-                }
-            }
-        } else {
-            const query = `
-                UPDATE user_captchas 
-                SET is_verified = 0,
-                    expired_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = ? AND guild_id = ? AND is_verified = 0
-                RETURNING *
-            `;
-            result = await client.query(query, [userId, guildId]);
-            await client.query('COMMIT');
-            if (result.rows.length > 0) {
-                console.log(`⏰ Captcha expiré pour ${result.rows[0].username} (${userId})`);
-            }
+            updates.attempts = sql`${schema.userCaptchas.attempts} + 1`;
         }
-        return { captcha: result?.rows[0] || null, shouldKick: false };
+
+        const [expired] = await db.update(schema.userCaptchas)
+            .set(updates)
+            .where(and(
+                eq(schema.userCaptchas.userId, userId),
+                eq(schema.userCaptchas.guildId, guildId)
+            ))
+            .returning();
+
+        return expired;
     } catch (error) {
-        await client.query('ROLLBACK');
         console.error('❌ Erreur expireCaptcha:', error);
         throw error;
-    } finally {
-        client.release();
     }
 }
 
 async function isUserVerified(userId, guildId) {
-    const query = `
-        SELECT is_verified FROM user_captchas 
-        WHERE user_id = ? AND guild_id = ? 
-        AND expires_at > CURRENT_TIMESTAMP
-        ORDER BY created_at DESC
-        LIMIT 1
-    `;
     try {
-        const result = await pool.query(query, [userId, guildId]);
-        return Boolean(result.rows[0]?.is_verified);
+        const captcha = await getUserCaptcha(userId, guildId);
+        return captcha ? Boolean(captcha.is_verified) : false;
     } catch (error) {
         console.error('❌ Erreur isUserVerified:', error);
-        throw error;
+        return false;
     }
 }
 
 async function deleteCaptcha(userId, guildId) {
-    const query = `
-        DELETE FROM user_captchas 
-        WHERE user_id = ? AND guild_id = ?
-        RETURNING *
-    `;
     try {
-        const result = await pool.query(query, [userId, guildId]);
-        return result.rows[0] || null;
+        await db.delete(schema.userCaptchas)
+            .where(and(
+                eq(schema.userCaptchas.userId, userId),
+                eq(schema.userCaptchas.guildId, guildId)
+            ));
+        return true;
     } catch (error) {
         console.error('❌ Erreur deleteCaptcha:', error);
         throw error;
     }
 }
 
-async function saveCaptchaConfig(guildId, config) {
-    const query = `
-        INSERT INTO captcha_config (
-            guild_id, channel_id, verified_role_id, timeout_minutes, max_attempts, is_enabled, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        ON CONFLICT(guild_id) 
-        DO UPDATE SET
-            channel_id = excluded.channel_id,
-            verified_role_id = excluded.verified_role_id,
-            timeout_minutes = excluded.timeout_minutes,
-            max_attempts = excluded.max_attempts,
-            is_enabled = excluded.is_enabled,
-            updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-    `;
+async function saveCaptchaConfig(guildId, channelId = null, verifiedRoleId = null, timeoutMinutes = 10, maxAttempts = 3, isEnabled = 1) {
     try {
-        const result = await pool.query(query, [
-            guildId,
-            config.channelId,
-            config.verifiedRoleId,
-            config.timeoutMinutes,
-            config.maxAttempts,
-            config.isEnabled ? 1 : 0
-        ]);
-        console.log(`⚙️ Configuration captcha mise à jour pour le serveur ${guildId}`);
-        return result.rows[0];
+        const [saved] = await db.insert(schema.captchaConfig)
+            .values({
+                guildId,
+                channelId,
+                verifiedRoleId,
+                timeoutMinutes,
+                maxAttempts,
+                isEnabled: isEnabled ? 1 : 0,
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.captchaConfig.guildId,
+                set: {
+                    channelId,
+                    verifiedRoleId,
+                    timeoutMinutes,
+                    maxAttempts,
+                    isEnabled: isEnabled ? 1 : 0,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            })
+            .returning();
+
+        return saved;
     } catch (error) {
         console.error('❌ Erreur saveCaptchaConfig:', error);
         throw error;
@@ -1537,10 +1243,22 @@ async function saveCaptchaConfig(guildId, config) {
 }
 
 async function getCaptchaConfig(guildId) {
-    const query = `SELECT * FROM captcha_config WHERE guild_id = ?`;
     try {
-        const result = await pool.query(query, [guildId]);
-        return result.rows[0] || null;
+        const [cfg] = await db.select()
+            .from(schema.captchaConfig)
+            .where(eq(schema.captchaConfig.guildId, guildId))
+            .limit(1);
+
+        if (!cfg) return null;
+        return {
+            ...cfg,
+            guild_id: cfg.guildId,
+            channel_id: cfg.channelId,
+            verified_role_id: cfg.verifiedRoleId,
+            timeout_minutes: cfg.timeoutMinutes,
+            max_attempts: cfg.maxAttempts,
+            is_enabled: cfg.isEnabled
+        };
     } catch (error) {
         console.error('❌ Erreur getCaptchaConfig:', error);
         throw error;
@@ -1548,19 +1266,23 @@ async function getCaptchaConfig(guildId) {
 }
 
 // ============================================
-// FONCTIONS BUMP LOGS
+// FONCTIONS BUMP (DISBOARD REMINDERS)
 // ============================================
 
 async function saveBump(guildId, channelId, userId = null, username = null) {
-    const query = `
-        INSERT INTO bump_logs (guild_id, channel_id, user_id, username, bumped_at, reminder_sent)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 0)
-        RETURNING *
-    `;
     try {
-        const result = await pool.query(query, [guildId, channelId, userId, username]);
-        console.log(`📌 Bump enregistré en BDD pour le serveur ${guildId} par ${username || userId || 'inconnu'}`);
-        return result.rows[0];
+        const [bump] = await db.insert(schema.bumpLogs)
+            .values({
+                guildId,
+                channelId,
+                userId,
+                username,
+                bumpedAt: new Date().toISOString(),
+                reminderSent: 0
+            })
+            .returning();
+
+        return bump;
     } catch (error) {
         console.error('❌ Erreur saveBump:', error);
         throw error;
@@ -1568,15 +1290,21 @@ async function saveBump(guildId, channelId, userId = null, username = null) {
 }
 
 async function getPendingBumpReminders() {
-    const query = `
-        SELECT * FROM bump_logs
-        WHERE reminder_sent = 0
-          AND (strftime('%s', 'now') - strftime('%s', bumped_at)) >= 7140
-        ORDER BY bumped_at ASC
-    `;
     try {
-        const result = await pool.query(query);
-        return result.rows;
+        const rows = await db.select()
+            .from(schema.bumpLogs)
+            .where(eq(schema.bumpLogs.reminderSent, 0))
+            .orderBy(asc(schema.bumpLogs.bumpedAt));
+
+        return rows.map(b => ({
+            ...b,
+            guild_id: b.guildId,
+            channel_id: b.channelId,
+            user_id: b.userId,
+            bumped_at: b.bumpedAt,
+            reminder_sent: b.reminderSent,
+            reminder_sent_at: b.reminderSentAt
+        }));
     } catch (error) {
         console.error('❌ Erreur getPendingBumpReminders:', error);
         throw error;
@@ -1584,15 +1312,16 @@ async function getPendingBumpReminders() {
 }
 
 async function markBumpReminderSent(bumpId) {
-    const query = `
-        UPDATE bump_logs
-        SET reminder_sent = 1, reminder_sent_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-        RETURNING *
-    `;
     try {
-        const result = await pool.query(query, [bumpId]);
-        return result.rows[0];
+        const [updated] = await db.update(schema.bumpLogs)
+            .set({
+                reminderSent: 1,
+                reminderSentAt: sql`CURRENT_TIMESTAMP`
+            })
+            .where(eq(schema.bumpLogs.id, bumpId))
+            .returning();
+
+        return updated;
     } catch (error) {
         console.error('❌ Erreur markBumpReminderSent:', error);
         throw error;
@@ -1600,22 +1329,663 @@ async function markBumpReminderSent(bumpId) {
 }
 
 async function getLastBump(guildId) {
-    const query = `
-        SELECT * FROM bump_logs
-        WHERE guild_id = ?
-        ORDER BY bumped_at DESC
-        LIMIT 1
-    `;
     try {
-        const result = await pool.query(query, [guildId]);
-        return result.rows[0] || null;
+        const [latest] = await db.select()
+            .from(schema.bumpLogs)
+            .where(eq(schema.bumpLogs.guildId, guildId))
+            .orderBy(desc(schema.bumpLogs.bumpedAt))
+            .limit(1);
+
+        if (!latest) return null;
+        return {
+            ...latest,
+            guild_id: latest.guildId,
+            channel_id: latest.channelId,
+            user_id: latest.userId,
+            bumped_at: latest.bumpedAt
+        };
     } catch (error) {
         console.error('❌ Erreur getLastBump:', error);
         throw error;
     }
 }
 
+// ============================================
+// FONCTIONS DUMP DISCORD
+// ============================================
+
+async function saveDumpUser(user) {
+    if (!user || !user.id) return;
+    try {
+        await db.insert(schema.discordUsers)
+            .values({
+                userId: user.id,
+                username: user.username || user.tag || 'Unknown',
+                globalName: user.globalName || null,
+                discriminator: user.discriminator || '0',
+                bot: user.bot ? 1 : 0,
+                avatarUrl: user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : user.avatarURL || null,
+                bannerUrl: user.bannerURL ? user.bannerURL({ dynamic: true }) : null,
+                createdAt: toISOStringSafe(user.createdAt, new Date().toISOString()),
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.discordUsers.userId,
+                set: {
+                    username: user.username || user.tag || 'Unknown',
+                    globalName: user.globalName || null,
+                    discriminator: user.discriminator || '0',
+                    bot: user.bot ? 1 : 0,
+                    avatarUrl: user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : user.avatarURL || null,
+                    bannerUrl: user.bannerURL ? user.bannerURL({ dynamic: true }) : null,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            });
+    } catch (e) {
+        console.error(`❌ Erreur saveDumpUser(${user.id}):`, e.message);
+    }
+}
+
+async function saveDumpChannel(channel) {
+    if (!channel || !channel.id) return;
+    try {
+        await db.insert(schema.discordChannels)
+            .values({
+                channelId: channel.id,
+                guildId: channel.guild?.id || channel.guildId || 'unknown',
+                name: channel.name,
+                type: String(channel.type),
+                parentId: channel.parentId || channel.parent?.id || null,
+                position: channel.position || 0,
+                topic: channel.topic || null,
+                isNsfw: channel.nsfw ? 1 : 0,
+                createdAt: toISOStringSafe(channel.createdAt, new Date().toISOString()),
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.discordChannels.channelId,
+                set: {
+                    name: channel.name,
+                    type: String(channel.type),
+                    parentId: channel.parentId || channel.parent?.id || null,
+                    position: channel.position || 0,
+                    topic: channel.topic || null,
+                    isNsfw: channel.nsfw ? 1 : 0,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            });
+    } catch (e) {
+        console.error(`❌ Erreur saveDumpChannel(${channel.id}):`, e.message);
+    }
+}
+
+async function saveDumpThread(thread) {
+    if (!thread || !thread.id) return;
+    try {
+        await db.insert(schema.discordThreads)
+            .values({
+                threadId: thread.id,
+                guildId: thread.guildId || thread.guild?.id || 'unknown',
+                parentId: thread.parentId || thread.parent?.id || 'unknown',
+                name: thread.name,
+                ownerId: thread.ownerId || null,
+                archived: thread.archived ? 1 : 0,
+                locked: thread.locked ? 1 : 0,
+                messageCount: thread.messageCount || 0,
+                memberCount: thread.memberCount || 0,
+                createdAt: toISOStringSafe(thread.createdAt, new Date().toISOString()),
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.discordThreads.threadId,
+                set: {
+                    name: thread.name,
+                    archived: thread.archived ? 1 : 0,
+                    locked: thread.locked ? 1 : 0,
+                    messageCount: thread.messageCount || 0,
+                    memberCount: thread.memberCount || 0,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            });
+    } catch (e) {
+        console.error(`❌ Erreur saveDumpThread(${thread.id}):`, e.message);
+    }
+}
+
+async function saveDumpMessagesBatch(messages) {
+    if (!messages || messages.length === 0) return;
+    try {
+        for (const msg of messages) {
+            const embeds = (msg.embeds || []).map(e => e.toJSON ? e.toJSON() : e);
+            const attachments = Array.from(msg.attachments?.values() || []).map(a => ({
+                id: a.id,
+                name: a.name,
+                url: a.url,
+                contentType: a.contentType
+            }));
+            const reactions = Array.from(msg.reactions?.cache?.values() || []).map(r => ({
+                emoji: r.emoji?.name,
+                count: r.count
+            }));
+
+            await db.insert(schema.discordMessages)
+                .values({
+                    messageId: msg.id,
+                    channelId: msg.channelId,
+                    threadId: msg.channel?.isThread?.() ? msg.channel.id : null,
+                    guildId: msg.guildId || msg.guild?.id || 'unknown',
+                    authorId: msg.author?.id || 'unknown',
+                    authorUsername: msg.author?.username || msg.author?.tag || 'Unknown',
+                    content: msg.content || '',
+                    pinned: msg.pinned ? 1 : 0,
+                    embedsJson: JSON.stringify(embeds),
+                    attachmentsJson: JSON.stringify(attachments),
+                    reactionsJson: JSON.stringify(reactions),
+                    createdAt: toISOStringSafe(msg.createdAt, new Date().toISOString()),
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                })
+                .onConflictDoUpdate({
+                    target: schema.discordMessages.messageId,
+                    set: {
+                        content: msg.content || '',
+                        pinned: msg.pinned ? 1 : 0,
+                        embedsJson: JSON.stringify(embeds),
+                        attachmentsJson: JSON.stringify(attachments),
+                        reactionsJson: JSON.stringify(reactions),
+                        updatedAt: sql`CURRENT_TIMESTAMP`
+                    }
+                });
+        }
+    } catch (e) {
+        console.error('❌ Erreur saveDumpMessagesBatch:', e.message);
+    }
+}
+
+// ============================================
+// FONCTIONS DU JEU COUNTER (ROUTE DE L'INFINI)
+// ============================================
+
+async function getCounterState(channelId) {
+    try {
+        const [st] = await db.select()
+            .from(schema.counterState)
+            .where(eq(schema.counterState.channelId, channelId))
+            .limit(1);
+
+        if (!st) return null;
+        return {
+            ...st,
+            channel_id: st.channelId,
+            current_number: st.currentNumber,
+            last_user_id: st.lastUserId,
+            updated_at: st.updatedAt
+        };
+    } catch (error) {
+        console.error('❌ Erreur getCounterState:', error);
+        throw error;
+    }
+}
+
+async function updateCounterState(channelId, currentNumber, lastUserId) {
+    try {
+        const [updated] = await db.insert(schema.counterState)
+            .values({
+                channelId,
+                currentNumber,
+                lastUserId,
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.counterState.channelId,
+                set: {
+                    currentNumber,
+                    lastUserId,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            })
+            .returning();
+
+        return {
+            ...updated,
+            channel_id: updated.channelId,
+            current_number: updated.currentNumber,
+            last_user_id: updated.lastUserId
+        };
+    } catch (error) {
+        console.error('❌ Erreur updateCounterState:', error);
+        throw error;
+    }
+}
+
+// ============================================
+// FONCTIONS DU JEU COUNTDOWN (COMPTE À REBOURS 900 -> 0)
+// ============================================
+
+async function getCountdownState(channelId) {
+    try {
+        const [st] = await db.select()
+            .from(schema.countdownState)
+            .where(eq(schema.countdownState.channelId, channelId))
+            .limit(1);
+
+        if (!st) return null;
+        return {
+            ...st,
+            channel_id: st.channelId,
+            current_number: st.currentNumber,
+            is_trap_active: st.isTrapActive,
+            trap_number: st.trapNumber,
+            last_user_id: st.lastUserId,
+            updated_at: st.updatedAt
+        };
+    } catch (error) {
+        console.error('❌ Erreur getCountdownState:', error);
+        throw error;
+    }
+}
+
+async function updateCountdownState(channelId, currentNumber, isTrapActive = 0, trapNumber = null, lastUserId = null) {
+    try {
+        const [updated] = await db.insert(schema.countdownState)
+            .values({
+                channelId,
+                currentNumber,
+                isTrapActive: isTrapActive ? 1 : 0,
+                trapNumber,
+                lastUserId,
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.countdownState.channelId,
+                set: {
+                    currentNumber,
+                    isTrapActive: isTrapActive ? 1 : 0,
+                    trapNumber,
+                    lastUserId,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            })
+            .returning();
+
+        return {
+            ...updated,
+            channel_id: updated.channelId,
+            current_number: updated.currentNumber,
+            is_trap_active: updated.isTrapActive,
+            trap_number: updated.trapNumber,
+            last_user_id: updated.lastUserId
+        };
+    } catch (error) {
+        console.error('❌ Erreur updateCountdownState:', error);
+        throw error;
+    }
+}
+
+async function addCountdownScore(channelId, userId, username, points = 1) {
+    try {
+        const [score] = await db.insert(schema.countdownScores)
+            .values({
+                channelId,
+                userId,
+                username,
+                score: points
+            })
+            .onConflictDoUpdate({
+                target: [schema.countdownScores.channelId, schema.countdownScores.userId],
+                set: {
+                    username,
+                    score: sql`${schema.countdownScores.score} + ${points}`
+                }
+            })
+            .returning();
+
+        return {
+            ...score,
+            channel_id: score.channelId,
+            user_id: score.userId
+        };
+    } catch (error) {
+        console.error('❌ Erreur addCountdownScore:', error);
+        throw error;
+    }
+}
+
+async function getCountdownScores(channelId, limit = 10) {
+    try {
+        const rows = await db.select()
+            .from(schema.countdownScores)
+            .where(eq(schema.countdownScores.channelId, channelId))
+            .orderBy(desc(schema.countdownScores.score))
+            .limit(limit);
+
+        return rows.map(r => ({
+            ...r,
+            channel_id: r.channelId,
+            user_id: r.userId
+        }));
+    } catch (error) {
+        console.error('❌ Erreur getCountdownScores:', error);
+        throw error;
+    }
+}
+
+async function resetCountdownScores(channelId) {
+    try {
+        await db.delete(schema.countdownScores)
+            .where(eq(schema.countdownScores.channelId, channelId));
+        return true;
+    } catch (error) {
+        console.error('❌ Erreur resetCountdownScores:', error);
+        throw error;
+    }
+}
+
+// ============================================
+// ÉTAT DU BOT ET SUIVI DE VERSION
+// ============================================
+
+async function getBotState(key) {
+    try {
+        const [state] = await db.select()
+            .from(schema.botVersionState)
+            .where(eq(schema.botVersionState.key, key))
+            .limit(1);
+
+        return state ? state.value : null;
+    } catch (error) {
+        console.error(`❌ Erreur getBotState(${key}):`, error);
+        return null;
+    }
+}
+
+async function setBotState(key, value) {
+    try {
+        await db.insert(schema.botVersionState)
+            .values({
+                key,
+                value: String(value),
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.botVersionState.key,
+                set: {
+                    value: String(value),
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            });
+        return true;
+    } catch (error) {
+        console.error(`❌ Erreur setBotState(${key}):`, error);
+        return false;
+    }
+}
+
+// ============================================
+// ARCHIVAGE DES ÉVÉNEMENTS DISCORD & SYNCHRONISATION
+// ============================================
+
+async function archiveDiscordEvent(eventName, payload = {}) {
+    try {
+        const [archived] = await db.insert(schema.discordEventsArchive)
+            .values({
+                eventName,
+                guildId: payload.guildId || payload.guild_id || null,
+                targetId: payload.targetId || payload.target_id || null,
+                userId: payload.userId || payload.user_id || null,
+                username: payload.username || null,
+                summary: payload.summary || null,
+                dataJson: payload.data ? JSON.stringify(payload.data) : null
+            })
+            .returning();
+
+        return archived;
+    } catch (e) {
+        console.error(`❌ Erreur archiveDiscordEvent(${eventName}):`, e.message);
+    }
+}
+
+async function getDiscordEventsArchive(options = {}) {
+    try {
+        const limit = parseInt(options.limit, 10) || 50;
+        const page = parseInt(options.page, 10) || 1;
+        const offset = (page - 1) * limit;
+
+        let query = db.select().from(schema.discordEventsArchive);
+
+        if (options.eventName) {
+            query = query.where(eq(schema.discordEventsArchive.eventName, options.eventName));
+        }
+
+        const rows = await query
+            .orderBy(desc(schema.discordEventsArchive.createdAt))
+            .limit(limit)
+            .offset(offset);
+
+        const [totalCountResult] = await db.select({ total: count() }).from(schema.discordEventsArchive);
+        const total = Number(totalCountResult?.total) || 0;
+
+        return {
+            events: rows.map(r => {
+                let parsedData = null;
+                if (r.dataJson) {
+                    try {
+                        parsedData = JSON.parse(r.dataJson);
+                    } catch {
+                        parsedData = r.dataJson;
+                    }
+                }
+                return {
+                    id: r.id,
+                    event_name: r.eventName,
+                    guild_id: r.guildId,
+                    target_id: r.targetId,
+                    user_id: r.userId,
+                    username: r.username,
+                    summary: r.summary,
+                    data: parsedData,
+                    created_at: r.createdAt
+                };
+            }),
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
+        };
+    } catch (e) {
+        console.error('❌ Erreur getDiscordEventsArchive:', e.message);
+        throw e;
+    }
+}
+
+async function upsertDiscordChannel(channel) {
+    if (!channel || !channel.id) return;
+    try {
+        await db.insert(schema.discordChannels)
+            .values({
+                channelId: channel.id,
+                guildId: channel.guild?.id || channel.guildId || 'unknown',
+                name: channel.name,
+                type: String(channel.type),
+                parentId: channel.parentId || channel.parent?.id || null,
+                position: channel.position || 0,
+                topic: channel.topic || null,
+                isNsfw: channel.nsfw ? 1 : 0,
+                createdAt: toISOStringSafe(channel.createdAt, new Date().toISOString()),
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.discordChannels.channelId,
+                set: {
+                    name: channel.name,
+                    type: String(channel.type),
+                    parentId: channel.parentId || channel.parent?.id || null,
+                    position: channel.position || 0,
+                    topic: channel.topic || null,
+                    isNsfw: channel.nsfw ? 1 : 0,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            });
+    } catch (e) {
+        console.error(`❌ Erreur upsertDiscordChannel(${channel.id}):`, e.message);
+    }
+}
+
+async function deleteDiscordChannel(channelId) {
+    try {
+        await db.delete(schema.discordChannels).where(eq(schema.discordChannels.channelId, channelId));
+    } catch (e) {
+        console.error(`❌ Erreur deleteDiscordChannel(${channelId}):`, e.message);
+    }
+}
+
+async function upsertDiscordRole(role) {
+    if (!role || !role.id) return;
+    try {
+        await db.insert(schema.discordRoles)
+            .values({
+                roleId: role.id,
+                guildId: role.guild?.id || 'unknown',
+                name: role.name,
+                color: role.color || 0,
+                hoist: role.hoist ? 1 : 0,
+                position: role.position || 0,
+                permissions: role.permissions?.bitfield?.toString() || '0',
+                managed: role.managed ? 1 : 0,
+                mentionable: role.mentionable ? 1 : 0,
+                createdAt: toISOStringSafe(role.createdAt, new Date().toISOString()),
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.discordRoles.roleId,
+                set: {
+                    name: role.name,
+                    color: role.color || 0,
+                    hoist: role.hoist ? 1 : 0,
+                    position: role.position || 0,
+                    permissions: role.permissions?.bitfield?.toString() || '0',
+                    managed: role.managed ? 1 : 0,
+                    mentionable: role.mentionable ? 1 : 0,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            });
+    } catch (e) {
+        console.error(`❌ Erreur upsertDiscordRole(${role.id}):`, e.message);
+    }
+}
+
+async function deleteDiscordRole(roleId) {
+    try {
+        await db.delete(schema.discordRoles).where(eq(schema.discordRoles.roleId, roleId));
+    } catch (e) {
+        console.error(`❌ Erreur deleteDiscordRole(${roleId}):`, e.message);
+    }
+}
+
+async function upsertDiscordThread(thread) {
+    if (!thread || !thread.id) return;
+    try {
+        await db.insert(schema.discordThreads)
+            .values({
+                threadId: thread.id,
+                guildId: thread.guildId || thread.guild?.id || 'unknown',
+                parentId: thread.parentId || thread.parent?.id || 'unknown',
+                name: thread.name,
+                ownerId: thread.ownerId || null,
+                archived: thread.archived ? 1 : 0,
+                locked: thread.locked ? 1 : 0,
+                messageCount: thread.messageCount || 0,
+                memberCount: thread.memberCount || 0,
+                createdAt: toISOStringSafe(thread.createdAt, new Date().toISOString()),
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.discordThreads.threadId,
+                set: {
+                    name: thread.name,
+                    archived: thread.archived ? 1 : 0,
+                    locked: thread.locked ? 1 : 0,
+                    messageCount: thread.messageCount || 0,
+                    memberCount: thread.memberCount || 0,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            });
+    } catch (e) {
+        console.error(`❌ Erreur upsertDiscordThread(${thread.id}):`, e.message);
+    }
+}
+
+async function deleteDiscordThread(threadId) {
+    try {
+        await db.delete(schema.discordThreads).where(eq(schema.discordThreads.threadId, threadId));
+    } catch (e) {
+        console.error(`❌ Erreur deleteDiscordThread(${threadId}):`, e.message);
+    }
+}
+
+async function updateDiscordMessage(message) {
+    if (!message || !message.id) return;
+    try {
+        const embeds = (message.embeds || []).map(e => e.toJSON ? e.toJSON() : e);
+        const attachments = Array.from(message.attachments?.values() || []).map(a => ({
+            id: a.id,
+            name: a.name,
+            url: a.url,
+            contentType: a.contentType
+        }));
+        const reactions = Array.from(message.reactions?.cache?.values() || []).map(r => ({
+            emoji: r.emoji?.name,
+            count: r.count
+        }));
+
+        await db.insert(schema.discordMessages)
+            .values({
+                messageId: message.id,
+                channelId: message.channelId,
+                threadId: message.channel?.isThread?.() ? message.channel.id : null,
+                guildId: message.guildId || 'unknown',
+                authorId: message.author?.id || 'unknown',
+                authorUsername: message.author?.username || message.author?.tag || 'Unknown',
+                content: message.content || '',
+                pinned: message.pinned ? 1 : 0,
+                embedsJson: JSON.stringify(embeds),
+                attachmentsJson: JSON.stringify(attachments),
+                reactionsJson: JSON.stringify(reactions),
+                createdAt: toISOStringSafe(message.createdAt, new Date().toISOString()),
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .onConflictDoUpdate({
+                target: schema.discordMessages.messageId,
+                set: {
+                    content: message.content || '',
+                    pinned: message.pinned ? 1 : 0,
+                    embedsJson: JSON.stringify(embeds),
+                    attachmentsJson: JSON.stringify(attachments),
+                    reactionsJson: JSON.stringify(reactions),
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                }
+            });
+    } catch (e) {
+        console.error(`❌ Erreur updateDiscordMessage(${message.id}):`, e.message);
+    }
+}
+
+async function deleteDiscordMessage(messageId) {
+    try {
+        await db.delete(schema.discordMessages).where(eq(schema.discordMessages.messageId, messageId));
+    } catch (e) {
+        console.error(`❌ Erreur deleteDiscordMessage(${messageId}):`, e.message);
+    }
+}
+
+// ============================================
+// EXPORTS DU MODULE DATABASE
+// ============================================
 module.exports = {
+    db,
+    schema,
+    dialect,
+    isPostgres,
+    isSqlite,
     pool,
     logUserEvent,
     getUserEvents,
@@ -1660,29 +2030,23 @@ module.exports = {
     deleteCaptcha,
     saveCaptchaConfig,
     getCaptchaConfig,
-    // Fonctions Bump
     saveBump,
     getPendingBumpReminders,
     markBumpReminderSent,
     getLastBump,
-    // Fonctions Dump Discord
     saveDumpUser,
     saveDumpChannel,
     saveDumpThread,
     saveDumpMessagesBatch,
-    // Fonctions Counter Game
     getCounterState,
     updateCounterState,
-    // Fonctions CountDown Game
     getCountdownState,
     updateCountdownState,
     addCountdownScore,
     getCountdownScores,
     resetCountdownScores,
-    // État du bot et suivi de version
     getBotState,
     setBotState,
-    // Archivage des Événements Discord & Synchronisation
     archiveDiscordEvent,
     getDiscordEventsArchive,
     upsertDiscordChannel,
@@ -1694,532 +2058,3 @@ module.exports = {
     updateDiscordMessage,
     deleteDiscordMessage
 };
-
-// ============================================
-// FONCTIONS DU JEU COUNTDOWN (COMPTE À REBOURS 90 -> 0)
-// ============================================
-
-async function getCountdownState(channelId) {
-    const query = `SELECT * FROM countdown_state WHERE channel_id = ?`;
-    try {
-        const result = await pool.query(query, [channelId]);
-        return result.rows[0] || null;
-    } catch (error) {
-        console.error('❌ Erreur getCountdownState:', error);
-        throw error;
-    }
-}
-
-async function updateCountdownState(channelId, currentNumber, isTrapActive = 0, trapNumber = null, lastUserId = null) {
-    const query = `
-        INSERT INTO countdown_state (channel_id, current_number, is_trap_active, trap_number, last_user_id, updated_at)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(channel_id) DO UPDATE SET
-            current_number = excluded.current_number,
-            is_trap_active = excluded.is_trap_active,
-            trap_number = excluded.trap_number,
-            last_user_id = excluded.last_user_id,
-            updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-    `;
-    try {
-        const result = await pool.query(query, [channelId, currentNumber, isTrapActive, trapNumber, lastUserId]);
-        return result.rows[0];
-    } catch (error) {
-        console.error('❌ Erreur updateCountdownState:', error);
-        throw error;
-    }
-}
-
-async function addCountdownScore(channelId, userId, username) {
-    const query = `
-        INSERT INTO countdown_scores (channel_id, user_id, username, score)
-        VALUES (?, ?, ?, 1)
-        ON CONFLICT(channel_id, user_id) DO UPDATE SET
-            score = score + 1,
-            username = excluded.username
-        RETURNING *
-    `;
-    try {
-        const result = await pool.query(query, [channelId, userId, username]);
-        return result.rows[0];
-    } catch (error) {
-        console.error('❌ Erreur addCountdownScore:', error);
-        throw error;
-    }
-}
-
-async function getCountdownScores(channelId) {
-    const query = `
-        SELECT user_id, username, score
-        FROM countdown_scores
-        WHERE channel_id = ?
-        ORDER BY score DESC
-    `;
-    try {
-        const result = await pool.query(query, [channelId]);
-        return result.rows;
-    } catch (error) {
-        console.error('❌ Erreur getCountdownScores:', error);
-        throw error;
-    }
-}
-
-async function resetCountdownScores(channelId) {
-    const query = `DELETE FROM countdown_scores WHERE channel_id = ?`;
-    try {
-        await pool.query(query, [channelId]);
-    } catch (error) {
-        console.error('❌ Erreur resetCountdownScores:', error);
-        throw error;
-    }
-}
-
-// ============================================
-// FONCTIONS DU JEU DES NOMBRES (COUNTER)
-// ============================================
-
-async function getCounterState(channelId) {
-    const query = `SELECT * FROM counter_state WHERE channel_id = ?`;
-    try {
-        const result = await pool.query(query, [channelId]);
-        return result.rows[0] || null;
-    } catch (error) {
-        console.error('❌ Erreur getCounterState:', error);
-        throw error;
-    }
-}
-
-async function updateCounterState(channelId, newNumber, userId = null) {
-    const query = `
-        INSERT INTO counter_state (channel_id, current_number, last_user_id, updated_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(channel_id) DO UPDATE SET
-            current_number = excluded.current_number,
-            last_user_id = excluded.last_user_id,
-            updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-    `;
-    try {
-        const result = await pool.query(query, [channelId, newNumber, userId]);
-        return result.rows[0];
-    } catch (error) {
-        console.error('❌ Erreur updateCounterState:', error);
-        throw error;
-    }
-}
-
-// ============================================
-// FONCTIONS DE SAUVEGARDE / DUMP DISCORD
-// ============================================
-
-async function saveDumpUser(user) {
-    const query = `
-        INSERT INTO discord_users (user_id, username, global_name, discriminator, bot, avatar_url, banner_url, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-            username = excluded.username,
-            global_name = excluded.global_name,
-            discriminator = excluded.discriminator,
-            bot = excluded.bot,
-            avatar_url = excluded.avatar_url,
-            banner_url = excluded.banner_url,
-            updated_at = CURRENT_TIMESTAMP
-    `;
-    try {
-        await pool.query(query, [
-            user.id,
-            user.username,
-            user.globalName || null,
-            user.discriminator || '0',
-            user.bot ? 1 : 0,
-            user.displayAvatarURL ? user.displayAvatarURL({ size: 512 }) : null,
-            user.bannerURL ? user.bannerURL({ size: 512 }) : null,
-            toISOStringSafe(user.createdAt, new Date().toISOString())
-        ]);
-    } catch (error) {
-        console.error('❌ Erreur saveDumpUser:', error);
-    }
-}
-
-async function saveDumpChannel(channel) {
-    const query = `
-        INSERT INTO discord_channels (channel_id, guild_id, name, type, parent_id, position, topic, is_nsfw, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(channel_id) DO UPDATE SET
-            name = excluded.name,
-            type = excluded.type,
-            parent_id = excluded.parent_id,
-            position = excluded.position,
-            topic = excluded.topic,
-            is_nsfw = excluded.is_nsfw,
-            updated_at = CURRENT_TIMESTAMP
-    `;
-    try {
-        await pool.query(query, [
-            channel.id,
-            channel.guildId,
-            channel.name || 'Unnamed',
-            String(channel.type),
-            channel.parentId || null,
-            channel.position || 0,
-            channel.topic || null,
-            channel.nsfw ? 1 : 0,
-            toISOStringSafe(channel.createdAt, new Date().toISOString())
-        ]);
-    } catch (error) {
-        console.error('❌ Erreur saveDumpChannel:', error);
-    }
-}
-
-async function saveDumpThread(thread) {
-    const query = `
-        INSERT INTO discord_threads (thread_id, guild_id, parent_id, name, owner_id, archived, locked, message_count, member_count, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(thread_id) DO UPDATE SET
-            name = excluded.name,
-            archived = excluded.archived,
-            locked = excluded.locked,
-            message_count = excluded.message_count,
-            member_count = excluded.member_count,
-            updated_at = CURRENT_TIMESTAMP
-    `;
-    try {
-        await pool.query(query, [
-            thread.id,
-            thread.guildId,
-            thread.parentId,
-            thread.name,
-            thread.ownerId || null,
-            thread.archived ? 1 : 0,
-            thread.locked ? 1 : 0,
-            thread.messageCount || 0,
-            thread.memberCount || 0,
-            toISOStringSafe(thread.createdAt, new Date().toISOString())
-        ]);
-    } catch (error) {
-        console.error('❌ Erreur saveDumpThread:', error);
-    }
-}
-
-async function saveDumpMessagesBatch(messages) {
-    if (!messages || messages.length === 0) return;
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
-        const query = `
-            INSERT INTO discord_messages (
-                message_id, channel_id, thread_id, guild_id, author_id, author_username, content, pinned, embeds_json, attachments_json, reactions_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(message_id) DO UPDATE SET
-                content = excluded.content,
-                pinned = excluded.pinned,
-                embeds_json = excluded.embeds_json,
-                attachments_json = excluded.attachments_json,
-                reactions_json = excluded.reactions_json,
-                updated_at = CURRENT_TIMESTAMP
-        `;
-
-        for (const msg of messages) {
-            const author = msg.author;
-            const embeds = msg.embeds ? msg.embeds.map(e => e.toJSON ? e.toJSON() : e) : [];
-            const attachments = msg.attachments ? Array.from(msg.attachments.values()).map(a => ({
-                id: a.id,
-                name: a.name,
-                url: a.url,
-                size: a.size,
-                contentType: a.contentType
-            })) : [];
-            const reactions = msg.reactions?.cache ? Array.from(msg.reactions.cache.values()).map(r => ({
-                emoji: r.emoji.name,
-                count: r.count
-            })) : [];
-
-            await client.query(query, [
-                msg.id,
-                msg.channelId,
-                msg.channel?.isThread?.() ? msg.channel.id : null,
-                msg.guildId || 'unknown',
-                author.id,
-                author.username || author.tag || 'Unknown',
-                msg.content || '',
-                msg.pinned ? 1 : 0,
-                JSON.stringify(embeds),
-                JSON.stringify(attachments),
-                JSON.stringify(reactions),
-                toISOStringSafe(msg.createdAt, new Date().toISOString())
-            ]);
-        }
-        await client.query('COMMIT');
-    } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('❌ Erreur saveDumpMessagesBatch:', error);
-    } finally {
-        client.release();
-    }
-}
-
-// ============================================
-// ÉTAT DU BOT & GESTION DES VERSIONS
-// ============================================
-
-async function getBotState(key) {
-    const query = `SELECT value FROM bot_version_state WHERE key = ?`;
-    try {
-        const result = await pool.query(query, [key]);
-        return result.rows.length > 0 ? result.rows[0].value : null;
-    } catch (error) {
-        console.error(`❌ Erreur getBotState(${key}):`, error);
-        return null;
-    }
-}
-
-async function setBotState(key, value) {
-    const query = `
-        INSERT INTO bot_version_state (key, value, updated_at)
-        VALUES (?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(key) DO UPDATE SET
-            value = excluded.value,
-            updated_at = CURRENT_TIMESTAMP
-    `;
-    try {
-        await pool.query(query, [key, String(value)]);
-        return true;
-    } catch (error) {
-        console.error(`❌ Erreur setBotState(${key}):`, error);
-        return false;
-    }
-}
-
-// ============================================
-// ARCHIVAGE DES ÉVÉNEMENTS DISCORD & SYNCHRONISATION
-// ============================================
-
-async function archiveDiscordEvent(eventName, { guildId = null, targetId = null, userId = null, username = null, summary = '', data = null } = {}) {
-    const query = `
-        INSERT INTO discord_events_archive (event_name, guild_id, target_id, user_id, username, summary, data_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `;
-    try {
-        const dataJson = data ? JSON.stringify(data) : null;
-        await pool.query(query, [eventName, guildId, targetId, userId, username, summary, dataJson]);
-        return true;
-    } catch (error) {
-        console.error(`❌ Erreur archiveDiscordEvent(${eventName}):`, error);
-        return false;
-    }
-}
-
-async function getDiscordEventsArchive({ limit = 100, offset = 0, eventName = null, search = null } = {}) {
-    try {
-        let conditions = [];
-        let params = [];
-
-        if (eventName && eventName !== 'ALL') {
-            conditions.push('event_name = ?');
-            params.push(eventName);
-        }
-
-        if (search) {
-            conditions.push('(summary LIKE ? OR username LIKE ? OR target_id LIKE ?)');
-            const s = `%${search}%`;
-            params.push(s, s, s);
-        }
-
-        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-        const countQuery = `SELECT COUNT(*) as total FROM discord_events_archive ${whereClause}`;
-        const countRes = await pool.query(countQuery, params);
-        const total = countRes.rows[0]?.total || 0;
-
-        const dataQuery = `
-            SELECT * FROM discord_events_archive 
-            ${whereClause} 
-            ORDER BY created_at DESC, id DESC 
-            LIMIT ? OFFSET ?
-        `;
-        const dataRes = await pool.query(dataQuery, [...params, limit, offset]);
-
-        return {
-            total,
-            events: dataRes.rows.map(r => ({
-                ...r,
-                data: r.data_json ? JSON.parse(r.data_json) : null
-            }))
-        };
-    } catch (error) {
-        console.error('❌ Erreur getDiscordEventsArchive:', error);
-        return { total: 0, events: [] };
-    }
-}
-
-async function upsertDiscordChannel(channel) {
-    if (!channel || !channel.id) return;
-    const query = `
-        INSERT INTO discord_channels (channel_id, guild_id, name, type, parent_id, position, topic, is_nsfw, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(channel_id) DO UPDATE SET
-            name = excluded.name,
-            type = excluded.type,
-            parent_id = excluded.parent_id,
-            position = excluded.position,
-            topic = excluded.topic,
-            is_nsfw = excluded.is_nsfw,
-            updated_at = CURRENT_TIMESTAMP
-    `;
-    try {
-        await pool.query(query, [
-            channel.id,
-            channel.guildId || channel.guild?.id || 'unknown',
-            channel.name,
-            String(channel.type),
-            channel.parentId || null,
-            channel.position || 0,
-            channel.topic || null,
-            channel.nsfw ? 1 : 0,
-            toISOStringSafe(channel.createdAt, new Date().toISOString())
-        ]);
-    } catch (e) {
-        console.error(`❌ Erreur upsertDiscordChannel(${channel.id}):`, e);
-    }
-}
-
-async function deleteDiscordChannel(channelId) {
-    try {
-        await pool.query(`DELETE FROM discord_channels WHERE channel_id = ?`, [channelId]);
-    } catch (e) {
-        console.error(`❌ Erreur deleteDiscordChannel(${channelId}):`, e);
-    }
-}
-
-async function upsertDiscordRole(role) {
-    if (!role || !role.id) return;
-    const query = `
-        INSERT INTO discord_roles (role_id, guild_id, name, color, hoist, position, permissions, managed, mentionable, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(role_id) DO UPDATE SET
-            name = excluded.name,
-            color = excluded.color,
-            hoist = excluded.hoist,
-            position = excluded.position,
-            permissions = excluded.permissions,
-            managed = excluded.managed,
-            mentionable = excluded.mentionable,
-            updated_at = CURRENT_TIMESTAMP
-    `;
-    try {
-        await pool.query(query, [
-            role.id,
-            role.guild?.id || 'unknown',
-            role.name,
-            role.color || 0,
-            role.hoist ? 1 : 0,
-            role.position || 0,
-            role.permissions?.bitfield?.toString() || '0',
-            role.managed ? 1 : 0,
-            role.mentionable ? 1 : 0,
-            toISOStringSafe(role.createdAt, new Date().toISOString())
-        ]);
-    } catch (e) {
-        console.error(`❌ Erreur upsertDiscordRole(${role.id}):`, e);
-    }
-}
-
-async function deleteDiscordRole(roleId) {
-    try {
-        await pool.query(`DELETE FROM discord_roles WHERE role_id = ?`, [roleId]);
-    } catch (e) {
-        console.error(`❌ Erreur deleteDiscordRole(${roleId}):`, e);
-    }
-}
-
-async function upsertDiscordThread(thread) {
-    if (!thread || !thread.id) return;
-    const query = `
-        INSERT INTO discord_threads (thread_id, guild_id, parent_id, name, owner_id, archived, locked, message_count, member_count, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(thread_id) DO UPDATE SET
-            name = excluded.name,
-            archived = excluded.archived,
-            locked = excluded.locked,
-            message_count = excluded.message_count,
-            member_count = excluded.member_count,
-            updated_at = CURRENT_TIMESTAMP
-    `;
-    try {
-        await pool.query(query, [
-            thread.id,
-            thread.guildId || thread.guild?.id || 'unknown',
-            thread.parentId || thread.parent?.id || 'unknown',
-            thread.name,
-            thread.ownerId || null,
-            thread.archived ? 1 : 0,
-            thread.locked ? 1 : 0,
-            thread.messageCount || 0,
-            thread.memberCount || 0,
-            toISOStringSafe(thread.createdAt, new Date().toISOString())
-        ]);
-    } catch (e) {
-        console.error(`❌ Erreur upsertDiscordThread(${thread.id}):`, e);
-    }
-}
-
-async function deleteDiscordThread(threadId) {
-    try {
-        await pool.query(`DELETE FROM discord_threads WHERE thread_id = ?`, [threadId]);
-    } catch (e) {
-        console.error(`❌ Erreur deleteDiscordThread(${threadId}):`, e);
-    }
-}
-
-async function updateDiscordMessage(message) {
-    if (!message || !message.id) return;
-    const query = `
-        INSERT INTO discord_messages (message_id, channel_id, thread_id, guild_id, author_id, author_username, content, pinned, embeds_json, attachments_json, reactions_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(message_id) DO UPDATE SET
-            content = excluded.content,
-            pinned = excluded.pinned,
-            embeds_json = excluded.embeds_json,
-            attachments_json = excluded.attachments_json,
-            reactions_json = excluded.reactions_json,
-            updated_at = CURRENT_TIMESTAMP
-    `;
-    try {
-        const embeds = (message.embeds || []).map(e => e.toJSON ? e.toJSON() : e);
-        const attachments = Array.from(message.attachments?.values() || []).map(a => ({
-            id: a.id,
-            name: a.name,
-            url: a.url,
-            contentType: a.contentType
-        }));
-        const reactions = Array.from(message.reactions?.cache?.values() || []).map(r => ({
-            emoji: r.emoji?.name,
-            count: r.count
-        }));
-
-        await pool.query(query, [
-            message.id,
-            message.channelId,
-            message.channel?.isThread?.() ? message.channel.id : null,
-            message.guildId || 'unknown',
-            message.author?.id || 'unknown',
-            message.author?.username || message.author?.tag || 'Unknown',
-            message.content || '',
-            message.pinned ? 1 : 0,
-            JSON.stringify(embeds),
-            JSON.stringify(attachments),
-            JSON.stringify(reactions),
-            toISOStringSafe(message.createdAt, new Date().toISOString())
-        ]);
-    } catch (e) {
-        console.error(`❌ Erreur updateDiscordMessage(${message.id}):`, e);
-    }
-}
-
-async function deleteDiscordMessage(messageId) {
-    try {
-        await pool.query(`DELETE FROM discord_messages WHERE message_id = ?`, [messageId]);
-    } catch (e) {
-        console.error(`❌ Erreur deleteDiscordMessage(${messageId}):`, e);
-    }
-}

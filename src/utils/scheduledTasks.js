@@ -6,7 +6,11 @@ const {
     autoValidateAndPublishDailyMessage,
     getParisHour 
 } = require("./dailyMessageManager.js");
+const { toDateSafe } = require("./dateUtils.js");
 const { config } = require("../config/index.js");
+
+// Cache mémoire des rappels de bump actuellement planifiés par setTimeout
+const activeScheduledBumpIds = new Set();
 
 /**
  * Fonction de vérification et d'envoi des rappels de bump en attente
@@ -14,28 +18,63 @@ const { config } = require("../config/index.js");
 async function checkAndSendBumpReminders(client) {
     try {
         const pendingBumps = await getPendingBumpReminders();
-        for (const bump of pendingBumps) {
-            try {
-                const guild = await client.guilds.fetch(bump.guild_id);
-                if (guild) {
-                    const channel = await guild.channels.fetch(bump.channel_id);
-                    if (channel) {
-                        const userText = bump.username ? `@${bump.username}` : (bump.user_id ? `<@${bump.user_id}>` : null);
-                        const userMentionInfo = userText ? ` (Dernier bump par <@${bump.user_id}>)` : '';
-                        const delay = ((parseInt(Date.parse(bump.bumped_at)) / 1000) + 7200) - Math.floor(Date.now() / 1000);
-                        console.log(`[BUMP] bientôt 2 heures se sont écoulées depuis le bump (ID: ${bump.id}), rappel envoyé dans ${delay} secondes !`, bump.bumped_at);
+        const now = Date.now();
 
-                        setTimeout(async () => {
-                            await channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544> ${userMentionInfo}`);
-                            const heureParis = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
-                            console.log(`[BUMP] 2 heures se sont écoulées, le rappel a été envoyé à ${heureParis}!`);
-                        }, delay * 1000);
-                    }
+        for (const bump of pendingBumps) {
+            if (activeScheduledBumpIds.has(bump.id)) {
+                continue; // Déjà planifié en mémoire pour s'exécuter dans quelques secondes
+            }
+
+            try {
+                const bumpDate = toDateSafe(bump.bumped_at);
+                if (!bumpDate) {
+                    console.warn(`[BUMP] Date de bump invalide pour l'ID ${bump.id} (${bump.bumped_at}), bump ignoré.`);
+                    await markBumpReminderSent(bump.id);
+                    continue;
                 }
-                await markBumpReminderSent(bump.id);
+
+                // 2 heures en millisecondes = 7 200 000 ms
+                const targetTimestamp = bumpDate.getTime() + (2 * 60 * 60 * 1000);
+                const remainingMs = targetTimestamp - now;
+
+                const sendReminderNow = async () => {
+                    try {
+                        const guild = await client.guilds.fetch(bump.guild_id);
+                        if (guild) {
+                            const channel = await guild.channels.fetch(bump.channel_id);
+                            if (channel) {
+                                const userText = bump.username ? `@${bump.username}` : (bump.user_id ? `<@${bump.user_id}>` : null);
+                                const userMentionInfo = userText ? ` (Dernier bump par <@${bump.user_id}>)` : '';
+                                await channel.send(`<@&1427703047534153872> **c'est l'heure de bumper Obsydian** <:Obsydemoncouverture:1488145689916473544> ${userMentionInfo}`);
+                                const heureParis = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+                                console.log(`[BUMP] 2 heures se sont écoulées, le rappel a été envoyé à ${heureParis} (Bump ID: ${bump.id}) !`);
+                            }
+                        }
+                    } catch (err) {
+                        console.error(`❌ Erreur lors de l'envoi du message de rappel de bump (ID ${bump.id}):`, err.message);
+                    } finally {
+                        activeScheduledBumpIds.delete(bump.id);
+                        await markBumpReminderSent(bump.id);
+                    }
+                };
+
+                // Cas 1 : 2 heures ou plus se sont déjà écoulées (ex: redémarrage après l'heure)
+                if (remainingMs <= 0) {
+                    await sendReminderNow();
+                }
+                // Cas 2 : Moins d'une minute restante avant l'échéance des 2 heures
+                else if (remainingMs <= 60 * 1000) {
+                    activeScheduledBumpIds.add(bump.id);
+                    console.log(`[BUMP] Bientôt 2 heures écoulées depuis le bump (ID: ${bump.id}), envoi dans ${Math.ceil(remainingMs / 1000)}s.`);
+                    setTimeout(sendReminderNow, remainingMs);
+                }
+                // Cas 3 : Plus d'une minute restante, la prochaine exécution du cron s'en chargera
+                else {
+                    // On laisse le cron périodique (chaque minute) s'en occuper
+                }
             } catch (err) {
-                console.error(`❌ Erreur lors de l'envoi du rappel de bump (ID ${bump.id}):`, err);
-                // Marquer comme envoyé pour éviter les boucles en cas d'erreur de canal inaccessible
+                console.error(`❌ Erreur lors du traitement du rappel de bump (ID ${bump.id}):`, err);
+                activeScheduledBumpIds.delete(bump.id);
                 await markBumpReminderSent(bump.id);
             }
         }

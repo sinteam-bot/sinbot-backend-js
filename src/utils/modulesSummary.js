@@ -183,7 +183,19 @@ function getModulesStatusList() {
             icon: '🛡️',
             enabled: !!config.web?.auth?.enabled,
             viewId: 'general-config',
-            details: config.web?.auth?.enabled ? 'Clé API active' : 'Accès public libre'
+            details: config.web?.auth?.enabled ? 'Authentification requise' : 'Accès ouvert'
+        },
+        {
+            key: 'database',
+            name: 'Base de Données (Drizzle ORM)',
+            subFeature: 'Couche de données ORM multi-dialectes',
+            category: 'Système',
+            icon: '🗄️',
+            enabled: true,
+            viewId: 'general-config',
+            details: (config.database_type === 'postgres' || (config.database_url && config.database_url.startsWith('postgres')))
+                ? 'Moteur : PostgreSQL (node-postgres)'
+                : `Moteur : SQLite (${config.db_path || './data/bot.db'})`
         }
     ];
 }

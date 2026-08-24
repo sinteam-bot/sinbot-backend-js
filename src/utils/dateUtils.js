@@ -26,8 +26,13 @@ function toISOStringSafe(val, fallback = null) {
     }
 
     if (typeof val === 'string') {
-        const trimmed = val.trim();
+        let trimmed = val.trim();
         if (!trimmed) return fallback;
+        
+        // Si format SQLite "YYYY-MM-DD HH:MM:SS" ou sans fuseau, forcer UTC
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(trimmed)) {
+            trimmed = trimmed.replace(' ', 'T') + 'Z';
+        }
         
         const d = new Date(trimmed);
         if (!isNaN(d.getTime())) {
@@ -60,12 +65,23 @@ function toDateSafe(val, fallback = null) {
     if (val === null || val === undefined) return fallback;
     if (val instanceof Date) return !isNaN(val.getTime()) ? val : fallback;
     
-    try {
+    if (typeof val === 'string') {
+        let str = val.trim();
+        if (!str) return fallback;
+        // Si format SQLite "YYYY-MM-DD HH:MM:SS", forcer l'interprétation en UTC
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(str)) {
+            str = str.replace(' ', 'T') + 'Z';
+        }
+        const d = new Date(str);
+        return !isNaN(d.getTime()) ? d : fallback;
+    }
+    
+    if (typeof val === 'number') {
         const d = new Date(val);
         return !isNaN(d.getTime()) ? d : fallback;
-    } catch {
-        return fallback;
     }
+
+    return fallback;
 }
 
 /**
