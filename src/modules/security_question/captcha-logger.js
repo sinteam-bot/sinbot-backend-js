@@ -1,8 +1,5 @@
-/**
- * Utilitaire pour logger les actions du captcha dans le canal dédié
- */
-
-const CAPTCHA_CONFIG = require('../config/captcha-config.js');
+const CAPTCHA_CONFIG = require('./captcha.config.js');
+const { EmbedBuilder } = require('discord.js');
 
 /**
  * Envoyer un log dans le canal de logs captcha
@@ -12,37 +9,30 @@ const CAPTCHA_CONFIG = require('../config/captcha-config.js');
  * @param {string} color - La couleur de l'embed (optionnel)
  */
 async function sendCaptchaLog(guild, action, message, color = '#e6d9e7') {
-    // Vérifier si le logging est activé et si un canal est configuré
-    if (!CAPTCHA_CONFIG.CAPTCHA_LOG_CHANNEL) {
+    if (!CAPTCHA_CONFIG.CAPTCHA_LOG_CHANNEL || !guild) {
         console.log(`[CAPTCHA LOG] ${action}: ${message}`);
         return;
     }
     
     try {
-        const { EmbedBuilder } = require('discord.js');
-        
-        // Récupérer le canal de logs
         const logChannel = await guild.channels.fetch(CAPTCHA_CONFIG.CAPTCHA_LOG_CHANNEL);
         
-        if (!logChannel) {
-            console.log(`[CAPTCHA LOG] Canal de logs non trouvé: ${CAPTCHA_CONFIG.CAPTCHA_LOG_CHANNEL}`);
+        if (!logChannel || !logChannel.isTextBased()) {
             console.log(`[CAPTCHA LOG] ${action}: ${message}`);
             return;
         }
         
-        // Créer un embed pour le log
         const embed = new EmbedBuilder()
             .setColor(color)
             .setTitle(`⚡ ${action}`)
             .setDescription(message)
             .setTimestamp()
-            .setFooter({ text: 'Captcha System' });
+            .setFooter({ text: 'Système Captcha' });
         
-        // Envoyer le message dans le canal de logs
         await logChannel.send({ embeds: [embed] });
         console.log(`[CAPTCHA LOG] ${action}: ${message}`);
     } catch (error) {
-        console.error('❌ Erreur envoi log captcha:', error);
+        console.error('❌ Erreur envoi log captcha:', error.message);
         console.log(`[CAPTCHA LOG] ${action}: ${message}`);
     }
 }

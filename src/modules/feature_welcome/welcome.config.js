@@ -1,6 +1,4 @@
-// Configuration du système d'accueil
-// Connecté au système de configuration unifié (config.yml / variables d'environnement)
-const { getConfig, saveModuleConfig } = require('./index.js');
+const { getConfig, saveModuleConfig } = require('../../config/index.js');
 
 function getWelcomeConfig() {
     const fullConfig = getConfig();

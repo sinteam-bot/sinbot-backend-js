@@ -1,7 +1,5 @@
-// Configuration du prompt for daily message
-// Connecté au système de configuration unifié (config.yml / variables d'environnement)
-const { getConfig } = require('./index.js');
-const { toDateSafe } = require('../utils/dateUtils.js');
+const { getConfig } = require('../../config/index.js');
+const { toDateSafe } = require('../../utils/dateUtils.js');
 
 const DEFAULT_ANGLE_HUMOUR = [
     "observation du quotidien",

@@ -16,7 +16,7 @@ const { config } = require('./config/index.js');
 
 const { saveOpenAIMessage } = require("./database.js");
 const { callResponseCustom } = require("./utils/openrouter.js");
-const { requestPrompt, formatFinalPrompt } = require("./config/daily_message_config.js");
+const { requestPrompt, formatFinalPrompt } = require("./modules/feature_daily-message/daily-message.config.js");
 
 // ⬇️ ⬇️ ⬇️ CONFIGURATION ⬇️ ⬇️ ⬇️
 // Modifie cette variable avec l'ID du channel Discord où tu veux envoyer le message de test

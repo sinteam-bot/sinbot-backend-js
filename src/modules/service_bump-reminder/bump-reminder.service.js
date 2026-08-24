@@ -1,5 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
-const { Injectable } = require('../../core/index.js');
+const { Injectable, Cron } = require('../../core/index.js');
 const { BumpReminderRepository } = require('./bump-reminder.repository.js');
 const { config, getConfig } = require('../../config/index.js');
 const { toDateSafe } = require('../../utils/dateUtils.js');
@@ -186,6 +185,7 @@ class BumpReminderService {
 }
 
 Injectable()(BumpReminderService);
+Cron('* * * * *', { timezone: 'Europe/Paris', configKey: 'scheduler.tasks.bump_reminders' })(BumpReminderService.prototype, 'checkAndSendReminders');
 
 module.exports = {
     BumpReminderService

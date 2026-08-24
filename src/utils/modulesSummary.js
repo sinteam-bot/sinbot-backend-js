@@ -1,7 +1,7 @@
 const { getConfig } = require('../config/index.js');
-const CAPTCHA_CONFIG = require('../config/captcha-config.js');
-const WELCOME_CONFIG = require('../config/welcome-config.js');
-const XP_CONFIG = require('../config/xp-config.js');
+const CAPTCHA_CONFIG = require('../modules/security_question/captcha.config.js');
+const WELCOME_CONFIG = require('../modules/feature_welcome/welcome.config.js');
+const XP_CONFIG = require('../modules/feature_xp-level/xp.config.js');
 
 /**
  * Récupère la liste complète et structurée de tous les modules et leur statut

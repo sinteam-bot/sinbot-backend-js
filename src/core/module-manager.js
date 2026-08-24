@@ -1,6 +1,8 @@
 const express = require('express');
+const cron = require('node-cron');
 const { container } = require('./container.js');
 const { eventBus } = require('./event-bus.js');
+const { config, getConfig } = require('../config/index.js');
 
 /**
  * Gestionnaire et chargeur de modules modulaire (style NestJS / Angular)
@@ -12,6 +14,7 @@ class ModuleManager {
         this.modules = [];
         this.apiRouter = express.Router();
         this.discordClient = null;
+        this.cronJobs = [];
     }
 
     /**
@@ -69,8 +72,8 @@ class ModuleManager {
         if (metadata.providers) {
             for (const ProviderClass of metadata.providers) {
                 this.container.register(ProviderClass);
-                // Pré-instanciation pour validation
-                this.container.resolve(ProviderClass);
+                const providerInstance = this.container.resolve(ProviderClass);
+                this._bindCronTasks(ProviderClass, providerInstance);
             }
         }
 
@@ -95,6 +98,7 @@ class ModuleManager {
         // 5. Enregistrer et instancier le module lui-même
         this.container.register(ModuleClass);
         const moduleInstance = this.container.resolve(ModuleClass);
+        this._bindCronTasks(ModuleClass, moduleInstance);
         this.modules.push({ name: moduleName, instance: moduleInstance, metadata });
     }
 
@@ -146,10 +150,73 @@ class ModuleManager {
     }
 
     /**
+     * Branche les tâches planifiées @Cron
+     * @private
+     */
+    _bindCronTasks(TargetClass, targetInstance) {
+        const cronTasks = TargetClass.__cronTasks || [];
+        if (cronTasks.length === 0) return;
+
+        const schedulerConfig = (getConfig ? getConfig() : config).scheduler || {};
+        const defaultTimezone = schedulerConfig.timezone || 'Europe/Paris';
+
+        for (const task of cronTasks) {
+            const options = task.options || {};
+            const timezone = options.timezone || defaultTimezone;
+
+            // Fonction de vérification de l'activation
+            const isEnabled = () => {
+                const currentConf = getConfig ? getConfig() : config;
+                if (currentConf.scheduler?.enabled === false) return false;
+
+                if (options.configKey) {
+                    const keys = options.configKey.split('.');
+                    let val = currentConf;
+                    for (const k of keys) {
+                        if (val === undefined || val === null) break;
+                        val = val[k];
+                    }
+                    if (val && typeof val === 'object' && val.enabled === false) return false;
+                    if (val === false) return false;
+                }
+                return true;
+            };
+
+            const job = cron.schedule(task.cronTime, async () => {
+                if (!isEnabled()) return;
+                try {
+                    await targetInstance[task.handlerName](this.discordClient);
+                } catch (err) {
+                    console.error(`❌ [Cron Error] ${TargetClass.name}.${task.handlerName}:`, err);
+                }
+            }, { timezone });
+
+            this.cronJobs.push({
+                className: TargetClass.name,
+                handlerName: task.handlerName,
+                cronTime: task.cronTime,
+                job
+            });
+
+            console.log(`  ⏰ Tâche Cron planifiée : "${task.cronTime}" (${timezone}) -> ${TargetClass.name}.${task.handlerName}`);
+        }
+    }
+
+    /**
      * Retourne le routeur Express
      */
     getRouter() {
         return this.apiRouter;
+    }
+
+    /**
+     * Arrête toutes les tâches cron en cours
+     */
+    stopCronJobs() {
+        for (const c of this.cronJobs) {
+            c.job?.stop?.();
+        }
+        this.cronJobs = [];
     }
 }
 

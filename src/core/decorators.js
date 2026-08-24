@@ -119,6 +119,28 @@ function Command(options = {}) {
     };
 }
 
+/**
+ * Décorateur de Tâche Planifiée (@Cron)
+ * Usage:
+ *   @Cron('0 21 * * *', { timezone: 'Europe/Paris', configKey: 'scheduler.tasks.daily_preview' })
+ *   ou Cron('0 21 * * *', { ... })(MyService.prototype, 'myMethod')
+ */
+function Cron(cronTime, options = {}) {
+    return function (target, propertyKey, descriptor) {
+        const targetClass = typeof target === 'function' ? target : target.constructor;
+        
+        if (!targetClass.__cronTasks) {
+            targetClass.__cronTasks = [];
+        }
+        targetClass.__cronTasks.push({
+            cronTime,
+            handlerName: propertyKey,
+            options
+        });
+        return descriptor;
+    };
+}
+
 module.exports = {
     Module,
     Injectable,
@@ -129,5 +151,6 @@ module.exports = {
     Put,
     Delete,
     OnEvent,
-    Command
+    Command,
+    Cron
 };

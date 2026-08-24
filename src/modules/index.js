@@ -5,6 +5,7 @@ const { StartupNotifierModule } = require('./notifier_startup/startup-notifier.m
 const { BumpReminderModule } = require('./service_bump-reminder/bump-reminder.module.js');
 const { XPLevelModule } = require('./feature_xp-level/xp-level.module.js');
 const { DailyMessageModule } = require('./feature_daily-message/daily-message.module.js');
+const { WelcomeModule } = require('./feature_welcome/welcome.module.js');
 
 const appModules = [
     RoadToInfiniteModule,
@@ -13,7 +14,8 @@ const appModules = [
     StartupNotifierModule,
     BumpReminderModule,
     XPLevelModule,
-    DailyMessageModule
+    DailyMessageModule,
+    WelcomeModule
 ];
 
 module.exports = {
@@ -24,5 +26,6 @@ module.exports = {
     StartupNotifierModule,
     BumpReminderModule,
     XPLevelModule,
-    DailyMessageModule
+    DailyMessageModule,
+    WelcomeModule
 };

@@ -1,8 +1,4 @@
-// ============================================
-// CONFIGURATION DU SYSTÈME XP
-// Connecté au système de configuration unifié (config.yml / variables d'environnement)
-// ============================================
-const { getConfig, saveModuleConfig } = require('./index.js');
+const { getConfig, saveModuleConfig } = require('../../config/index.js');
 
 function getXpConfig() {
     const fullConfig = getConfig();

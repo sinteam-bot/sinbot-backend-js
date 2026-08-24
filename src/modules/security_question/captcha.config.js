@@ -1,8 +1,4 @@
-// ============================================
-// CONFIGURATION DU SYSTÈME DE CAPTCHA
-// Connecté au système de configuration unifié (config.yml / variables d'environnement)
-// ============================================
-const { getConfig, saveModuleConfig } = require('./index.js');
+const { getConfig, saveModuleConfig } = require('../../config/index.js');
 
 function getCaptchaConfig() {
     const fullConfig = getConfig();
@@ -11,7 +7,6 @@ function getCaptchaConfig() {
     const msgs = c.messages || {};
     const logMsgs = c.log_messages || {};
 
-    // Résoudre le format des poids d'opérations s'il s'agit d'un tableau YAML (ex: [{ "+": 0.6 }, ...])
     let operationWeights = { '+': 0.6, '-': 0.3, '*': 0.1 };
     if (math.operation_weights) {
         if (Array.isArray(math.operation_weights)) {

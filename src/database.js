@@ -3,8 +3,8 @@ const { db, schema, rawClient, isPostgres, isSqlite, dialect } = require('./db/i
 const { toISOStringSafe } = require('./utils/dateUtils.js');
 
 // Configuration XP et Captcha
-const XP_CONFIG = require("./config/xp-config.js");
-const CAPTCHA_CONFIG = require("./config/captcha-config.js");
+const XP_CONFIG = require("./modules/feature_xp-level/xp.config.js");
+const CAPTCHA_CONFIG = require("./modules/security_question/captcha.config.js");
 
 // ============================================
 // ADAPTATEUR DE COMPATIBILITÉ POOL

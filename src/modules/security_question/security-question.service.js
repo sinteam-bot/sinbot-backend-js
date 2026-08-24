@@ -2,7 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 const { Injectable } = require('../../core/index.js');
 const { SecurityQuestionRepository } = require('./security-question.repository.js');
 const { config, getConfig } = require('../../config/index.js');
-const { sendCaptchaLog } = require('../../utils/captchaLogger.js');
+const { sendCaptchaLog } = require('./captcha-logger.js');
 const logger = require('../../utils/logger.js');
 
 class SecurityQuestionService {
@@ -134,10 +134,10 @@ class SecurityQuestionService {
 
     async triggerWelcome(member) {
         try {
-            const { handleWelcome } = require('../../events/guildMemberAdd.js');
-            if (typeof handleWelcome === 'function') {
-                await handleWelcome(member);
-            }
+            const { container } = require('../../core/container.js');
+            const { WelcomeService } = require('../feature_welcome/welcome.service.js');
+            const welcomeService = container.resolve(WelcomeService);
+            await welcomeService.handleWelcome(member);
         } catch (err) {
             console.error('❌ [SecurityQuestion] Erreur déclenchement accueil:', err);
         }

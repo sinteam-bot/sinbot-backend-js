@@ -1,4 +1,3 @@
-const { setupScheduledTasks } = require("../utils/scheduledTasks.js");
 const { printStartupModulesTable } = require("../utils/modulesSummary.js");
 
 module.exports = {
@@ -21,8 +20,5 @@ module.exports = {
         
         // Définir le statut du bot
         client.user.setActivity('les commandes !help', { type: 'LISTENING' });
-        
-        // Démarrer les tâches planifiées
-        setupScheduledTasks(client);
     }
 };

@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { config } = require('../config/index.js');
 const { callChatGPT, calculateCost, estimateTokens } = require("../utils/openrouter.js");
-const { getHumour, getEcriture, getNarratif, getContrainte } = require("../config/daily_message_config.js");
+const { getHumour, getEcriture, getNarratif, getContrainte } = require("../modules/feature_daily-message/daily-message.config.js");
 
 //const { logInfo, logError } = require('../database');
 

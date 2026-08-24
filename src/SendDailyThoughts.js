@@ -3,7 +3,7 @@ const { config } = require('./config/index.js');
 const { Client, GatewayIntentBits, Collection, EmbedBuilder } = require('discord.js');
 const express = require('express');
 const fs = require('fs');
-const { buildPrompt, requestPrompt } = require("./config/daily_message_config.js");
+const { buildPrompt, requestPrompt } = require("./modules/feature_daily-message/daily-message.config.js");
 const { callResponseCustom } = require("./utils/openrouter.js");
 
 const { logUserEvent, getUserEvents, getGlobalStats } = require("./database.js");
