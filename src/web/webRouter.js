@@ -4,6 +4,7 @@ const fs = require('fs');
 const { ChannelType } = require('discord.js');
 const logger = require("../utils/logger.js");
 const db = require("../database.js");
+const { toISOStringSafe } = require("../utils/dateUtils.js");
 
 function createWebRouter(client) {
     const router = express.Router();
@@ -331,9 +332,9 @@ function createWebRouter(client) {
                             roleColor: roleColor
                         },
                         content: msg.content || '',
-                        createdAt: msg.createdAt ? msg.createdAt.toISOString() : new Date().toISOString(),
+                        createdAt: toISOStringSafe(msg.createdAt, new Date().toISOString()),
                         pinned: msg.pinned,
-                        editedAt: msg.editedAt ? msg.editedAt.toISOString() : null,
+                        editedAt: toISOStringSafe(msg.editedAt, null),
                         attachments: Array.from(msg.attachments.values()).map(att => ({
                             id: att.id,
                             name: att.name,
@@ -507,7 +508,7 @@ function createWebRouter(client) {
                 data: {
                     id: sentMessage.id,
                     content: sentMessage.content,
-                    createdAt: sentMessage.createdAt.toISOString()
+                    createdAt: toISOStringSafe(sentMessage.createdAt, new Date().toISOString())
                 }
             });
         } catch (error) {
@@ -606,7 +607,7 @@ function createWebRouter(client) {
                     memberCount: th.memberCount || 0,
                     archived: !!th.archived,
                     locked: !!th.locked,
-                    createdAt: th.createdAt ? th.createdAt.toISOString() : null,
+                    createdAt: toISOStringSafe(th.createdAt, null),
                     lastMessageId: th.lastMessageId,
                     preview: starterContent
                 };
@@ -705,7 +706,7 @@ function createWebRouter(client) {
                 }
 
                 const editedMessage = await message.edit(editedContent);
-                editedAt = editedMessage.editedAt ? editedMessage.editedAt.toISOString() : new Date().toISOString();
+                editedAt = toISOStringSafe(editedMessage.editedAt, new Date().toISOString());
                 logger.info(`Message ${messageId} modifié sur #${channel.name} par interface Web`, 'WEB');
             }
 
@@ -877,8 +878,8 @@ function createWebRouter(client) {
                         tag: member.user.tag,
                         avatar: getUserAvatar(member.user, member),
                         isBot: member.user.bot,
-                        joinedAt: member.joinedAt ? member.joinedAt.toISOString() : null,
-                        createdAt: member.user.createdAt ? member.user.createdAt.toISOString() : null,
+                        joinedAt: toISOStringSafe(member.joinedAt, null),
+                        createdAt: toISOStringSafe(member.user?.createdAt, null),
                         highestRole: highestRole ? { id: highestRole.id, name: highestRole.name, color: roleColor } : null,
                         roles: roles,
                         presence: member.presence ? member.presence.status : 'offline'

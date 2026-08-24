@@ -45,7 +45,7 @@ function getCaptchaConfig() {
         FAIL_MESSAGE: msgs.fail_message ?? msgs.FAIL_MESSAGE ?? 'Mauvaise réponse, tu n\'as plus que {attempts} tentative(s) <:Obsydemoncouverture:1488145689916473544>.',
         TIMEOUT_MESSAGE: msgs.timeout_message ?? msgs.TIMEOUT_MESSAGE ?? '⏰ Temps écoulé ! Le captcha a expiré. Veuillez réessayer en rejoignant à nouveau le serveur.',
         MAX_ATTEMPTS_MESSAGE: msgs.max_attempts_message ?? msgs.MAX_ATTEMPTS_MESSAGE ?? '❌ Trop de tentatives incorrectes. Veuillez quitter et rejoindre le serveur pour réessayer.',
-        ALREADY_VERIFIED: msgs.already_verified ?? msALREADY_VERIFIED ?? '✅ Tu as déjà été vérifié !',
+        ALREADY_VERIFIED: msgs.already_verified ?? msgs.ALREADY_VERIFIED ?? '✅ Tu as déjà été vérifié !',
         welcome_message: msgs.welcome_message ?? 'Bienvenue sur le serveur ! Pour accéder au reste du serveur, tu dois résoudre ce captcha :',
         captcha_question: msgs.captcha_question ?? 'Combien font {num1} {operator} {num2} ?',
         instructions: msgs.instructions ?? 'Réponds avec le résultat **en chiffres** (exemple: 18) dans ce canal.',

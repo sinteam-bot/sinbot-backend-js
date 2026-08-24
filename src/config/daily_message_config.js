@@ -1,6 +1,7 @@
 // Configuration du prompt for daily message
 // Connecté au système de configuration unifié (config.yml / variables d'environnement)
 const { getConfig } = require('./index.js');
+const { toDateSafe } = require('../utils/dateUtils.js');
 
 const DEFAULT_ANGLE_HUMOUR = [
     "observation du quotidien",
@@ -62,8 +63,9 @@ function pickRandom(arr, n) {
 }
 
 function getDayOfYear(date = new Date()) {
-    const start = new Date(date.getFullYear(), 0, 0);
-    const diff = date - start;
+    const d = toDateSafe(date, new Date());
+    const start = new Date(d.getFullYear(), 0, 0);
+    const diff = d - start;
     const oneDay = 1000 * 60 * 60 * 24;
     return Math.floor(diff / oneDay);
 }
@@ -84,8 +86,9 @@ function getDailyVariation(date = new Date()) {
 }
 
 function buildPrompt(date = new Date()) {
-    const { angle, style, dispositif, contrainte } = getDailyVariation(date);
-    const dateStr = date.toISOString().slice(0, 10);
+    const d = toDateSafe(date, new Date());
+    const { angle, style, dispositif, contrainte } = getDailyVariation(d);
+    const dateStr = d.toISOString().slice(0, 10);
     const aiConf = getAiConfig();
 
     const customPromptTemplate = aiConf.prompt;
@@ -105,10 +108,11 @@ function buildPrompt(date = new Date()) {
 }
 
 function requestPrompt(date = new Date()) {
-    const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' });
-    const day = date.getDate();
-    const monthName = date.toLocaleDateString('fr-FR', { month: 'long' });
-    const year = date.getFullYear();
+    const d = toDateSafe(date, new Date());
+    const dayName = d.toLocaleDateString('fr-FR', { weekday: 'long' });
+    const day = d.getDate();
+    const monthName = d.toLocaleDateString('fr-FR', { month: 'long' });
+    const year = d.getFullYear();
     const fullDate = `${dayName} ${day} ${monthName} ${year}`;
 
     const generateprompt = `Tu es un générateur de prompts créatifs pour messages Discord.
@@ -141,14 +145,15 @@ function requestPrompt(date = new Date()) {
 /**
  * Génère un prompt final formaté avec la date du jour
  * @param {string} rawPrompt - Le prompt généré par l'IA
- * @param {Date} date - Date à utiliser
+ * @param {Date|string|number} date - Date à utiliser
  * @returns {object} - {prompt: string, instruction: string}
  */
 function formatFinalPrompt(rawPrompt, date = new Date()) {
-    const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' });
-    const day = date.getDate();
-    const monthName = date.toLocaleDateString('fr-FR', { month: 'long' });
-    const year = date.getFullYear();
+    const d = toDateSafe(date, new Date());
+    const dayName = d.toLocaleDateString('fr-FR', { weekday: 'long' });
+    const day = d.getDate();
+    const monthName = d.toLocaleDateString('fr-FR', { month: 'long' });
+    const year = d.getFullYear();
     const fullDate = `${dayName} ${day} ${monthName} ${year}`;
 
     return {

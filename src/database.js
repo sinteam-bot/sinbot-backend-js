@@ -2,6 +2,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const { config } = require('./config/index.js');
+const { toISOStringSafe } = require('./utils/dateUtils.js');
 
 // Configuration du captcha
 const CAPTCHA_CONFIG = require("./config/captcha-config.js");
@@ -1016,8 +1017,8 @@ async function registerNewMember(member) {
             member.user.tag,
             member.displayName || member.user.username,
             member.user.displayAvatarURL({ size: 512 }),
-            member.joinedAt,
-            member.user.createdAt,
+            toISOStringSafe(member.joinedAt),
+            toISOStringSafe(member.user.createdAt),
             member.user.bot ? 1 : 0
         ]);
         console.log(`👤 Membre enregistré: ${member.user.tag}`);
@@ -1822,7 +1823,7 @@ async function saveDumpUser(user) {
             user.bot ? 1 : 0,
             user.displayAvatarURL ? user.displayAvatarURL({ size: 512 }) : null,
             user.bannerURL ? user.bannerURL({ size: 512 }) : null,
-            user.createdAt ? user.createdAt.toISOString() : new Date().toISOString()
+            toISOStringSafe(user.createdAt, new Date().toISOString())
         ]);
     } catch (error) {
         console.error('❌ Erreur saveDumpUser:', error);
@@ -1852,7 +1853,7 @@ async function saveDumpChannel(channel) {
             channel.position || 0,
             channel.topic || null,
             channel.nsfw ? 1 : 0,
-            channel.createdAt ? channel.createdAt.toISOString() : new Date().toISOString()
+            toISOStringSafe(channel.createdAt, new Date().toISOString())
         ]);
     } catch (error) {
         console.error('❌ Erreur saveDumpChannel:', error);
@@ -1882,7 +1883,7 @@ async function saveDumpThread(thread) {
             thread.locked ? 1 : 0,
             thread.messageCount || 0,
             thread.memberCount || 0,
-            thread.createdAt ? thread.createdAt.toISOString() : new Date().toISOString()
+            toISOStringSafe(thread.createdAt, new Date().toISOString())
         ]);
     } catch (error) {
         console.error('❌ Erreur saveDumpThread:', error);
@@ -1934,7 +1935,7 @@ async function saveDumpMessagesBatch(messages) {
                 JSON.stringify(embeds),
                 JSON.stringify(attachments),
                 JSON.stringify(reactions),
-                msg.createdAt ? msg.createdAt.toISOString() : new Date().toISOString()
+                toISOStringSafe(msg.createdAt, new Date().toISOString())
             ]);
         }
         await client.query('COMMIT');
@@ -2063,7 +2064,7 @@ async function upsertDiscordChannel(channel) {
             channel.position || 0,
             channel.topic || null,
             channel.nsfw ? 1 : 0,
-            channel.createdAt ? channel.createdAt.toISOString() : new Date().toISOString()
+            toISOStringSafe(channel.createdAt, new Date().toISOString())
         ]);
     } catch (e) {
         console.error(`❌ Erreur upsertDiscordChannel(${channel.id}):`, e);
@@ -2104,7 +2105,7 @@ async function upsertDiscordRole(role) {
             role.permissions?.bitfield?.toString() || '0',
             role.managed ? 1 : 0,
             role.mentionable ? 1 : 0,
-            role.createdAt ? role.createdAt.toISOString() : new Date().toISOString()
+            toISOStringSafe(role.createdAt, new Date().toISOString())
         ]);
     } catch (e) {
         console.error(`❌ Erreur upsertDiscordRole(${role.id}):`, e);
@@ -2143,7 +2144,7 @@ async function upsertDiscordThread(thread) {
             thread.locked ? 1 : 0,
             thread.messageCount || 0,
             thread.memberCount || 0,
-            thread.createdAt ? thread.createdAt.toISOString() : new Date().toISOString()
+            toISOStringSafe(thread.createdAt, new Date().toISOString())
         ]);
     } catch (e) {
         console.error(`❌ Erreur upsertDiscordThread(${thread.id}):`, e);
@@ -2196,7 +2197,7 @@ async function updateDiscordMessage(message) {
             JSON.stringify(embeds),
             JSON.stringify(attachments),
             JSON.stringify(reactions),
-            message.createdAt ? message.createdAt.toISOString() : new Date().toISOString()
+            toISOStringSafe(message.createdAt, new Date().toISOString())
         ]);
     } catch (e) {
         console.error(`❌ Erreur updateDiscordMessage(${message.id}):`, e);

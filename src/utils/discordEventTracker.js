@@ -1,5 +1,6 @@
 const db = require('../database.js');
 const logger = require('./logger.js');
+const { toISOStringSafe } = require('./dateUtils.js');
 
 /**
  * Initialise les écouteurs pour tous les événements Discord (Discord.js v14)
@@ -68,13 +69,13 @@ function initDiscordEventTracker(client) {
 
     client.on('channelPinsUpdate', async (channel, time) => {
         try {
-            const summary = `Épingles mises à jour dans #${channel.name}`;
+            const summary = `Épingles mises à jour dans #${channel.name || channel.id}`;
             logger.info(`[channelPinsUpdate] ${summary}`, 'EVENT');
             await db.archiveDiscordEvent('channelPinsUpdate', {
                 guildId: channel.guild?.id || channel.guildId,
                 targetId: channel.id,
                 summary,
-                data: { channelId: channel.id, time: time ? time.toISOString() : null }
+                data: { channelId: channel.id, time: toISOStringSafe(time) }
             });
         } catch (e) {
             console.error('Erreur tracker channelPinsUpdate:', e);
@@ -573,7 +574,12 @@ function initDiscordEventTracker(client) {
                 guildId: scheduledEvent.guild?.id,
                 targetId: scheduledEvent.id,
                 summary,
-                data: { id: scheduledEvent.id, name: scheduledEvent.name, scheduledStartTime: scheduledEvent.scheduledStartTime }
+                data: { 
+                    id: scheduledEvent.id, 
+                    name: scheduledEvent.name, 
+                    scheduledStartTime: toISOStringSafe(scheduledEvent.scheduledStartTime),
+                    scheduledEndTime: toISOStringSafe(scheduledEvent.scheduledEndTime)
+                }
             });
         } catch (e) {
             console.error('Erreur tracker guildScheduledEventCreate:', e);

@@ -3,6 +3,7 @@ const { saveOpenAIMessage, getBotState, setBotState } = require("../database.js"
 const { callResponseCustom } = require("./openrouter.js");
 const { requestPrompt, formatFinalPrompt } = require("../config/daily_message_config.js");
 const { config } = require("../config/index.js");
+const { getParisHour, getParisDateString, toISOStringSafe } = require("./dateUtils.js");
 
 // Cache en mémoire des brouillons de messages en attente de validation
 const pendingDrafts = new Map();
@@ -11,42 +12,6 @@ const pendingDrafts = new Map();
 const PREVIEW_CHANNEL_ID = config.daily_message?.preview_channel_id || config.startup_notifier?.channel_id || process.env.LOG_CHANNEL_ID;
 const TARGET_CHANNEL_ID = config.daily_message?.channel_id || process.env.DAILY_MESSAGE_CHANNEL_ID;
 const TARGET_GUILD_ID = config.discord?.guild_id || process.env.GUILD_ID;
-
-/**
- * Récupère l'heure actuelle au fuseau horaire de Paris
- * @returns {number} Heure de 0 à 23
- */
-function getParisHour() {
-    try {
-        const formatter = new Intl.DateTimeFormat('fr-FR', {
-            timeZone: 'Europe/Paris',
-            hour: 'numeric',
-            hour12: false
-        });
-        return parseInt(formatter.format(new Date()), 10);
-    } catch {
-        return new Date().getHours();
-    }
-}
-
-/**
- * Récupère la date actuelle au format YYYY-MM-DD (fuseau Paris)
- * @param {Date} date
- * @returns {string} Date au format YYYY-MM-DD
- */
-function getParisDateString(date = new Date()) {
-    try {
-        const formatter = new Intl.DateTimeFormat('fr-CA', {
-            timeZone: 'Europe/Paris',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        return formatter.format(date);
-    } catch {
-        return date.toISOString().slice(0, 10);
-    }
-}
 
 /**
  * Détermine la date cible pour le message du jour.
