@@ -139,9 +139,9 @@ const PG_TABLES_DDL = `
     CREATE TABLE IF NOT EXISTS openaimessages (
         id SERIAL PRIMARY KEY,
         msgid TEXT UNIQUE NOT NULL,
-        prompt TEXT NOT NULL,
+        prompt TEXT,
         instruction TEXT,
-        model TEXT NOT NULL,
+        model TEXT,
         tokeninput INTEGER DEFAULT 0,
         tokenoutput INTEGER DEFAULT 0,
         content TEXT,

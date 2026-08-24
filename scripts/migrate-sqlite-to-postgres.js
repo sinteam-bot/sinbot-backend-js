@@ -193,9 +193,9 @@ async function ensurePgTables(pgClient) {
         CREATE TABLE IF NOT EXISTS openaimessages (
             id SERIAL PRIMARY KEY,
             msgid TEXT UNIQUE NOT NULL,
-            prompt TEXT NOT NULL,
+            prompt TEXT,
             instruction TEXT,
-            model TEXT NOT NULL,
+            model TEXT,
             tokeninput INTEGER DEFAULT 0,
             tokenoutput INTEGER DEFAULT 0,
             content TEXT,
@@ -205,6 +205,21 @@ async function ensurePgTables(pgClient) {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- Assouplir les contraintes si la table existait déjà avec NOT NULL
+        DO $$ 
+        BEGIN 
+            ALTER TABLE openaimessages ALTER COLUMN prompt DROP NOT NULL;
+        EXCEPTION 
+            WHEN OTHERS THEN NULL;
+        END $$;
+
+        DO $$ 
+        BEGIN 
+            ALTER TABLE openaimessages ALTER COLUMN model DROP NOT NULL;
+        EXCEPTION 
+            WHEN OTHERS THEN NULL;
+        END $$;
 
         CREATE TABLE IF NOT EXISTS conversation_contexts (
             id SERIAL PRIMARY KEY,
