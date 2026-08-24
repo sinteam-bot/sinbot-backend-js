@@ -260,7 +260,8 @@ app.get('/health', (req, res) => {
     });
 });
 // SPA Fallback pour le routage des pages Nuxt
-app.get('*', (req, res, next) => {
+app.use((req, res, next) => {
+    if (req.method !== 'GET') return next();
     if (req.path.startsWith('/api') || req.path.startsWith('/webhook') || req.path === '/health') {
         return next();
     }
