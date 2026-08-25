@@ -43,7 +43,7 @@ function getModulesStatusList() {
             icon: '🔔',
             enabled: isScheduler && (config.scheduler?.tasks?.bump_reminders?.enabled !== false),
             parent: 'scheduler',
-            viewId: 'general-config',
+            viewId: 'module-bump-reminder',
             details: `Cron : ${config.scheduler?.tasks?.bump_reminders?.cron || '* * * * *'}`
         },
         {

@@ -15,11 +15,20 @@ class BumpReminderService {
         const currentConfig = getConfig ? getConfig() : config;
         const schedulerConf = currentConfig.scheduler || {};
         const taskConf = schedulerConf.tasks?.bump_reminders || {};
+        const bumpConf = currentConfig.bump_reminders || {};
         return {
-            enabled: schedulerConf.enabled !== false && taskConf.enabled !== false,
-            role_id: taskConf.role_id || currentConfig.bump_reminders?.role_id,
-            channel_id: taskConf.channel_id || currentConfig.bump_reminders?.channel_id,
-            ...taskConf
+            enabled: schedulerConf.enabled !== false && taskConf.enabled !== false && bumpConf.enabled !== false,
+            role_id: bumpConf.role_id || taskConf.role_id || '',
+            channel_id: bumpConf.channel_id || taskConf.channel_id || '',
+            reminder_cooldown_hours: bumpConf.reminder_cooldown_hours || 2,
+            mention_here: bumpConf.mention_here !== false,
+            messages: {
+                title: bumpConf.messages?.title || "⏰ C'est l'heure du Bump !",
+                description: bumpConf.messages?.description || "2 heures se sont écoulées depuis le dernier bump !\n\nTapez </bump:947088344167366698> pour faire monter le serveur sur Disboard 🚀",
+                color: bumpConf.messages?.color || bumpConf.color || "#f2c7ce"
+            },
+            ...taskConf,
+            ...bumpConf
         };
     }
 
@@ -70,7 +79,8 @@ class BumpReminderService {
                 const channelId = message.channel.id;
 
                 const bump = await this.repo.saveBump(guildId, channelId, bumperId, bumperUsername);
-                const nextReminderDate = new Date(Date.now() + 2 * 60 * 60 * 1000).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+                const cooldownHours = Number(conf.reminder_cooldown_hours) || 2;
+                const nextReminderDate = new Date(Date.now() + cooldownHours * 60 * 60 * 1000).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
                 const userLabel = bumperUsername ? `@${bumperUsername}` : (bumperId ? `<@${bumperId}>` : 'Inconnu');
 
                 console.log(`[BUMP] Bump détecté par ${userLabel}. Sauvegardé en BDD (ID: ${bump.id}). Rappel prévu pour : ${nextReminderDate}`);
@@ -89,20 +99,37 @@ class BumpReminderService {
             const pendingList = await this.repo.getPendingReminders();
             if (!pendingList || pendingList.length === 0) return;
 
-            const now = Date.now();
+            // pendingList est trié par id DESC (le plus récent en premier)
+            const latestBump = pendingList[0];
 
-            for (const bump of pendingList) {
-                const bumpDate = toDateSafe(bump.bumped_at);
-                if (!bumpDate) continue;
-
-                // 2 heures en millisecondes = 7 200 000 ms
-                const targetTimestamp = bumpDate.getTime() + (2 * 60 * 60 * 1000);
-                const remainingMs = targetTimestamp - now;
-
-                // Si l'heure de rappel est arrivée ou dépassée
-                if (remainingMs <= 0) {
-                    await this.sendBumpReminder(client, bump);
+            // Marquer tous les anciens bumps non rappelés comme traités pour éviter le spam
+            if (pendingList.length > 1) {
+                for (let i = 1; i < pendingList.length; i++) {
+                    await this.repo.markReminderSent(pendingList[i].id);
                 }
+            }
+
+            const now = Date.now();
+            const bumpDate = toDateSafe(latestBump.bumped_at);
+            if (!bumpDate) {
+                await this.repo.markReminderSent(latestBump.id);
+                return;
+            }
+
+            const cooldownHours = Number(conf.reminder_cooldown_hours) || 2;
+            const targetTimestamp = bumpDate.getTime() + (cooldownHours * 60 * 60 * 1000);
+            const remainingMs = targetTimestamp - now;
+
+            // Si le rappel est dû
+            if (remainingMs <= 0) {
+                // Si le bump est trop ancien (> 24h), on l'acquitte sans spammer
+                const isTooOld = (now - targetTimestamp) > (24 * 60 * 60 * 1000);
+                if (isTooOld) {
+                    await this.repo.markReminderSent(latestBump.id);
+                    return;
+                }
+
+                await this.sendBumpReminder(client, latestBump);
             }
         } catch (error) {
             console.error('❌ [BUMP Service] Erreur checkAndSendReminders:', error);
@@ -132,19 +159,19 @@ class BumpReminderService {
                 return;
             }
 
-            const roleMention = conf.role_id ? `<@&${conf.role_id}>` : '@here';
+            const roleMention = conf.role_id ? `<@&${conf.role_id}>` : (conf.mention_here !== false ? '@here' : '');
+            const title = conf.messages?.title || "⏰ C'est l'heure du Bump !";
+            const description = conf.messages?.description || "2 heures se sont écoulées depuis le dernier bump !\n\nTapez </bump:947088344167366698> pour faire monter le serveur sur Disboard 🚀";
+            const color = conf.messages?.color || conf.color || '#f2c7ce';
 
             const embed = new EmbedBuilder()
-                .setColor('#f2c7ce')
-                .setTitle('⏰ C\'est l\'heure du Bump !')
-                .setDescription(
-                    `2 heures se sont écoulées depuis le dernier bump !\n\n` +
-                    `Tapez </bump:947088344167366698> pour faire monter le serveur sur Disboard 🚀`
-                )
+                .setColor(color)
+                .setTitle(title)
+                .setDescription(description)
                 .setTimestamp();
 
             await channel.send({
-                content: `🔔 ${roleMention}`,
+                content: roleMention ? `🔔 ${roleMention}` : undefined,
                 embeds: [embed]
             });
 
@@ -165,13 +192,16 @@ class BumpReminderService {
      */
     async getBumpStatus(guildId = null) {
         const lastBump = await this.repo.getLastBump(guildId);
-        const history = await this.repo.getHistory(10);
+        const history = await this.repo.getHistory(20);
         const conf = this.getConfig();
+
+        const cooldownHours = Number(conf.reminder_cooldown_hours) || 2;
 
         if (!lastBump) {
             return {
                 enabled: conf.enabled,
                 hasBump: false,
+                config: conf,
                 message: 'Aucun bump enregistré pour le moment.',
                 history
             };
@@ -179,15 +209,17 @@ class BumpReminderService {
 
         const now = Date.now();
         const bumpDate = toDateSafe(lastBump.bumped_at);
-        const targetTimestamp = bumpDate ? bumpDate.getTime() + (2 * 60 * 60 * 1000) : now;
+        const targetTimestamp = bumpDate ? bumpDate.getTime() + (cooldownHours * 60 * 60 * 1000) : now;
         const remainingSeconds = Math.max(0, Math.floor((targetTimestamp - now) / 1000));
         const isReady = remainingSeconds <= 0;
 
         return {
             enabled: conf.enabled,
             hasBump: true,
+            config: conf,
             lastBump: {
                 id: lastBump.id,
+                channelId: lastBump.channel_id,
                 bumperId: lastBump.bumper_id,
                 bumperUsername: lastBump.bumper_username,
                 bumpedAt: lastBump.bumped_at,
@@ -195,6 +227,7 @@ class BumpReminderService {
             },
             isReady,
             remainingSeconds,
+            targetTimestamp,
             history
         };
     }

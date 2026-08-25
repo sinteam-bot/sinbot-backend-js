@@ -90,61 +90,12 @@ function createWebRouter(client) {
     });
 
     // ============================================
-    // 2. LISTE DES SALONS (RÉELS + CATÉGORIE VIRTUELLE)
+    // 2. LISTE DES SALONS
     // ============================================
     router.get('/channels', async (req, res) => {
         try {
             const guild = await getGuild();
-            const virtualCategory = {
-                id: 'cat-virtual-chienne-bot',
-                name: 'CHIENNE BOT',
-                isVirtual: true,
-                position: -100,
-                channels: [
-                    {
-                        id: 'virtual-logs',
-                        name: '📜-logs',
-                        type: 'virtual',
-                        icon: 'scroll',
-                        topic: 'Logs et événements du bot en temps réel',
-                        unread: false
-                    },
-                    {
-                        id: 'virtual-config',
-                        name: '⚙️-config',
-                        type: 'virtual',
-                        icon: 'gear',
-                        topic: 'Configuration générale et modules du bot (Accueil, Captcha, XP, Messages)',
-                        unread: false
-                    },
-                    {
-                        id: 'virtual-users',
-                        name: '👥-users',
-                        type: 'virtual',
-                        icon: 'users',
-                        topic: 'Liste des membres avec filtres avancés par rôles et statistiques XP',
-                        unread: false
-                    },
-                    {
-                        id: 'virtual-daily-messages',
-                        name: '🌅-daily-messages',
-                        type: 'virtual',
-                        icon: 'sun',
-                        topic: 'Historique des Daily Messages avec métadonnées de génération IA, prompts et tokens',
-                        unread: false
-                    },
-                    {
-                        id: 'virtual-captcha-logs',
-                        name: '🛡️-captcha-logs',
-                        type: 'virtual',
-                        icon: 'shield',
-                        topic: 'Historique des vérifications Captcha, tentatives des membres et logs de sécurité',
-                        unread: false
-                    }
-                ]
-            };
-
-            const categories = [virtualCategory];
+            const categories = [];
             const uncatChannels = [];
 
             if (guild) {
@@ -898,10 +849,16 @@ function createWebRouter(client) {
                         .map(r => ({
                             id: r.id,
                             name: r.name,
-                            color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : '#99aab5',
-                            position: r.position
+                            color: (r.color && r.color !== 0) ? `#${r.color.toString(16).padStart(6, '0')}` : null,
+                            rawColor: r.color || 0,
+                            position: r.position,
+                            icon: r.iconURL ? r.iconURL({ size: 64 }) : null,
+                            unicodeEmoji: r.unicodeEmoji || null,
+                            hoist: r.hoist
                         }))
                         .sort((a, b) => b.position - a.position);
+
+                    const avatarUrl = getUserAvatar(member.user, member);
 
                     membersList.push({
                         id: member.id,
@@ -910,11 +867,20 @@ function createWebRouter(client) {
                         displayName: member.displayName,
                         discriminator: member.user.discriminator,
                         tag: member.user.tag,
-                        avatar: getUserAvatar(member.user, member),
+                        avatar: avatarUrl,
+                        avatarUrl: avatarUrl,
+                        displayColor: roleColor,
                         isBot: member.user.bot,
                         joinedAt: toISOStringSafe(member.joinedAt, null),
                         createdAt: toISOStringSafe(member.user?.createdAt, null),
-                        highestRole: highestRole ? { id: highestRole.id, name: highestRole.name, color: roleColor } : null,
+                        highestRole: highestRole ? {
+                            id: highestRole.id,
+                            name: highestRole.name,
+                            color: roleColor,
+                            position: highestRole.position,
+                            icon: highestRole.iconURL ? highestRole.iconURL({ size: 64 }) : null,
+                            unicodeEmoji: highestRole.unicodeEmoji || null
+                        } : null,
                         roles: roles,
                         presence: member.presence ? member.presence.status : 'offline'
                     });
@@ -1063,9 +1029,13 @@ function createWebRouter(client) {
                     .map(r => ({
                         id: r.id,
                         name: r.name,
-                        color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : '#99aab5',
+                        color: (r.color && r.color !== 0) ? `#${r.color.toString(16).padStart(6, '0')}` : '#99aab5',
+                        rawColor: r.color || 0,
                         position: r.position,
-                        memberCount: r.members.size
+                        icon: r.iconURL ? r.iconURL({ size: 64 }) : null,
+                        unicodeEmoji: r.unicodeEmoji || null,
+                        hoist: r.hoist,
+                        memberCount: r.members ? r.members.size : 0
                     }))
                     .sort((a, b) => b.position - a.position);
             }
@@ -1409,7 +1379,64 @@ function createWebRouter(client) {
     });
 
     // ============================================
-    // 8. JEUX : COMPTEUR & COUNTDOWN
+    // 8. SERVICE : RAPPELS DE BUMP DISBOARD
+    // ============================================
+    router.get('/bump', async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { BumpReminderService } = require('../modules/service_bump-reminder/bump-reminder.service.js');
+            const service = container.resolve(BumpReminderService);
+            const status = await service.getBumpStatus();
+            res.json({ success: true, data: status });
+        } catch (error) {
+            logger.error(`Erreur GET /api/bump: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.get('/bump/status', async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { BumpReminderService } = require('../modules/service_bump-reminder/bump-reminder.service.js');
+            const service = container.resolve(BumpReminderService);
+            const status = await service.getBumpStatus();
+            res.json({ success: true, data: status });
+        } catch (error) {
+            logger.error(`Erreur GET /api/bump/status: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/bump/config', async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { BumpReminderController } = require('../modules/service_bump-reminder/bump-reminder.controller.js');
+            const controller = container.resolve(BumpReminderController);
+            const result = await controller.saveConfig(req);
+            res.json(result);
+        } catch (error) {
+            logger.error(`Erreur POST /api/bump/config: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/bump/test-reminder', async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { BumpReminderController } = require('../modules/service_bump-reminder/bump-reminder.controller.js');
+            const controller = container.resolve(BumpReminderController);
+            req.app = req.app || {};
+            req.app.get = () => client;
+            const result = await controller.remindNow(req);
+            res.json(result);
+        } catch (error) {
+            logger.error(`Erreur POST /api/bump/test-reminder: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ============================================
+    // 9. JEUX : COMPTEUR & COUNTDOWN
     // ============================================
     router.get('/games/counter', async (req, res) => {
         try {
