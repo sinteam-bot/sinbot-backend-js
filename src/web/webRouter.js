@@ -43,12 +43,20 @@ function createWebRouter(client) {
             const guild = await getGuild();
             const botUser = client?.user;
 
+            const guildEmojis = guild ? Array.from(guild.emojis.cache.values()).map(e => ({
+                id: e.id,
+                name: e.name,
+                animated: !!e.animated,
+                url: e.imageURL ? e.imageURL({ extension: e.animated ? 'gif' : 'png', size: 64 }) : `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? 'gif' : 'png'}?size=64&quality=lossless`
+            })) : [];
+
             let guildInfo = {
                 id: guild?.id || process.env.GUILD_ID || 'server-demo',
                 name: guild?.name || 'Serveur Discord',
                 icon: guild?.icon ? guild.iconURL({ dynamic: true, size: 256 }) : null,
                 memberCount: guild?.memberCount || 0,
                 botOnline: client?.isReady() || false,
+                emojis: guildEmojis,
                 bot: {
                     id: botUser?.id || null,
                     username: botUser?.username || 'Chienne Bot',
@@ -61,6 +69,21 @@ function createWebRouter(client) {
             res.json({ success: true, data: guildInfo });
         } catch (error) {
             logger.error(`Erreur GET /api/guild: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.get('/emojis', async (req, res) => {
+        try {
+            const guild = await getGuild();
+            const emojis = guild ? Array.from(guild.emojis.cache.values()).map(e => ({
+                id: e.id,
+                name: e.name,
+                animated: !!e.animated,
+                url: e.imageURL ? e.imageURL({ extension: e.animated ? 'gif' : 'png', size: 64 }) : `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? 'gif' : 'png'}?size=64&quality=lossless`
+            })) : [];
+            res.json({ success: true, data: emojis });
+        } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
     });
