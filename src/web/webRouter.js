@@ -5,6 +5,7 @@ const { ChannelType } = require('discord.js');
 const logger = require("../utils/logger.js");
 const db = require("../database.js");
 const { toISOStringSafe } = require("../utils/dateUtils.js");
+const { config, getConfig, saveModuleConfig } = require("../config/index.js");
 
 function createWebRouter(client) {
     const router = express.Router();
