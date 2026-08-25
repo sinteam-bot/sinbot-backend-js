@@ -1,7 +1,7 @@
 // OpenRouter utilise l'API standard compatible OpenAI.
 // On utilise donc le SDK 'openai' en pointant sur l'URL d'OpenRouter (https://openrouter.ai/api/v1).
 const OpenAI = require('openai');
-const { config } = require('../config/index.js');
+const { config, getConfig } = require('../config/index.js');
 
 // Initialiser le client OpenRouter via le SDK OpenAI compatible
 const apiKey = config.openrouter?.api_key || process.env.OPENROUTER_API_KEY;
@@ -16,8 +16,16 @@ const client = new OpenAI({
     }
 });
 
-// Modèle par défaut pour OpenRouter
-const DEFAULT_MODEL = config.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
+// Modèle par défaut dynamique pour OpenRouter
+function getDefaultModel() {
+    const currentConfig = getConfig ? getConfig() : config;
+    return currentConfig.daily_message?.ai_config?.model ||
+           currentConfig.openrouter?.default_model ||
+           process.env.OPENROUTER_MODEL ||
+           'nvidia/nemotron-3-ultra-550b-a55b:free';
+}
+
+const DEFAULT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
 /**
  * Appeler un LLM via OpenRouter avec un prompt simple
@@ -33,7 +41,7 @@ const DEFAULT_MODEL = config.openrouter?.default_model || process.env.OPENROUTER
  */
 async function callChatGPT(prompt, options = {}) {
     try {
-        const model = options.model || DEFAULT_MODEL;
+        const model = options.model || getDefaultModel();
         const maxTokens = options.maxTokens || parseInt(process.env.OPENROUTER_MAX_TOKENS) || 1000;
         const temperature = options.temperature !== undefined ? options.temperature : (parseFloat(process.env.OPENROUTER_TEMPERATURE) || 0.7);
 
@@ -92,7 +100,7 @@ async function callChatGPT(prompt, options = {}) {
  */
 async function callChatGPTWithHistory(conversationHistory, newMessage, options = {}) {
     try {
-        const model = options.model || DEFAULT_MODEL;
+        const model = options.model || getDefaultModel();
         const maxTokens = options.maxTokens || parseInt(process.env.OPENROUTER_MAX_TOKENS) || 1000;
         const temperature = options.temperature !== undefined ? options.temperature : (parseFloat(process.env.OPENROUTER_TEMPERATURE) || 0.7);
 
@@ -183,7 +191,7 @@ async function generateImage(prompt, options = {}) {
  */
 async function analyzeImage(imageUrl, question, options = {}) {
     try {
-        const model = options.model || DEFAULT_MODEL;
+        const model = options.model || getDefaultModel();
         const maxTokens = options.maxTokens || 500;
 
         console.log(`👁️ Analyse d'image avec OpenRouter (${model})...`);
@@ -225,7 +233,7 @@ async function analyzeImage(imageUrl, question, options = {}) {
  */
 async function callResponseCustom(prompt, options = {}) {
     try {
-        const model = options.model || DEFAULT_MODEL;
+        const model = options.model || getDefaultModel();
         const maxTokens = options.maxTokens || parseInt(process.env.OPENROUTER_MAX_TOKENS) || 1000;
         const temperature = options.temperature !== undefined ? options.temperature : 0.7;
 

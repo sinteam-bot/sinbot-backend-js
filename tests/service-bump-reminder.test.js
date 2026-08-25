@@ -52,6 +52,36 @@ describe('Service: Bump Reminder Module Tests', () => {
         const last = await repo.getLastBump(guildId);
         assert.ok(last);
         assert.strictEqual(last.bumper_id, 'user_bumper_2');
+        await repo.markReminderSent(last.id);
+    });
+
+    test('Service: should send bump reminder embed without error', async () => {
+        const service = container.resolve(BumpReminderService);
+        const repo = container.resolve(BumpReminderRepository);
+
+        let sentPayload = null;
+        const mockClient = {
+            channels: {
+                fetch: async (id) => ({
+                    id,
+                    isTextBased: () => true,
+                    send: async (payload) => {
+                        sentPayload = payload;
+                        return { id: 'sent_msg_123' };
+                    }
+                })
+            }
+        };
+
+        const testBump = {
+            id: 999999,
+            channel_id: '123456789012345678',
+            bumped_at: new Date(Date.now() - 3 * 3600 * 1000)
+        };
+
+        await service.sendBumpReminder(mockClient, testBump);
+        assert.ok(sentPayload);
+        assert.ok(sentPayload.embeds && sentPayload.embeds.length > 0);
     });
 
     test('Controller: should return bump status', async () => {

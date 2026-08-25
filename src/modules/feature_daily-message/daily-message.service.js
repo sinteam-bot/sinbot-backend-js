@@ -37,7 +37,8 @@ class DailyMessageService {
         console.log(`🌅 [DailyMessage] Début de la génération pour le ${getParisDateString(targetDate)}...`);
 
         const aiConfig = this.getConfig().ai_config || {};
-        const selectedModel = aiConfig.model || config.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
+        const conf = getConfig ? getConfig() : config;
+        const selectedModel = aiConfig.model || conf.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
         // Étape 1 : Méta-prompt créatif
         const promptGenerationOptions = {
@@ -178,6 +179,8 @@ class DailyMessageService {
                 regenCount: 0
             });
 
+            await this.saveCurrentDraft(dailyData);
+
             console.log(`✅ [DailyMessage] Pré-rendu envoyé avec succès (ID: ${sentMessage.id})`);
             return sentMessage;
         } catch (error) {
@@ -215,12 +218,16 @@ class DailyMessageService {
         await targetChannel.send({ embeds: [finalEmbed] });
         console.log(`📢 [DailyMessage] Message publié dans #${targetChannel.name}`);
 
+        const aiConfig = this.getConfig().ai_config || {};
+        const configFull = getConfig ? getConfig() : config;
+        const fallbackModel = aiConfig.model || configFull.openrouter?.default_model || 'nvidia/nemotron-3-ultra-550b-a55b:free';
+
         try {
             await this.repo.saveAiMessage({
                 msgid: draftData.messageResponse?.msgId || `manual_${Date.now()}`,
                 prompt: draftData.finalPrompt || 'Message validé',
                 instruction: draftData.finalInstruction || null,
-                model: draftData.model || 'gpt-4o-mini',
+                model: draftData.model || fallbackModel,
                 tokeninput: draftData.messageResponse?.usage?.promptTokens || 0,
                 tokenoutput: draftData.messageResponse?.usage?.completionTokens || 0,
                 content: draftData.text,
@@ -233,6 +240,8 @@ class DailyMessageService {
 
         const todayParis = getParisDateString(new Date());
         await this.repo.setLastPublishedDate(todayParis);
+        await this.repo.setBotState('daily_msg_accepted_draft', null);
+        await this.repo.setBotState('daily_msg_current_draft', null);
 
         return true;
     }
@@ -293,11 +302,23 @@ class DailyMessageService {
      * Traite les clics sur les boutons Accept / Reject
      */
     async handleButtonInteraction(interaction) {
-        if (!interaction.isButton()) return;
+        if (!interaction.isButton || !interaction.isButton()) return;
         const customId = interaction.customId;
         if (customId !== 'daily_msg_accept' && customId !== 'daily_msg_reject') return;
 
-        await interaction.deferUpdate();
+        // Éviter d'acquitter une interaction déjà traitée
+        if (interaction.deferred || interaction.replied) {
+            return;
+        }
+
+        try {
+            await interaction.deferUpdate();
+        } catch (err) {
+            if (err.code === 10062 || err.code === 40060) {
+                return;
+            }
+            console.warn('⚠️ [DailyMessage] Erreur deferUpdate:', err.message);
+        }
 
         const messageId = interaction.message.id;
         let draft = this.pendingDrafts.get(messageId);
@@ -316,6 +337,7 @@ class DailyMessageService {
 
         if (customId === 'daily_msg_accept') {
             await this.repo.setBotState('daily_msg_accepted_draft', JSON.stringify(draft));
+            await this.repo.setBotState('daily_msg_current_draft', null);
 
             const successEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                 .setColor('#2ecc71')
@@ -325,7 +347,7 @@ class DailyMessageService {
             await interaction.editReply({
                 embeds: [successEmbed],
                 components: [this.buildActionButtons(true)]
-            });
+            }).catch(err => console.warn('⚠️ [DailyMessage] Erreur editReply accept:', err.message));
 
             console.log(`✅ [DailyMessage] Brouillon accepté par @${interaction.user.tag}`);
 
@@ -334,6 +356,8 @@ class DailyMessageService {
             console.log(`🔄 [DailyMessage] Brouillon refusé par @${interaction.user.tag}. Régénération #${currentRegen}...`);
 
             const newDraft = await this.generateDailyMessageContent(draft.date);
+            await this.saveCurrentDraft(newDraft);
+
             const newEmbed = this.buildPreviewEmbed(newDraft, {
                 regenCount: currentRegen,
                 rejectedBy: interaction.user.id
@@ -347,21 +371,88 @@ class DailyMessageService {
             await interaction.editReply({
                 embeds: [newEmbed],
                 components: [this.buildActionButtons(false)]
-            });
+            }).catch(err => console.warn('⚠️ [DailyMessage] Erreur editReply reject:', err.message));
         }
+    }
+
+    /**
+     * Récupère le brouillon actuel (en attente de review ou validé)
+     */
+    async getPendingDraft() {
+        const acceptedRaw = await this.repo.getBotState('daily_msg_accepted_draft');
+        if (acceptedRaw) {
+            const draft = typeof acceptedRaw === 'string' ? JSON.parse(acceptedRaw) : acceptedRaw;
+            return { ...draft, isAccepted: true };
+        }
+
+        const currentRaw = await this.repo.getBotState('daily_msg_current_draft');
+        if (currentRaw) {
+            const draft = typeof currentRaw === 'string' ? JSON.parse(currentRaw) : currentRaw;
+            return { ...draft, isAccepted: false };
+        }
+
+        return null;
+    }
+
+    /**
+     * Sauvegarde le brouillon en cours
+     */
+    async saveCurrentDraft(draft) {
+        await this.repo.setBotState('daily_msg_current_draft', JSON.stringify(draft));
+        return draft;
+    }
+
+    /**
+     * Accepte et valide le brouillon en cours pour publication à 09:00
+     */
+    async acceptDraft(draftData = null) {
+        let draft = draftData;
+        if (!draft) {
+            draft = await this.getPendingDraft();
+        }
+        if (!draft) {
+            draft = await this.generateDailyMessageContent();
+        }
+        await this.repo.setBotState('daily_msg_accepted_draft', JSON.stringify(draft));
+        await this.repo.setBotState('daily_msg_current_draft', null);
+        return { ...draft, isAccepted: true };
+    }
+
+    /**
+     * Refuse / Supprime le brouillon
+     */
+    async rejectDraft() {
+        await this.repo.setBotState('daily_msg_accepted_draft', null);
+        await this.repo.setBotState('daily_msg_current_draft', null);
+        return true;
+    }
+
+    /**
+     * Refuse et régénère immédiatement un nouveau brouillon
+     */
+    async regenerateDraft(date = null) {
+        await this.rejectDraft();
+        const newDraft = await this.generateDailyMessageContent(date);
+        await this.saveCurrentDraft(newDraft);
+        return newDraft;
     }
 
     async getStatus() {
         const lastPubDate = await this.repo.getLastPublishedDate();
         const conf = this.getConfig();
+        const fullConfig = getConfig ? getConfig() : config;
         const recentMessages = await this.repo.getAiMessages('daily_message', 5);
+        const pendingDraft = await this.getPendingDraft();
+        const configuredModel = conf.ai_config?.model || fullConfig.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
         return {
             enabled: conf.enabled !== false,
             channelId: conf.channel_id || null,
             previewChannelId: conf.preview_channel_id || null,
+            configuredModel,
             lastPublishedDate: lastPubDate || null,
             isPublishedToday: lastPubDate === getParisDateString(new Date()),
+            pendingDraft,
             recentMessages
         };
     }

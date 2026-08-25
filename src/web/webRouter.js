@@ -1014,13 +1014,12 @@ function createWebRouter(client) {
 
             res.json({
                 success: true,
-                data: {
-                    users: paginated,
-                    total,
-                    page: p,
-                    limit: l,
-                    totalPages: Math.ceil(total / l)
-                }
+                data: paginated,
+                users: paginated,
+                total,
+                page: p,
+                limit: l,
+                totalPages: Math.ceil(total / l)
             });
         } catch (error) {
             logger.error(`Erreur GET /api/users: ${error.message}`, 'WEB');
@@ -1140,13 +1139,15 @@ function createWebRouter(client) {
     // ============================================
     router.get('/daily-messages', async (req, res) => {
         try {
-            // 1. Récupérer le message en attente de publication (s'il existe)
-            let pendingPublish = null;
+            const { container } = require('../core/container.js');
+            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const dailyService = container.resolve(DailyMessageService);
+            const conf = getConfig ? getConfig() : config;
+
+            // 1. Récupérer le brouillon en attente ou validé
+            let pending = null;
             try {
-                const rawPending = await db.getBotState('pending_daily_message_publish');
-                if (rawPending) {
-                    pendingPublish = JSON.parse(rawPending);
-                }
+                pending = await dailyService.getPendingDraft();
             } catch (e) { }
 
             // 2. Récupérer l'historique complet depuis openaimessages
@@ -1165,6 +1166,8 @@ function createWebRouter(client) {
                     promptMap.set(m.msgid, m);
                 }
             });
+
+            const defaultModel = conf.daily_message?.ai_config?.model || conf.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
             const history = rawMessages.map(m => {
                 let step1Data = null;
@@ -1190,14 +1193,14 @@ function createWebRouter(client) {
                     content: m.content || '',
                     prompt: m.prompt || '',
                     instruction: m.instruction || '',
-                    model: m.model || 'gpt-4o-mini',
+                    model: m.model || defaultModel,
                     tokens,
                     previousMsgId: m.previousmsgid,
                     step1: step1Data ? {
                         msgId: step1Data.msgid,
                         metaPrompt: step1Data.prompt,
                         creativePrompt: step1Data.content,
-                        model: step1Data.model,
+                        model: step1Data.model || defaultModel,
                         tokens: step1Tokens,
                         createdAt: step1Data.created_at
                     } : null,
@@ -1210,18 +1213,28 @@ function createWebRouter(client) {
             const totalMessages = history.length;
             const totalTokens = history.reduce((acc, cur) => acc + cur.tokens.total, 0);
 
+            const configuredModel = conf.daily_message?.ai_config?.model || conf.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
+            const configuredChannelId = conf.daily_message?.channel_id || process.env.DAILY_MESSAGE_CHANNEL_ID || '1337807772024180756';
+            const configuredPreviewChannelId = conf.daily_message?.preview_channel_id || process.env.LOG_CHANNEL_ID;
+
             res.json({
                 success: true,
                 data: {
-                    pendingPublish,
+                    pending,
+                    pendingPublish: pending,
                     stats: {
                         totalMessages,
                         totalTokens,
-                        configuredChannelId: process.env.DAILY_MESSAGE_CHANNEL_ID || '1337807772024180756',
-                        configuredPreviewChannelId: process.env.LOG_CHANNEL_ID,
-                        configuredModel: process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+                        configuredChannelId,
+                        configuredPreviewChannelId,
+                        configuredModel,
                         scheduleTime: '09:00',
                         previewTime: '21:00'
+                    },
+                    env: {
+                        dailyMessageChannelId: configuredChannelId,
+                        configuredModel,
+                        openaiModel: configuredModel
                     },
                     history
                 }
@@ -1232,29 +1245,125 @@ function createWebRouter(client) {
         }
     });
 
-    router.post('/daily-messages/generate-preview', async (req, res) => {
+    // Générer un brouillon / test de message du jour
+    const handleGenerateDraft = async (req, res) => {
         try {
             const { container } = require('../core/container.js');
             const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
             const dailyService = container.resolve(DailyMessageService);
             const dailyData = await dailyService.generateDailyMessageContent(new Date());
+            await dailyService.saveCurrentDraft(dailyData);
+
             res.json({
                 success: true,
                 data: {
-                    text: dailyData.text,
-                    model: dailyData.model,
+                    ...dailyData,
+                    content: dailyData.text,
                     metaPrompt: dailyData.metaPrompt,
                     creativePrompt: dailyData.promptResponse?.text,
                     finalPrompt: dailyData.finalPrompt,
                     finalInstruction: dailyData.finalInstruction,
                     usage: dailyData.messageResponse?.usage
-                }
+                },
+                message: 'Nouveau brouillon généré avec succès !'
             });
         } catch (error) {
-            logger.error(`Erreur génération test daily message: ${error.message}`, 'WEB');
+            logger.error(`Erreur génération daily message: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    };
+
+    router.post('/daily-messages/generate-test', handleGenerateDraft);
+    router.post('/daily-messages/generate-preview', handleGenerateDraft);
+    router.post('/daily-messages/generate', handleGenerateDraft);
+
+    // Accepter / valider le brouillon pour diffusion à 09:00
+    router.post('/daily-messages/accept', async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const dailyService = container.resolve(DailyMessageService);
+            const accepted = await dailyService.acceptDraft(req.body?.draft);
+
+            res.json({
+                success: true,
+                data: accepted,
+                message: 'Brouillon validé et programmé pour diffusion à 09:00 !'
+            });
+        } catch (error) {
+            logger.error(`Erreur accept daily message: ${error.message}`, 'WEB');
             res.status(500).json({ success: false, error: error.message });
         }
     });
+
+    // Refuser / supprimer le brouillon en cours
+    router.post('/daily-messages/reject', async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const dailyService = container.resolve(DailyMessageService);
+            await dailyService.rejectDraft();
+
+            res.json({
+                success: true,
+                message: 'Brouillon refusé et supprimé.'
+            });
+        } catch (error) {
+            logger.error(`Erreur reject daily message: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // Refuser et régénérer immédiatement
+    router.post('/daily-messages/regenerate', async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const dailyService = container.resolve(DailyMessageService);
+            const newDraft = await dailyService.regenerateDraft(new Date());
+
+            res.json({
+                success: true,
+                data: {
+                    ...newDraft,
+                    content: newDraft.text
+                },
+                message: 'Nouveau brouillon régénéré avec succès !'
+            });
+        } catch (error) {
+            logger.error(`Erreur regenerate daily message: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // Publier immédiatement sur Discord
+    const handlePublishNow = async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const dailyService = container.resolve(DailyMessageService);
+
+            const text = req.body?.text || req.body?.content;
+            let draft = text ? { text, model: 'manual' } : await dailyService.getPendingDraft();
+            if (!draft) {
+                draft = await dailyService.generateDailyMessageContent(new Date());
+            }
+
+            await dailyService.executePublication(client, draft);
+            await dailyService.rejectDraft();
+
+            res.json({
+                success: true,
+                message: 'Message du jour publié immédiatement sur Discord !'
+            });
+        } catch (error) {
+            logger.error(`Erreur publication immédiate daily message: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    };
+
+    router.post('/daily-messages/publish-now', handlePublishNow);
+    router.post('/daily-messages/publish', handlePublishNow);
 
     // ============================================
     // 8. SALON VIRTUEL : CAPTCHA LOGS (HISTORIQUE ET SÉCURITÉ)

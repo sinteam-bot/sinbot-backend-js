@@ -1,3 +1,4 @@
+const { EmbedBuilder } = require('discord.js');
 const { Injectable, Cron } = require('../../core/index.js');
 const { BumpReminderRepository } = require('./bump-reminder.repository.js');
 const { config, getConfig } = require('../../config/index.js');
@@ -115,9 +116,21 @@ class BumpReminderService {
         const conf = this.getConfig();
         const channelId = conf.channel_id || bump.channel_id;
 
+        if (!channelId || !/^\d{17,20}$/.test(channelId)) {
+            console.warn(`⚠️ [BUMP Service] ID de salon invalide ignoré (Bump ID: ${bump.id}, salon: "${channelId}")`);
+            await this.repo.markReminderSent(bump.id);
+            return;
+        }
+
         try {
-            const channel = await client.channels.fetch(channelId);
-            if (!channel || !channel.isTextBased()) return;
+            const channel = await client.channels.fetch(channelId).catch(err => {
+                console.warn(`⚠️ [BUMP Service] Impossible de récupérer le salon ${channelId}:`, err.message);
+                return null;
+            });
+            if (!channel || !channel.isTextBased()) {
+                await this.repo.markReminderSent(bump.id);
+                return;
+            }
 
             const roleMention = conf.role_id ? `<@&${conf.role_id}>` : '@here';
 
@@ -141,6 +154,9 @@ class BumpReminderService {
 
         } catch (error) {
             console.error(`❌ [BUMP Service] Erreur envoi rappel (Bump ID: ${bump.id}):`, error);
+            if (error.code === 50035 || error.code === 10003 || error.status === 400 || error.status === 404) {
+                await this.repo.markReminderSent(bump.id);
+            }
         }
     }
 
