@@ -1,6 +1,7 @@
 const { Container, container } = require('./container.js');
 const { DiscordEventBus, eventBus } = require('./event-bus.js');
 const { ModuleManager, moduleManager } = require('./module-manager.js');
+const { FeatureRegistry, featureRegistry } = require('./feature-registry.js');
 const decorators = require('./decorators.js');
 
 module.exports = {
@@ -10,5 +11,7 @@ module.exports = {
     eventBus,
     ModuleManager,
     moduleManager,
+    FeatureRegistry,
+    featureRegistry,
     ...decorators
 };
