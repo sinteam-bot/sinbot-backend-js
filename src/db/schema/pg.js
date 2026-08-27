@@ -369,6 +369,33 @@ const discordEmojis = pgTable('discord_emojis', {
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 });
 
+// 29. guild_settings (Phase 0: multi-guild foundations)
+const guildSettings = pgTable('guild_settings', {
+    guildId: text('guild_id').primaryKey(),
+    name: text('name').notNull(),
+    locale: text('locale').default('fr'),
+    timezone: text('timezone').default('Europe/Paris'),
+    ownerId: text('owner_id'),
+    premiumTier: integer('premium_tier').default(0),
+    joinedAt: integer('joined_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull()
+});
+
+// 30. feature_flags (Phase 0: per-guild feature toggles + config)
+const featureFlags = pgTable('feature_flags', {
+    guildId: text('guild_id').notNull(),
+    featureName: text('feature_name').notNull(),
+    enabled: integer('enabled').notNull().default(0),
+    configJson: text('config_json').notNull().default('{}'),
+    allowedRoles: text('allowed_roles').notNull().default('[]'),
+    updatedBy: text('updated_by'),
+    updatedAt: integer('updated_at').notNull()
+}, (table) => [
+    primaryKey({ columns: [table.guildId, table.featureName] }),
+    index('idx_pg_feature_flags_enabled').on(table.enabled)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -397,5 +424,7 @@ module.exports = {
     botVersionState,
     discordRoles,
     discordEventsArchive,
-    discordEmojis
+    discordEmojis,
+    guildSettings,
+    featureFlags
 };

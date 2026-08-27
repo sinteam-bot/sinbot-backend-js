@@ -405,6 +405,32 @@ const PG_TABLES_DDL = `
         deleted_at TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- Phase 0: Multi-guild foundations
+    CREATE TABLE IF NOT EXISTS guild_settings (
+        guild_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        locale TEXT DEFAULT 'fr',
+        timezone TEXT DEFAULT 'Europe/Paris',
+        owner_id TEXT,
+        premium_tier INTEGER DEFAULT 0,
+        joined_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS feature_flags (
+        guild_id TEXT NOT NULL,
+        feature_name TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        config_json TEXT NOT NULL DEFAULT '{}',
+        allowed_roles TEXT NOT NULL DEFAULT '[]',
+        updated_by TEXT,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, feature_name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_feature_flags_enabled ON feature_flags(enabled);
 `;
 
 /**
