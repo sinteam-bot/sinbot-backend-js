@@ -196,6 +196,10 @@ function applyEnvironmentOverrides(config) {
     config.countdown.emojis = config.countdown.emojis || {};
     config.countdown.messages = config.countdown.messages || {};
 
+    config.bump_reminder = config.bump_reminder || config.bump_reminders || {};
+    config.bump_reminders = config.bump_reminder;
+    config.bump_reminder.messages = config.bump_reminder.messages || {};
+
     const env = process.env;
 
     // 1. Mappages explicites directs
@@ -260,6 +264,12 @@ function applyEnvironmentOverrides(config) {
     // Welcome
     if (env.WELCOME_ENABLED !== undefined) config.welcome.enabled = parseEnvValue(env.WELCOME_ENABLED);
     if (env.WELCOME_CHANNEL_ID) config.welcome.channel_id = env.WELCOME_CHANNEL_ID;
+
+    // Bump Reminder
+    if (env.BUMP_REMINDER_ENABLED !== undefined) config.bump_reminder.enabled = parseEnvValue(env.BUMP_REMINDER_ENABLED);
+    if (env.BUMP_REMINDER_CHANNEL_ID) config.bump_reminder.channel_id = env.BUMP_REMINDER_CHANNEL_ID;
+    if (env.BUMP_REMINDER_ROLE_ID) config.bump_reminder.role_id = env.BUMP_REMINDER_ROLE_ID;
+    if (env.BUMP_REMINDER_COOLDOWN_HOURS) config.bump_reminder.reminder_cooldown_hours = Number(env.BUMP_REMINDER_COOLDOWN_HOURS);
 
     // 2. Surcharges dynamiques via double underscore (ex: DISCORD__TOKEN, DAILY_MESSAGE__CHANNEL_ID, etc.)
     for (const [rawKey, rawVal] of Object.entries(env)) {

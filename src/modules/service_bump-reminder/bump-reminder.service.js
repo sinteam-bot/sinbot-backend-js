@@ -15,21 +15,41 @@ class BumpReminderService {
         const currentConfig = getConfig ? getConfig() : config;
         const schedulerConf = currentConfig.scheduler || {};
         const taskConf = schedulerConf.tasks?.bump_reminders || {};
-        const bumpConf = currentConfig.bump_reminders || {};
+        const bumpConf = currentConfig.bump_reminder || currentConfig.bump_reminders || currentConfig.bump || {};
+
+        const isEnabled = bumpConf.enabled !== undefined 
+            ? bumpConf.enabled !== false 
+            : (schedulerConf.enabled !== false && taskConf.enabled !== false);
+
         return {
-            enabled: schedulerConf.enabled !== false && taskConf.enabled !== false && bumpConf.enabled !== false,
+            enabled: isEnabled,
             role_id: bumpConf.role_id || taskConf.role_id || '',
             channel_id: bumpConf.channel_id || taskConf.channel_id || '',
-            reminder_cooldown_hours: bumpConf.reminder_cooldown_hours || 2,
-            mention_here: bumpConf.mention_here !== false,
+            reminder_cooldown_hours: bumpConf.reminder_cooldown_hours || taskConf.reminder_cooldown_hours || 2,
+            mention_here: bumpConf.mention_here !== undefined ? bumpConf.mention_here : (taskConf.mention_here !== false),
             messages: {
-                title: bumpConf.messages?.title || "⏰ C'est l'heure du Bump !",
-                description: bumpConf.messages?.description || "2 heures se sont écoulées depuis le dernier bump !\n\nTapez </bump:947088344167366698> pour faire monter le serveur sur Disboard 🚀",
-                color: bumpConf.messages?.color || bumpConf.color || "#f2c7ce"
-            },
-            ...taskConf,
-            ...bumpConf
+                content: bumpConf.messages?.content !== undefined ? bumpConf.messages.content : (taskConf.messages?.content ?? "🔔 {role}"),
+                title: bumpConf.messages?.title || taskConf.messages?.title || "⏰ C'est l'heure du Bump !",
+                description: bumpConf.messages?.description || taskConf.messages?.description || "{hours} heures se sont écoulées depuis le dernier bump !\n\nTapez {command} pour faire monter le serveur sur Disboard 🚀",
+                color: bumpConf.messages?.color || bumpConf.color || taskConf.messages?.color || taskConf.color || "#f2c7ce",
+                thumbnail: bumpConf.messages?.thumbnail || taskConf.messages?.thumbnail || null,
+                image: bumpConf.messages?.image || taskConf.messages?.image || null,
+                footer: bumpConf.messages?.footer || taskConf.messages?.footer || null
+            }
         };
+    }
+
+    /**
+     * Remplace les variables dynamiques dans un texte
+     */
+    formatMessageText(text, variables) {
+        if (!text || typeof text !== 'string') return text;
+        let formatted = text;
+        for (const [key, value] of Object.entries(variables)) {
+            const regex = new RegExp(`{${key}}`, 'gi');
+            formatted = formatted.replace(regex, value !== undefined && value !== null ? String(value) : '');
+        }
+        return formatted;
     }
 
     /**
@@ -159,10 +179,38 @@ class BumpReminderService {
                 return;
             }
 
+            const guild = channel.guild;
+            const cooldownHours = Number(conf.reminder_cooldown_hours) || 2;
             const roleMention = conf.role_id ? `<@&${conf.role_id}>` : (conf.mention_here !== false ? '@here' : '');
-            const title = conf.messages?.title || "⏰ C'est l'heure du Bump !";
-            const description = conf.messages?.description || "2 heures se sont écoulées depuis le dernier bump !\n\nTapez </bump:947088344167366698> pour faire monter le serveur sur Disboard 🚀";
+            const bumperUsername = bump.bumper_username || 'Inconnu';
+            const bumperUser = bump.bumper_username ? `@${bump.bumper_username}` : (bump.bumper_id ? `<@${bump.bumper_id}>` : 'Inconnu');
+            const bumpCommand = '</bump:947088344167366698>';
+
+            const vars = {
+                hours: cooldownHours,
+                role: roleMention,
+                mention: roleMention,
+                user: bumperUser,
+                username: bumperUsername,
+                bumper: bumperUser,
+                command: bumpCommand,
+                channel: `<#${channel.id}>`,
+                server: guild?.name || 'le serveur'
+            };
+
+            const defaultTitle = "⏰ C'est l'heure du Bump !";
+            const defaultDescription = "{hours} heures se sont écoulées depuis le dernier bump !\n\nTapez {command} pour faire monter le serveur sur Disboard 🚀";
+
+            const rawContent = conf.messages?.content !== undefined 
+                ? this.formatMessageText(conf.messages.content, vars)
+                : (roleMention ? `🔔 ${roleMention}` : undefined);
+
+            const title = this.formatMessageText(conf.messages?.title || defaultTitle, vars);
+            const description = this.formatMessageText(conf.messages?.description || defaultDescription, vars);
             const color = conf.messages?.color || conf.color || '#f2c7ce';
+            const footerText = conf.messages?.footer ? this.formatMessageText(conf.messages.footer, vars) : null;
+            const thumbnail = conf.messages?.thumbnail || null;
+            const image = conf.messages?.image || null;
 
             const embed = new EmbedBuilder()
                 .setColor(color)
@@ -170,14 +218,18 @@ class BumpReminderService {
                 .setDescription(description)
                 .setTimestamp();
 
+            if (footerText) embed.setFooter({ text: footerText });
+            if (thumbnail) embed.setThumbnail(thumbnail);
+            if (image) embed.setImage(image);
+
             await channel.send({
-                content: roleMention ? `🔔 ${roleMention}` : undefined,
+                content: rawContent && rawContent.trim() !== '' ? rawContent : undefined,
                 embeds: [embed]
             });
 
             await this.repo.markReminderSent(bump.id);
             const dateStr = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
-            console.log(`[BUMP] 2 heures se sont écoulées, rappel envoyé à ${dateStr} (Bump ID: ${bump.id}) !`);
+            console.log(`[BUMP] ${cooldownHours} heures se sont écoulées, rappel envoyé à ${dateStr} (Bump ID: ${bump.id}) !`);
 
         } catch (error) {
             console.error(`❌ [BUMP Service] Erreur envoi rappel (Bump ID: ${bump.id}):`, error);

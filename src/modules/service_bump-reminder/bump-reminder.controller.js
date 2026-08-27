@@ -19,7 +19,7 @@ class BumpReminderController {
         try {
             const body = req.body || {};
             const currentFull = getConfig();
-            const currentBump = currentFull.bump_reminders || {};
+            const currentBump = currentFull.bump_reminder || currentFull.bump_reminders || {};
 
             const updatedBump = {
                 ...currentBump,
@@ -30,14 +30,19 @@ class BumpReminderController {
                 mention_here: body.mention_here !== undefined ? !!body.mention_here : (currentBump.mention_here !== false),
                 messages: {
                     ...(currentBump.messages || {}),
+                    content: body.messages?.content !== undefined ? body.messages.content : (currentBump.messages?.content ?? "🔔 {role}"),
                     title: body.messages?.title || currentBump.messages?.title || "⏰ C'est l'heure du Bump !",
-                    description: body.messages?.description || currentBump.messages?.description || "2 heures se sont écoulées depuis le dernier bump !\n\nTapez </bump:947088344167366698> pour faire monter le serveur sur Disboard 🚀",
-                    color: body.messages?.color || currentBump.messages?.color || "#f2c7ce"
+                    description: body.messages?.description || currentBump.messages?.description || "{hours} heures se sont écoulées depuis le dernier bump !\n\nTapez {command} pour faire monter le serveur sur Disboard 🚀",
+                    color: body.messages?.color || currentBump.messages?.color || "#f2c7ce",
+                    thumbnail: body.messages?.thumbnail !== undefined ? body.messages.thumbnail : (currentBump.messages?.thumbnail || null),
+                    image: body.messages?.image !== undefined ? body.messages.image : (currentBump.messages?.image || null),
+                    footer: body.messages?.footer !== undefined ? body.messages.footer : (currentBump.messages?.footer || "Disboard Auto-Reminder")
                 }
             };
 
-            // Mettre à jour la section bump_reminders
-            saveModuleConfig('bump_reminders', updatedBump);
+            // Mettre à jour la section bump_reminder et bump_reminders
+            saveModuleConfig('bump_reminder', updatedBump);
+            currentFull.bump_reminders = updatedBump;
 
             // Mettre à jour aussi scheduler.tasks.bump_reminders pour cohérence
             if (currentFull.scheduler?.tasks?.bump_reminders) {
