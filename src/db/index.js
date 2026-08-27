@@ -600,6 +600,56 @@ const PG_TABLES_DDL = `
         PRIMARY KEY (poll_id, user_id, option_index)
     );
     CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id);
+
+    -- Phase 7: Birthdays
+    CREATE TABLE IF NOT EXISTS birthday_guild_settings (
+        guild_id TEXT PRIMARY KEY,
+        mode TEXT NOT NULL DEFAULT 'public',
+        announce_channel_id TEXT,
+        announce_hour INTEGER NOT NULL DEFAULT 9,
+        announce_timezone TEXT NOT NULL DEFAULT 'Europe/Paris',
+        ping_role_id TEXT,
+        message_template TEXT NOT NULL DEFAULT '🎂 Joyeux anniversaire {user} ! Tu fêtes tes **{age} ans** aujourdhui !',
+        temp_role_id TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS birthday_visibility (
+        user_id TEXT NOT NULL,
+        guild_id TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, guild_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_birthday_visibility_user ON birthday_visibility(user_id);
+
+    CREATE TABLE IF NOT EXISTS birthday_change_log (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        guild_id TEXT,
+        change_number INTEGER NOT NULL,
+        previous_birthdate TEXT,
+        new_birthdate TEXT NOT NULL,
+        cooldown_until INTEGER NOT NULL,
+        changed_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_birthday_change_user ON birthday_change_log(user_id, guild_id);
+    CREATE INDEX IF NOT EXISTS idx_birthday_change_until ON birthday_change_log(cooldown_until);
+
+    CREATE TABLE IF NOT EXISTS birthday_history (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        username TEXT NOT NULL,
+        age INTEGER,
+        message_id TEXT,
+        gifts_given TEXT,
+        announced_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_birthday_history_user ON birthday_history(user_id, guild_id, announced_at);
+    CREATE INDEX IF NOT EXISTS idx_birthday_history_guild ON birthday_history(guild_id, announced_at);
 `;
 
 /**

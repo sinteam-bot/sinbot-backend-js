@@ -581,6 +581,62 @@ const pollVotes = pgTable('poll_votes', {
     index('idx_pg_poll_votes_poll').on(table.pollId)
 ]);
 
+// 42. birthday_guild_settings (Phase 7)
+const birthdayGuildSettings = pgTable('birthday_guild_settings', {
+    guildId: text('guild_id').primaryKey(),
+    mode: text('mode').notNull().default('public'),
+    announceChannelId: text('announce_channel_id'),
+    announceHour: integer('announce_hour').notNull().default(9),
+    announceTimezone: text('announce_timezone').notNull().default('Europe/Paris'),
+    pingRoleId: text('ping_role_id'),
+    messageTemplate: text('message_template').notNull().default('🎂 Joyeux anniversaire {user} !'),
+    tempRoleId: text('temp_role_id'),
+    enabled: integer('enabled').notNull().default(1),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull()
+});
+
+// 43. birthday_visibility (Phase 7)
+const birthdayVisibility = pgTable('birthday_visibility', {
+    userId: text('user_id').notNull(),
+    guildId: text('guild_id').notNull(),
+    enabled: integer('enabled').notNull().default(1),
+    updatedAt: integer('updated_at').notNull()
+}, (table) => [
+    primaryKey({ columns: [table.userId, table.guildId] }),
+    index('idx_pg_birthday_visibility_user').on(table.userId)
+]);
+
+// 44. birthday_change_log (Phase 7)
+const birthdayChangeLog = pgTable('birthday_change_log', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    guildId: text('guild_id'),
+    changeNumber: integer('change_number').notNull(),
+    previousBirthdate: text('previous_birthdate'),
+    newBirthdate: text('new_birthdate').notNull(),
+    cooldownUntil: integer('cooldown_until').notNull(),
+    changedAt: integer('changed_at').notNull()
+}, (table) => [
+    index('idx_pg_birthday_change_user').on(table.userId, table.guildId),
+    index('idx_pg_birthday_change_until').on(table.cooldownUntil)
+]);
+
+// 45. birthday_history (Phase 7)
+const birthdayHistory = pgTable('birthday_history', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    userId: text('user_id').notNull(),
+    username: text('username').notNull(),
+    age: integer('age'),
+    messageId: text('message_id'),
+    giftsGiven: text('gifts_given'),
+    announcedAt: integer('announced_at').notNull()
+}, (table) => [
+    index('idx_pg_birthday_history_user').on(table.userId, table.guildId, table.announcedAt),
+    index('idx_pg_birthday_history_guild').on(table.guildId, table.announcedAt)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -622,5 +678,9 @@ module.exports = {
     giveaways,
     giveawayEntries,
     polls,
-    pollVotes
+    pollVotes,
+    birthdayGuildSettings,
+    birthdayVisibility,
+    birthdayChangeLog,
+    birthdayHistory
 };
