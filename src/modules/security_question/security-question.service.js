@@ -125,7 +125,6 @@ class SecurityQuestionService {
                 permissionOverwrites
             });
 
-            await sendCaptchaLog(member.guild, 'Création canal', `Canal captcha créé pour **${member.user.tag}** (ID: ${channel.id})`, '#3498db');
             return channel;
         } catch (error) {
             console.error('❌ [SecurityQuestion] Erreur création canal:', error);
@@ -160,11 +159,14 @@ class SecurityQuestionService {
         try {
             const existing = await this.repo.getUserCaptcha(member.id, member.guild.id);
             if (existing && existing.is_verified) {
-                await sendCaptchaLog(member.guild, 'Déjà vérifié', `**${member.user.tag}** est déjà vérifié`, '#3498db');
                 const role = await this.getVerifiedRole(member.guild);
                 if (role) {
                     await member.roles.add(role.id).catch(() => {});
                 }
+                await sendCaptchaLog(member.guild, 'Déjà vérifié', `**${member.user.tag}** est déjà vérifié sur le serveur. Rôle appliqué directement.`, '#3498db', {
+                    member,
+                    role
+                });
                 await this.triggerWelcome(member);
                 return;
             }
@@ -182,6 +184,14 @@ class SecurityQuestionService {
                 channel.id,
                 timeoutMinutes
             );
+
+            await sendCaptchaLog(member.guild, 'Création canal', `Canal temporaire de vérification créé pour **${member.user.tag}**`, '#5865F2', {
+                member,
+                channel,
+                question: mathQuestion.question,
+                timeoutMinutes,
+                maxAttempts: captchaConfig.max_attempts || 3
+            });
 
             const welcomeMsg = captchaConfig.messages?.welcome_message || "Bienvenue sur le serveur ! Pour des raisons de sécurité, veuillez résoudre ce calcul :";
             const instructions = captchaConfig.messages?.instructions || "Répondez avec le nombre en chiffres uniquement (exemple: 12) dans les 10 minutes.";
@@ -255,8 +265,18 @@ class SecurityQuestionService {
                 const role = await this.getVerifiedRole(message.guild);
                 if (role && message.member) {
                     await message.member.roles.add(role.id).catch(() => {});
-                    await sendCaptchaLog(message.guild, 'Succès captcha', `**${message.author.tag}** a validé le captcha - Rôle vérifié donné`, '#2ecc71');
                 }
+
+                await sendCaptchaLog(message.guild, 'Succès captcha', `**${message.author.tag}** a résolu le captcha avec succès et a reçu le rôle vérifié.`, '#2ecc71', {
+                    member: message.member,
+                    user: message.author,
+                    channel: message.channel,
+                    question: captcha.question,
+                    userAnswer,
+                    attempts: (captcha.attempts || 0) + 1,
+                    maxAttempts,
+                    role
+                });
 
                 if (message.member) {
                     await this.triggerWelcome(message.member);
@@ -282,7 +302,16 @@ class SecurityQuestionService {
                     if (message.member) {
                         await message.member.kick('Échec vérification captcha').catch(() => {});
                     }
-                    await sendCaptchaLog(message.guild, 'Kick utilisateur', `**${message.author.tag}** kické - Max tentatives dépassé`, '#e74c3c');
+                    await sendCaptchaLog(message.guild, 'Kick utilisateur', `**${message.author.tag}** a été expulsé du serveur suite au dépassement du nombre maximal de tentatives (**${nextAttempts}/${maxAttempts}**).`, '#e74c3c', {
+                        member: message.member,
+                        user: message.author,
+                        channel: message.channel,
+                        question: captcha.question,
+                        userAnswer,
+                        attempts: nextAttempts,
+                        maxAttempts,
+                        reason: 'Nombre maximal de tentatives dépassé'
+                    });
 
                     setTimeout(async () => {
                         await message.channel.delete().catch(() => {});
@@ -297,7 +326,16 @@ class SecurityQuestionService {
                 if (rep) {
                     try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
                 }
-                await sendCaptchaLog(message.guild, 'Tentative échouée', `**${message.author.tag}** - Réponse incorrecte (${nextAttempts}/${maxAttempts})`, '#f39c12');
+                await sendCaptchaLog(message.guild, 'Tentative échouée', `**${message.author.tag}** a soumis une réponse incorrecte (\`${userAnswer}\`). Il lui reste **${remaining}** tentative(s).`, '#f39c12', {
+                    member: message.member,
+                    user: message.author,
+                    channel: message.channel,
+                    question: captcha.question,
+                    userAnswer,
+                    attempts: nextAttempts,
+                    maxAttempts,
+                    remaining
+                });
                 return true;
             }
 
