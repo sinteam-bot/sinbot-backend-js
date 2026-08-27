@@ -80,8 +80,8 @@ const webAuthMiddleware = (req, res, next) => {
         return next();
     }
 
-    // 2. Endpoints toujours publics : health check et vérification d'authentification
-    if (req.path === '/health' || req.path === '/api/auth/status' || req.path === '/api/auth/verify') {
+    // 2. Endpoints toujours publics : health check, statut auth et proxy d'images Discord
+    if (req.path === '/health' || req.path === '/api/auth/status' || req.path === '/api/auth/verify' || req.path.startsWith('/api/proxy/')) {
         return next();
     }
 
