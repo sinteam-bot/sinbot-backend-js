@@ -8,6 +8,9 @@
 
 const { ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { Injectable } = require('../../../core/index.js');
+const { TicketService } = require('./ticket.service.js');
+const { TicketPermissionsService } = require('./ticket-permissions.service.js');
+const { TranscriptService } = require('./transcript.service.js');
 
 class TicketManagerService {
     static inject = [TicketService, TicketPermissionsService, TranscriptService];

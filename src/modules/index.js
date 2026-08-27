@@ -7,6 +7,7 @@ const { XPLevelModule } = require('./feature_xp-level/xp-level.module.js');
 const { DailyMessageModule } = require('./feature_daily-message/daily-message.module.js');
 const { WelcomeModule } = require('./feature_welcome/welcome.module.js');
 const { AutoModModule } = require('./feature_automod/automod.module.js');
+const { TicketsModule } = require('./feature_tickets/tickets.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -20,7 +21,8 @@ const appModules = [
     XPLevelModule,
     DailyMessageModule,
     WelcomeModule,
-    AutoModModule
+    AutoModModule,
+    TicketsModule
 ];
 
 module.exports = {
@@ -33,5 +35,6 @@ module.exports = {
     XPLevelModule,
     DailyMessageModule,
     WelcomeModule,
-    AutoModModule
+    AutoModModule,
+    TicketsModule
 };
