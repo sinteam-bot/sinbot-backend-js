@@ -21,16 +21,20 @@ class BumpReminderService {
             ? bumpConf.enabled !== false 
             : (schedulerConf.enabled !== false && taskConf.enabled !== false);
 
+        const defaultSimpleMsg = "{role} c'est l'heure de bumper {server} <:Obsydemoncouverture:1488145689916473544> (Dernier bump par {user})";
+
         return {
             enabled: isEnabled,
             role_id: bumpConf.role_id || taskConf.role_id || '',
             channel_id: bumpConf.channel_id || taskConf.channel_id || '',
             reminder_cooldown_hours: bumpConf.reminder_cooldown_hours || taskConf.reminder_cooldown_hours || 2,
             mention_here: bumpConf.mention_here !== undefined ? bumpConf.mention_here : (taskConf.mention_here !== false),
+            use_embed: bumpConf.use_embed === true,
+            message: bumpConf.message || defaultSimpleMsg,
             messages: {
-                content: bumpConf.messages?.content !== undefined ? bumpConf.messages.content : (taskConf.messages?.content ?? "🔔 {role}"),
+                content: bumpConf.messages?.content !== undefined ? bumpConf.messages.content : (taskConf.messages?.content ?? "{role}"),
                 title: bumpConf.messages?.title || taskConf.messages?.title || "⏰ C'est l'heure du Bump !",
-                description: bumpConf.messages?.description || taskConf.messages?.description || "{hours} heures se sont écoulées depuis le dernier bump !\n\nTapez {command} pour faire monter le serveur sur Disboard 🚀",
+                description: bumpConf.messages?.description || taskConf.messages?.description || "{role} c'est l'heure de bumper {server} <:Obsydemoncouverture:1488145689916473544> !\n(Dernier bump par {user})",
                 color: bumpConf.messages?.color || bumpConf.color || taskConf.messages?.color || taskConf.color || "#f2c7ce",
                 thumbnail: bumpConf.messages?.thumbnail || taskConf.messages?.thumbnail || null,
                 image: bumpConf.messages?.image || taskConf.messages?.image || null,
@@ -183,49 +187,62 @@ class BumpReminderService {
             const cooldownHours = Number(conf.reminder_cooldown_hours) || 2;
             const roleMention = conf.role_id ? `<@&${conf.role_id}>` : (conf.mention_here !== false ? '@here' : '');
             const bumperUsername = bump.bumper_username || 'Inconnu';
-            const bumperUser = bump.bumper_username ? `@${bump.bumper_username}` : (bump.bumper_id ? `<@${bump.bumper_id}>` : 'Inconnu');
+            const bumperUser = bump.bumper_id ? `<@${bump.bumper_id}>` : (bump.bumper_username ? `@${bump.bumper_username}` : 'Inconnu');
             const bumpCommand = '</bump:947088344167366698>';
+            const obsyDemonEmoji = '<:Obsydemoncouverture:1488145689916473544>';
 
             const vars = {
                 hours: cooldownHours,
                 role: roleMention,
                 mention: roleMention,
                 user: bumperUser,
+                last_user: bumperUser,
                 username: bumperUsername,
                 bumper: bumperUser,
                 command: bumpCommand,
                 channel: `<#${channel.id}>`,
-                server: guild?.name || 'le serveur'
+                server: guild?.name || 'Obsydian',
+                emoji: obsyDemonEmoji,
+                emojiObsydemon: '1488145689916473544'
             };
 
-            const defaultTitle = "⏰ C'est l'heure du Bump !";
-            const defaultDescription = "{hours} heures se sont écoulées depuis le dernier bump !\n\nTapez {command} pour faire monter le serveur sur Disboard 🚀";
+            if (conf.use_embed) {
+                const defaultTitle = "⏰ C'est l'heure du Bump !";
+                const defaultDescription = "{role} c'est l'heure de bumper {server} <:Obsydemoncouverture:1488145689916473544> !\n(Dernier bump par {user})";
 
-            const rawContent = conf.messages?.content !== undefined 
-                ? this.formatMessageText(conf.messages.content, vars)
-                : (roleMention ? `🔔 ${roleMention}` : undefined);
+                const rawContent = conf.messages?.content !== undefined 
+                    ? this.formatMessageText(conf.messages.content, vars)
+                    : (roleMention ? `🔔 ${roleMention}` : undefined);
 
-            const title = this.formatMessageText(conf.messages?.title || defaultTitle, vars);
-            const description = this.formatMessageText(conf.messages?.description || defaultDescription, vars);
-            const color = conf.messages?.color || conf.color || '#f2c7ce';
-            const footerText = conf.messages?.footer ? this.formatMessageText(conf.messages.footer, vars) : null;
-            const thumbnail = conf.messages?.thumbnail || null;
-            const image = conf.messages?.image || null;
+                const title = this.formatMessageText(conf.messages?.title || defaultTitle, vars);
+                const description = this.formatMessageText(conf.messages?.description || defaultDescription, vars);
+                const color = conf.messages?.color || conf.color || '#f2c7ce';
+                const footerText = conf.messages?.footer ? this.formatMessageText(conf.messages.footer, vars) : null;
+                const thumbnail = conf.messages?.thumbnail || null;
+                const image = conf.messages?.image || null;
 
-            const embed = new EmbedBuilder()
-                .setColor(color)
-                .setTitle(title)
-                .setDescription(description)
-                .setTimestamp();
+                const embed = new EmbedBuilder()
+                    .setColor(color)
+                    .setTitle(title)
+                    .setDescription(description)
+                    .setTimestamp();
 
-            if (footerText) embed.setFooter({ text: footerText });
-            if (thumbnail) embed.setThumbnail(thumbnail);
-            if (image) embed.setImage(image);
+                if (footerText) embed.setFooter({ text: footerText });
+                if (thumbnail) embed.setThumbnail(thumbnail);
+                if (image) embed.setImage(image);
 
-            await channel.send({
-                content: rawContent && rawContent.trim() !== '' ? rawContent : undefined,
-                embeds: [embed]
-            });
+                await channel.send({
+                    content: rawContent && rawContent.trim() !== '' ? rawContent : undefined,
+                    embeds: [embed]
+                });
+            } else {
+                const defaultSimpleMsg = "{role} c'est l'heure de bumper {server} <:Obsydemoncouverture:1488145689916473544> (Dernier bump par {user})";
+                const simpleText = this.formatMessageText(conf.message || defaultSimpleMsg, vars);
+
+                await channel.send({
+                    content: simpleText
+                });
+            }
 
             await this.repo.markReminderSent(bump.id);
             const dateStr = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });

@@ -55,9 +55,8 @@ describe('Service: Bump Reminder Module Tests', () => {
         await repo.markReminderSent(last.id);
     });
 
-    test('Service: should send bump reminder embed without error', async () => {
+    test('Service: should send simple text bump reminder without embed by default', async () => {
         const service = container.resolve(BumpReminderService);
-        const repo = container.resolve(BumpReminderRepository);
 
         let sentPayload = null;
         const mockClient = {
@@ -76,12 +75,52 @@ describe('Service: Bump Reminder Module Tests', () => {
         const testBump = {
             id: 999999,
             channel_id: '123456789012345678',
+            bumper_id: '1003058288461623438',
+            bumper_username: 'TestUser',
             bumped_at: new Date(Date.now() - 3 * 3600 * 1000)
         };
 
         await service.sendBumpReminder(mockClient, testBump);
         assert.ok(sentPayload);
-        assert.ok(sentPayload.embeds && sentPayload.embeds.length > 0);
+        assert.ok(typeof sentPayload.content === 'string');
+        assert.ok(sentPayload.content.includes("c'est l'heure de bumper"));
+    });
+
+    test('Service: should send bump reminder embed when use_embed is true', async () => {
+        const service = container.resolve(BumpReminderService);
+        const originalGetConfig = service.getConfig.bind(service);
+        service.getConfig = () => ({
+            ...originalGetConfig(),
+            use_embed: true
+        });
+
+        try {
+            let sentPayload = null;
+            const mockClient = {
+                channels: {
+                    fetch: async (id) => ({
+                        id,
+                        isTextBased: () => true,
+                        send: async (payload) => {
+                            sentPayload = payload;
+                            return { id: 'sent_msg_123' };
+                        }
+                    })
+                }
+            };
+
+            const testBump = {
+                id: 999999,
+                channel_id: '123456789012345678',
+                bumped_at: new Date(Date.now() - 3 * 3600 * 1000)
+            };
+
+            await service.sendBumpReminder(mockClient, testBump);
+            assert.ok(sentPayload);
+            assert.ok(sentPayload.embeds && sentPayload.embeds.length > 0);
+        } finally {
+            service.getConfig = originalGetConfig;
+        }
     });
 
     test('Service: should format placeholders in custom bump reminder message and embed', async () => {
