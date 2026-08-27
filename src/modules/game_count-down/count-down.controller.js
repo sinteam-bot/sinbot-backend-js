@@ -19,6 +19,8 @@ class CountDownController {
             data: {
                 state: {
                     current_number: state.currentNumber,
+                    error_count: state.errorCount ?? 0,
+                    max_errors: state.maxErrors ?? 1,
                     is_trap_active: state.isTrapActive ? 1 : 0,
                     trap_number: state.trapNumber,
                     last_user_id: state.lastUserId,

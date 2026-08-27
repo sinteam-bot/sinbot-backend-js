@@ -287,6 +287,7 @@ const discordMessages = pgTable('discord_messages', {
 const counterState = pgTable('counter_state', {
     channelId: text('channel_id').primaryKey(),
     currentNumber: integer('current_number').default(0),
+    errorCount: integer('error_count').default(0),
     lastUserId: text('last_user_id'),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 });
@@ -295,6 +296,7 @@ const counterState = pgTable('counter_state', {
 const countdownState = pgTable('countdown_state', {
     channelId: text('channel_id').primaryKey(),
     currentNumber: integer('current_number').default(900),
+    errorCount: integer('error_count').default(0),
     isTrapActive: integer('is_trap_active').default(0),
     trapNumber: integer('trap_number'),
     lastUserId: text('last_user_id'),

@@ -19,6 +19,8 @@ class RoadToInfiniteController {
             data: {
                 state: {
                     current_number: state.currentNumber,
+                    error_count: state.errorCount ?? 0,
+                    max_errors: state.maxErrors ?? 1,
                     last_user_id: state.lastUserId,
                     updated_at: state.updatedAt
                 },

@@ -100,7 +100,7 @@ class RoadToInfiniteService {
 
             // 2. Vérification si le nombre est correct
             if (postedNumber !== null && postedNumber === expectedNumber) {
-                await this.repo.updateState(COUNTER_CHANNEL_ID, expectedNumber, message.author.id);
+                await this.repo.updateState(COUNTER_CHANNEL_ID, expectedNumber, message.author.id, state.error_count || 0);
                 await this.repo.addScore(COUNTER_CHANNEL_ID, message.author.id, message.author.username);
 
                 try {
@@ -121,6 +121,32 @@ class RoadToInfiniteService {
                     await message.react('❌').catch(() => {});
                 }
 
+                const maxErrors = Math.max(1, parseInt(counterConfig.max_errors || 1, 10));
+                const newErrorCount = (state.error_count || 0) + 1;
+
+                if (newErrorCount < maxErrors) {
+                    await this.repo.updateState(COUNTER_CHANNEL_ID, currentNumber, state.last_user_id, newErrorCount);
+
+                    const warningMsg = this.formatMessage(
+                        messages.warning_message || "⚠️ <@{userId}> s'est trompé(e) ! (**{errorsCount}/{maxErrors} erreurs** tolérées). Le nombre attendu reste **{expectedNumber}**.",
+                        {
+                            userId: message.author.id,
+                            username: message.author.username,
+                            errorsCount: newErrorCount,
+                            maxErrors,
+                            remainingErrors: maxErrors - newErrorCount,
+                            expectedNumber,
+                            postedNumber: message.content,
+                            emojiObsydemon: EMOJI_OBSYDEMON_ID
+                        }
+                    );
+
+                    await message.channel.send(warningMsg);
+                    console.log(`⚠️ [COUNTER] ${message.author.tag} a fait une erreur (${newErrorCount}/${maxErrors} erreurs). Compteur maintenu à ${currentNumber}.`);
+                    return;
+                }
+
+                // Si le seuil d'erreurs est atteint : Game Over & Réinitialisation
                 const scores = await this.repo.getScores(COUNTER_CHANNEL_ID);
 
                 let rankingText = messages.no_participation || "Aucune participation enregistrée pour cette session.";
@@ -132,12 +158,14 @@ class RoadToInfiniteService {
                 }
 
                 const rankingTextHeader = this.formatMessage(
-                    messages.ranking_header || "**<@{userId}> a ruiné la Route de l'Infini en envoyant un nombre incorrect !** \n\n 🏆 **Classement de la Route de l'Infini**\n",
+                    messages.ranking_header || "**<@{userId}> a ruiné la Route de l'Infini après {maxErrors} erreur(s) !** \n\n 🏆 **Classement de la Route de l'Infini**\n",
                     {
                         userId: message.author.id,
                         username: message.author.username,
                         expectedNumber,
-                        postedNumber: message.content
+                        postedNumber: message.content,
+                        errorsCount: newErrorCount,
+                        maxErrors
                     }
                 );
 
@@ -152,9 +180,9 @@ class RoadToInfiniteService {
                 await message.channel.send({ embeds: [embed] });
 
                 await this.repo.resetScores(COUNTER_CHANNEL_ID);
-                await this.repo.updateState(COUNTER_CHANNEL_ID, 0, null);
+                await this.repo.updateState(COUNTER_CHANNEL_ID, 0, null, 0);
 
-                console.log(`❌ [COUNTER] ${message.author.tag} a fait une erreur (attendu: ${expectedNumber}, reçu: "${message.content}"). Compteur réinitialisé.`);
+                console.log(`❌ [COUNTER] ${message.author.tag} a atteint la limite d'erreurs (${newErrorCount}/${maxErrors}). Compteur réinitialisé.`);
             }
 
         } catch (error) {
@@ -168,6 +196,8 @@ class RoadToInfiniteService {
         return {
             channelId: targetChannel,
             currentNumber: state?.current_number || 0,
+            errorCount: state?.error_count || 0,
+            maxErrors: this.getConfig().max_errors || 1,
             lastUserId: state?.last_user_id || null,
             updatedAt: state?.updated_at || null,
             enabled: this.getConfig().enabled !== false
@@ -183,7 +213,7 @@ class RoadToInfiniteService {
     async resetGame(channelId = null) {
         const targetChannel = channelId || this.getConfig().channel_id || '1533492692825276598';
         await this.repo.resetScores(targetChannel);
-        await this.repo.updateState(targetChannel, 0, null);
+        await this.repo.updateState(targetChannel, 0, null, 0);
         return { success: true, message: 'Compteur réinitialisé avec succès.' };
     }
 }

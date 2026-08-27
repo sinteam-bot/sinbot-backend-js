@@ -153,17 +153,31 @@ class CountDownService {
                         await message.react('❌').catch(() => {});
                     }
 
-                    const trapFailMsg = this.formatMessage(
-                        messages.trap_failed_message || "<@{userId}>**, Je t’ai eu ** <:Obsydemoncouverture:{emojiObsydemon}>",
-                        {
-                            userId: message.author.id,
-                            username: message.author.username,
-                            emojiObsydemon: EMOJI_OBSYDEMON_ID
-                        }
-                    );
-                    await message.channel.send(trapFailMsg);
+                    const maxErrors = Math.max(1, parseInt(cdConfig.max_errors || 1, 10));
+                    const newErrorCount = (state.error_count || 0) + 1;
 
-                    console.log(`🪤 [COUNTDOWN] ${message.author.tag} est tombé dans le piège (attendu: ${trapNum}, reçu: "${message.content}")`);
+                    if (newErrorCount < maxErrors) {
+                        await this.repo.updateState(COUNTDOWN_CHANNEL_ID, currentNumber, 0, null, state.last_user_id, newErrorCount);
+
+                        const trapFailMsg = this.formatMessage(
+                            messages.trap_failed_message || "<@{userId}>**, Je t’ai eu !** (**{errorsCount}/{maxErrors} erreurs** tolérées) <:Obsydemoncouverture:{emojiObsydemon}>. Le prochain nombre attendu est **{expectedNumber}**.",
+                            {
+                                userId: message.author.id,
+                                username: message.author.username,
+                                errorsCount: newErrorCount,
+                                maxErrors,
+                                remainingErrors: maxErrors - newErrorCount,
+                                expectedNumber: currentNumber - 1,
+                                emojiObsydemon: EMOJI_OBSYDEMON_ID
+                            }
+                        );
+                        await message.channel.send(trapFailMsg);
+                        console.log(`🪤 [COUNTDOWN] ${message.author.tag} est tombé dans le piège (${newErrorCount}/${maxErrors} erreurs)`);
+                        return;
+                    }
+
+                    // Seuil d'erreurs atteint lors du piège -> Reset de la partie
+                    await this.handleGameOver(message, COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, messages, newErrorCount, maxErrors);
                     return;
                 }
             }
@@ -214,7 +228,7 @@ class CountDownService {
                     await message.channel.send({ embeds: [embed] });
 
                     await this.repo.resetScores(COUNTDOWN_CHANNEL_ID);
-                    await this.repo.updateState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, message.author.id);
+                    await this.repo.updateState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, null, 0);
 
                     const restartMsg = this.formatMessage(
                         messages.start_message || "**Allez la chienne commence :** {number}",
@@ -232,9 +246,9 @@ class CountDownService {
                     console.log(`🪤 [COUNTDOWN] Piège déclenché par le bot ! Nombre posté : ${trapNumber}`);
 
                     await message.channel.send(`${trapNumber}`);
-                    await this.repo.updateState(COUNTDOWN_CHANNEL_ID, trapNumber, 1, trapNumber, message.author.id);
+                    await this.repo.updateState(COUNTDOWN_CHANNEL_ID, trapNumber, 1, trapNumber, message.author.id, state.error_count || 0);
                 } else {
-                    await this.repo.updateState(COUNTDOWN_CHANNEL_ID, expectedNumber, 0, null, message.author.id);
+                    await this.repo.updateState(COUNTDOWN_CHANNEL_ID, expectedNumber, 0, null, message.author.id, state.error_count || 0);
                 }
 
             } else {
@@ -246,24 +260,67 @@ class CountDownService {
                     await message.react('❌').catch(() => {});
                 }
 
-                const errorMsg = this.formatMessage(
-                    messages.error_message || "**Oups <@{userId}> s'est trompé(e), je vais devoir mordre ** <:Obsydemoncouverture:{emojiObsydemon}>",
-                    {
-                        userId: message.author.id,
-                        username: message.author.username,
-                        expectedNumber,
-                        postedNumber: message.content,
-                        emojiObsydemon: EMOJI_OBSYDEMON_ID
-                    }
-                );
+                const maxErrors = Math.max(1, parseInt(cdConfig.max_errors || 1, 10));
+                const newErrorCount = (state.error_count || 0) + 1;
 
-                await message.channel.send(errorMsg);
-                console.log(`❌ [COUNTDOWN] ${message.author.tag} a fait une erreur (attendu: ${expectedNumber}, reçu: "${message.content}")`);
+                if (newErrorCount < maxErrors) {
+                    await this.repo.updateState(COUNTDOWN_CHANNEL_ID, currentNumber, 0, null, state.last_user_id, newErrorCount);
+
+                    const warningMsg = this.formatMessage(
+                        messages.warning_message || messages.error_message || "⚠️ <@{userId}> s'est trompé(e) ! (**{errorsCount}/{maxErrors} erreurs** tolérées). Le prochain nombre attendu est **{expectedNumber}**.",
+                        {
+                            userId: message.author.id,
+                            username: message.author.username,
+                            errorsCount: newErrorCount,
+                            maxErrors,
+                            remainingErrors: maxErrors - newErrorCount,
+                            expectedNumber,
+                            postedNumber: message.content,
+                            emojiObsydemon: EMOJI_OBSYDEMON_ID
+                        }
+                    );
+
+                    await message.channel.send(warningMsg);
+                    console.log(`⚠️ [COUNTDOWN] ${message.author.tag} a fait une erreur (${newErrorCount}/${maxErrors} erreurs). Décompte maintenu à ${currentNumber}.`);
+                    return;
+                }
+
+                // Seuil d'erreurs atteint -> Reset de la partie
+                await this.handleGameOver(message, COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, messages, newErrorCount, maxErrors);
             }
 
         } catch (error) {
             console.error('❌ [COUNTDOWN Service] Erreur:', error);
         }
+    }
+
+    async handleGameOver(message, channelId, startNumber, messages, errorsCount, maxErrors) {
+        const scores = await this.repo.getScores(channelId);
+        let rankingText = messages.no_participation || "Aucune participation enregistrée.";
+        if (scores.length > 0) {
+            rankingText = scores.map((s, index) => {
+                const medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : '👤'));
+                return `${medal} **${s.username}** : ${s.score} point(s)`;
+            }).join('\n');
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(messages.embed_color || '#F2C7CE')
+            .setTitle(messages.embed_title || '❌ **Partie terminée !**')
+            .setDescription(`**La limite de ${maxErrors} erreur(s) a été atteinte.**\n\n🏆 **Classement de la partie :**\n${rankingText}\n\nLe compte à rebours a été réinitialisé à **${startNumber}**.`)
+            .setTimestamp();
+
+        await message.channel.send({ embeds: [embed] });
+
+        await this.repo.resetScores(channelId);
+        await this.repo.updateState(channelId, startNumber, 0, null, null, 0);
+
+        const restartMsg = this.formatMessage(
+            messages.start_message || "**Allez la chienne commence :** {number}",
+            { number: startNumber }
+        );
+        await message.channel.send(restartMsg);
+        console.log(`❌ [COUNTDOWN] ${message.author.tag} a atteint la limite d'erreurs (${errorsCount}/${maxErrors}). Partie réinitialisée.`);
     }
 
     async getGameState(channelId = null) {
@@ -272,6 +329,8 @@ class CountDownService {
         return {
             channelId: targetChannel,
             currentNumber: state?.current_number ?? (this.getConfig().start_number || 900),
+            errorCount: state?.error_count || 0,
+            maxErrors: this.getConfig().max_errors || 1,
             isTrapActive: state?.is_trap_active === 1,
             trapNumber: state?.trap_number || null,
             lastUserId: state?.last_user_id || null,
@@ -290,7 +349,7 @@ class CountDownService {
         const targetChannel = channelId || this.getConfig().channel_id || '1533492760697503805';
         const startNumber = this.getConfig().start_number || 900;
         await this.repo.resetScores(targetChannel);
-        await this.repo.updateState(targetChannel, startNumber, 0, null, null);
+        await this.repo.updateState(targetChannel, startNumber, 0, null, null, 0);
         return { success: true, message: `Compte à rebours réinitialisé à ${startNumber}.` };
     }
 }

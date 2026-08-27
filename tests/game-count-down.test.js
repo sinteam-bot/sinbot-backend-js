@@ -49,6 +49,36 @@ describe('Game: Count Down Module Tests', () => {
         assert.strictEqual(state.last_user_id, 'user_bob');
     });
 
+    test('Service: should tolerate errors when max_errors > 1 and only reset on reaching limit', async () => {
+        const service = container.resolve(CountDownService);
+        const repo = container.resolve(CountDownRepository);
+        service.getConfig = () => ({ enabled: true, channel_id: channelId, start_number: 900, max_errors: 2 });
+
+        await repo.updateState(channelId, 850, 0, null, 'user_alice', 0);
+
+        let sentMessages = [];
+        const mockWrongMessage = {
+            id: 'msg_cd_wrong_1',
+            guild: { id: 'guild_1', name: 'Test Guild' },
+            channel: { id: channelId, send: async (payload) => { sentMessages.push(payload); } },
+            author: { id: 'user_bob', username: 'Bob', bot: false },
+            content: '123', // Erreur (attendu: 849)
+            react: async () => {}
+        };
+
+        // 1ère erreur : Tolérée
+        await service.handleIncomingMessage(mockWrongMessage);
+        let state = await repo.getState(channelId);
+        assert.strictEqual(state.current_number, 850, 'Countdown number must stay at 850 after 1st error when max_errors=2');
+        assert.strictEqual(state.error_count, 1, 'Error count must be 1');
+
+        // 2ème erreur : Limite atteinte -> Reset à start_number (900)
+        await service.handleIncomingMessage(mockWrongMessage);
+        state = await repo.getState(channelId);
+        assert.strictEqual(state.current_number, 900, 'Countdown must reset to 900 after reaching max_errors');
+        assert.strictEqual(state.error_count, 0, 'Error count must reset to 0');
+    });
+
     test('Controller: should return status and leaderboard', async () => {
         const controller = container.resolve(CountDownController);
         const resState = await controller.getState({ query: { channel_id: channelId } });

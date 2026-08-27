@@ -23,6 +23,7 @@ class CountDownRepository {
             ...state,
             channel_id: state.channelId,
             current_number: state.currentNumber,
+            error_count: state.errorCount ?? 0,
             is_trap_active: state.isTrapActive,
             trap_number: state.trapNumber,
             last_user_id: state.lastUserId,
@@ -37,12 +38,14 @@ class CountDownRepository {
      * @param {number} [isTrapActive=0]
      * @param {number|null} [trapNumber=null]
      * @param {string|null} [lastUserId=null]
+     * @param {number} [errorCount=0]
      */
-    async updateState(channelId, currentNumber, isTrapActive = 0, trapNumber = null, lastUserId = null) {
+    async updateState(channelId, currentNumber, isTrapActive = 0, trapNumber = null, lastUserId = null, errorCount = 0) {
         const [updated] = await this.db.insert(this.schema.countdownState)
             .values({
                 channelId,
                 currentNumber,
+                errorCount,
                 isTrapActive: isTrapActive ? 1 : 0,
                 trapNumber,
                 lastUserId,
@@ -52,6 +55,7 @@ class CountDownRepository {
                 target: this.schema.countdownState.channelId,
                 set: {
                     currentNumber,
+                    errorCount,
                     isTrapActive: isTrapActive ? 1 : 0,
                     trapNumber,
                     lastUserId,
@@ -64,6 +68,7 @@ class CountDownRepository {
             ...updated,
             channel_id: updated.channelId,
             current_number: updated.currentNumber,
+            error_count: updated.errorCount ?? 0,
             is_trap_active: updated.isTrapActive,
             trap_number: updated.trapNumber,
             last_user_id: updated.lastUserId

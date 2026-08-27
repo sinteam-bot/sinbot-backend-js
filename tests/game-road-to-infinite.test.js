@@ -76,28 +76,40 @@ describe('Game: Road to Infinite Module Tests', () => {
         assert.strictEqual(state.current_number, 11, 'Counter must stay unchanged on double post');
     });
 
-    test('Service: should reset counter on wrong number', async () => {
+    test('Service: should tolerate errors when max_errors > 1 and only reset on reaching limit', async () => {
         const service = container.resolve(RoadToInfiniteService);
         const repo = container.resolve(RoadToInfiniteRepository);
-        service.getConfig = () => ({ enabled: true, channel_id: channelId });
+        service.getConfig = () => ({ enabled: true, channel_id: channelId, max_errors: 3 });
 
-        await repo.updateState(channelId, 11, 'user_b');
+        await repo.updateState(channelId, 25, 'user_b', 0);
 
-        let sentMsg = null;
-        const mockMessage = {
+        let sentMessages = [];
+        const mockMessage1 = {
             id: 'msg_wrong_1',
             guild: { id: 'guild_1', name: 'Test Guild' },
-            channel: { id: channelId, send: async (payload) => { sentMsg = payload; }, messages: { fetch: async () => new Map() } },
+            channel: { id: channelId, send: async (payload) => { sentMessages.push(payload); }, messages: { fetch: async () => new Map() } },
             author: { id: 'user_c', username: 'Charlie', bot: false },
             content: '999',
             react: async () => {}
         };
 
-        await service.handleIncomingMessage(mockMessage);
-        assert.ok(sentMsg, 'Should send failure embed');
+        // 1ère erreur : Tolérée
+        await service.handleIncomingMessage(mockMessage1);
+        let state = await repo.getState(channelId);
+        assert.strictEqual(state.current_number, 25, 'Counter must stay unchanged on first error when max_errors=3');
+        assert.strictEqual(state.error_count, 1, 'Error count must be 1');
 
-        const state = await repo.getState(channelId);
-        assert.strictEqual(state.current_number, 0, 'Counter must be reset to 0 on wrong number');
+        // 2ème erreur : Tolérée
+        await service.handleIncomingMessage(mockMessage1);
+        state = await repo.getState(channelId);
+        assert.strictEqual(state.current_number, 25, 'Counter must stay unchanged on second error');
+        assert.strictEqual(state.error_count, 2, 'Error count must be 2');
+
+        // 3ème erreur : Seuil atteint -> Reset
+        await service.handleIncomingMessage(mockMessage1);
+        state = await repo.getState(channelId);
+        assert.strictEqual(state.current_number, 0, 'Counter must reset to 0 after 3rd error');
+        assert.strictEqual(state.error_count, 0, 'Error count must reset to 0');
     });
 
     test('Controller: should return status and leaderboard', async () => {

@@ -23,6 +23,7 @@ class RoadToInfiniteRepository {
             ...state,
             channel_id: state.channelId,
             current_number: state.currentNumber,
+            error_count: state.errorCount ?? 0,
             last_user_id: state.lastUserId,
             updated_at: state.updatedAt
         };
@@ -33,12 +34,14 @@ class RoadToInfiniteRepository {
      * @param {string} channelId
      * @param {number} currentNumber
      * @param {string|null} lastUserId
+     * @param {number} [errorCount=0]
      */
-    async updateState(channelId, currentNumber, lastUserId = null) {
+    async updateState(channelId, currentNumber, lastUserId = null, errorCount = 0) {
         const [updated] = await this.db.insert(this.schema.counterState)
             .values({
                 channelId,
                 currentNumber,
+                errorCount,
                 lastUserId,
                 updatedAt: sql`CURRENT_TIMESTAMP`
             })
@@ -46,6 +49,7 @@ class RoadToInfiniteRepository {
                 target: this.schema.counterState.channelId,
                 set: {
                     currentNumber,
+                    errorCount,
                     lastUserId,
                     updatedAt: sql`CURRENT_TIMESTAMP`
                 }
@@ -56,6 +60,7 @@ class RoadToInfiniteRepository {
             ...updated,
             channel_id: updated.channelId,
             current_number: updated.currentNumber,
+            error_count: updated.errorCount ?? 0,
             last_user_id: updated.lastUserId
         };
     }

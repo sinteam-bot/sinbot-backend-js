@@ -334,6 +334,7 @@ const PG_TABLES_DDL = `
     CREATE TABLE IF NOT EXISTS counter_state (
         channel_id TEXT PRIMARY KEY,
         current_number INTEGER DEFAULT 0,
+        error_count INTEGER DEFAULT 0,
         last_user_id TEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -341,6 +342,7 @@ const PG_TABLES_DDL = `
     CREATE TABLE IF NOT EXISTS countdown_state (
         channel_id TEXT PRIMARY KEY,
         current_number INTEGER DEFAULT 900,
+        error_count INTEGER DEFAULT 0,
         is_trap_active INTEGER DEFAULT 0,
         trap_number INTEGER,
         last_user_id TEXT,
@@ -413,6 +415,8 @@ async function initPgTables(client) {
 
     // Migration progressive automatique des colonnes manquantes pour PostgreSQL
     const migrationStatements = [
+        `ALTER TABLE counter_state ADD COLUMN IF NOT EXISTS error_count INTEGER DEFAULT 0;`,
+        `ALTER TABLE countdown_state ADD COLUMN IF NOT EXISTS error_count INTEGER DEFAULT 0;`,
         `ALTER TABLE discord_roles ADD COLUMN IF NOT EXISTS color_hex TEXT;`,
         `ALTER TABLE discord_roles ADD COLUMN IF NOT EXISTS icon_url TEXT;`,
         `ALTER TABLE discord_roles ADD COLUMN IF NOT EXISTS unicode_emoji TEXT;`,
