@@ -21,6 +21,12 @@ module.exports = {
         // Définir le statut du bot
         client.user.setActivity('les commandes !help', { type: 'LISTENING' });
 
+        // Synchronisation automatique des Slash Commands avec Discord (modules + legacy)
+        const { syncDiscordSlashCommands } = require("../utils/commandDeployer.js");
+        syncDiscordSlashCommands(client).catch(err => {
+            console.error('❌ [SlashCommands] Erreur lors de la synchronisation au démarrage:', err.message);
+        });
+
         // Synchronisation du cache BDD de toutes les données Discord
         const DiscordCacheService = require("../services/discordCacheService.js");
         const guildId = process.env.GUILD_ID;

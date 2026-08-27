@@ -5,7 +5,19 @@ module.exports = {
     
     async execute(interaction) {
         // Les boutons des modules sont traités via l'EventBus modulaire (DailyMessageEvent, etc.)
+        // ou directement pour les boutons de commandes de modules (ex: pagination leaderboard XP)
         if (interaction.isButton()) {
+            if (interaction.customId?.startsWith('xp:lb:')) {
+                try {
+                    const { container } = require('../core/container.js');
+                    const { XPLevelCommand } = require('../modules/feature_xp-level/xp-level.cmd.js');
+                    const cmd = container.resolve(XPLevelCommand);
+                    await cmd.handleLeaderboardButton(interaction);
+                } catch (err) {
+                    console.error('❌ Erreur pagination leaderboard XP:', err);
+                }
+                return;
+            }
             return;
         }
 

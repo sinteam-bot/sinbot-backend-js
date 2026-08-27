@@ -1715,16 +1715,22 @@ function createWebRouter(client) {
             const commandsList = [];
 
             if (client.commands) {
+                const seen = new Set();
                 client.commands.forEach((cmd, name) => {
-                    commandsList.push({
-                        name: cmd.data?.name || name,
-                        description: cmd.data?.description || cmd.description || 'Pas de description',
-                        options: cmd.data?.options || [],
-                        type: cmd.executeSlash ? 'Slash Command' : 'Prefix Command',
-                        adminOnly: !!cmdConfig.permissions?.[name]?.admin_only,
-                        allowedRoles: cmdConfig.permissions?.[name]?.allowed_roles || [],
-                        allowedChannels: cmdConfig.permissions?.[name]?.allowed_channels || []
-                    });
+                    const cmdName = cmd.data?.name || name;
+                    if (!seen.has(cmdName.toLowerCase())) {
+                        seen.add(cmdName.toLowerCase());
+                        commandsList.push({
+                            name: cmdName,
+                            description: cmd.data?.description || cmd.description || 'Pas de description',
+                            options: cmd.data?.options || [],
+                            module: cmd.module || 'Système',
+                            type: cmd.executeSlash ? 'Slash Command' : 'Prefix Command',
+                            adminOnly: !!cmdConfig.permissions?.[cmdName]?.admin_only,
+                            allowedRoles: cmdConfig.permissions?.[cmdName]?.allowed_roles || [],
+                            allowedChannels: cmdConfig.permissions?.[cmdName]?.allowed_channels || []
+                        });
+                    }
                 });
             }
 
@@ -1736,6 +1742,16 @@ function createWebRouter(client) {
                     config: cmdConfig
                 }
             });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/commands/sync', async (req, res) => {
+        try {
+            const { syncDiscordSlashCommands } = require('../utils/commandDeployer.js');
+            const result = await syncDiscordSlashCommands(client, req.body || {});
+            res.json(result);
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }

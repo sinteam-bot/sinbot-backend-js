@@ -60,4 +60,90 @@ describe('Command Handler Utilities Tests', () => {
         assert.strictEqual(executed, true);
         assert.strictEqual(called, true);
     });
+
+    test('ModuleManager: should register and bind module commands properly', () => {
+        const { ModuleManager } = require('../src/core/module-manager.js');
+        const { Container } = require('../src/core/container.js');
+        const { DiscordEventBus } = require('../src/core/event-bus.js');
+        const { Module, Command } = require('../src/core/decorators.js');
+
+        class TestCommand {
+            async ping(interaction) {
+                return 'pong';
+            }
+        }
+        Command({ name: 'ping', description: 'Test ping command' })(TestCommand.prototype, 'ping');
+
+        class TestModule {}
+        Module({
+            commands: [TestCommand]
+        })(TestModule);
+
+        const testContainer = new Container();
+        const testBus = new DiscordEventBus();
+        const manager = new ModuleManager(testContainer, testBus);
+
+        const fakeClient = { commands: new Map() };
+        manager.init(fakeClient);
+        manager.registerModule(TestModule);
+
+        assert.ok(fakeClient.commands.has('ping'));
+        const registered = fakeClient.commands.get('ping');
+        assert.strictEqual(registered.name, 'ping');
+        assert.strictEqual(registered.description, 'Test ping command');
+        assert.ok(registered.data);
+    });
+
+    test('syncDiscordSlashCommands: correctly serializes and syncs commands payload', async () => {
+        const { syncDiscordSlashCommands } = require('../src/utils/commandDeployer.js');
+        const { SlashCommandBuilder } = require('discord.js');
+
+        const fakeCommands = new Map();
+        fakeCommands.set('help', {
+            data: new SlashCommandBuilder().setName('help').setDescription('Afficher aide'),
+            module: 'Core'
+        });
+        fakeCommands.set('rank', {
+            data: new SlashCommandBuilder().setName('rank').setDescription('Afficher niveau XP'),
+            module: 'XP'
+        });
+
+        let putRouteCalled = null;
+        let putBodyCalled = null;
+
+        const mockRest = {
+            put: async (route, { body }) => {
+                putRouteCalled = route;
+                putBodyCalled = body;
+                return body;
+            }
+        };
+
+        // Mock client Discord
+        const fakeClient = {
+            token: 'mock_token_123',
+            user: { id: 'mock_bot_user_id' },
+            guilds: {
+                cache: new Map([
+                    ['123456789', { id: '123456789', name: 'Test Guild' }]
+                ])
+            },
+            commands: fakeCommands
+        };
+
+        // We can test the sync with guildId and mock REST
+        const result = await syncDiscordSlashCommands(fakeClient, {
+            guildId: '123456789',
+            rest: mockRest
+        });
+
+        assert.ok(result);
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.count, 2);
+        assert.ok(result.commands.includes('help'));
+        assert.ok(result.commands.includes('rank'));
+        assert.ok(putRouteCalled.includes('123456789'));
+        assert.strictEqual(putBodyCalled.length, 2);
+    });
 });
+

@@ -12,6 +12,7 @@ class ModuleManager {
         this.container = customContainer;
         this.eventBus = customEventBus;
         this.modules = [];
+        this.commands = new Map();
         this.apiRouter = express.Router();
         this.discordClient = null;
         this.cronJobs = [];
@@ -25,6 +26,16 @@ class ModuleManager {
     init(client, app = null) {
         this.discordClient = client;
         this.eventBus.init(client);
+
+        if (client) {
+            if (!client.commands) {
+                client.commands = new Map();
+            }
+            // Transférer les commandes déjà enregistrées
+            for (const [name, cmd] of this.commands.entries()) {
+                client.commands.set(name, cmd);
+            }
+        }
 
         if (app) {
             app.use(this.apiRouter);
@@ -95,7 +106,16 @@ class ModuleManager {
             }
         }
 
-        // 5. Enregistrer et instancier le module lui-même
+        // 5. Enregistrer et brancher les Commandes Discord
+        if (metadata.commands) {
+            for (const CommandClass of metadata.commands) {
+                this.container.register(CommandClass);
+                const commandInstance = this.container.resolve(CommandClass);
+                this._bindCommands(CommandClass, commandInstance, moduleName);
+            }
+        }
+
+        // 6. Enregistrer et instancier le module lui-même
         this.container.register(ModuleClass);
         const moduleInstance = this.container.resolve(ModuleClass);
         this._bindCronTasks(ModuleClass, moduleInstance);
@@ -146,6 +166,62 @@ class ModuleManager {
                 eventInstance
             );
             console.log(`  🎧 Événement Discord branché : "${h.eventName}" -> ${EventClass.name}.${h.handlerName}`);
+        }
+    }
+
+    /**
+     * Branche les commandes Discord d'un module
+     * @private
+     */
+    _bindCommands(CommandClass, commandInstance, moduleName) {
+        const { SlashCommandBuilder } = require('discord.js');
+        const commands = CommandClass.__commands || [];
+
+        for (const cmdDef of commands) {
+            let builder = cmdDef.builder || CommandClass.__commandBuilder || null;
+
+            // Si aucun builder explicite n'a été fourni mais qu'un nom valide existe
+            if (!builder && cmdDef.name && !cmdDef.name.includes('-button') && !cmdDef.name.includes(':')) {
+                builder = new SlashCommandBuilder()
+                    .setName(cmdDef.name.toLowerCase())
+                    .setDescription(cmdDef.description || `Commande ${cmdDef.name}`);
+            }
+
+            const wrappedCmd = {
+                name: cmdDef.name,
+                data: builder,
+                description: cmdDef.description || builder?.description || '',
+                module: moduleName,
+                handlerName: cmdDef.handlerName,
+                instance: commandInstance,
+                executeSlash: async (interaction) => {
+                    if (typeof commandInstance[cmdDef.handlerName] === 'function') {
+                        return await commandInstance[cmdDef.handlerName](interaction);
+                    }
+                    if (typeof commandInstance.execute === 'function') {
+                        return await commandInstance.execute(interaction);
+                    }
+                },
+                execute: async (message, args) => {
+                    if (typeof commandInstance.execute === 'function') {
+                        return await commandInstance.execute(message, args);
+                    }
+                    if (typeof commandInstance[cmdDef.handlerName] === 'function') {
+                        return await commandInstance[cmdDef.handlerName](message, args);
+                    }
+                }
+            };
+
+            this.commands.set(cmdDef.name, wrappedCmd);
+
+            if (this.discordClient) {
+                if (!this.discordClient.commands) {
+                    this.discordClient.commands = new Map();
+                }
+                this.discordClient.commands.set(cmdDef.name, wrappedCmd);
+            }
+
+            console.log(`  ⚡ Commande Discord enregistrée : /${cmdDef.name} -> ${CommandClass.name}.${cmdDef.handlerName}`);
         }
     }
 
