@@ -193,6 +193,23 @@ class DailyMessageService {
      * Publie le message validé dans le salon public
      */
     async executePublication(client, draftData) {
+        if (!draftData) {
+            console.warn('⚠️ [DailyMessage] executePublication appelé avec un draft vide ou null.');
+            return false;
+        }
+
+        let textContent = '';
+        if (typeof draftData === 'string') {
+            textContent = draftData;
+        } else if (typeof draftData === 'object') {
+            textContent = draftData.text || draftData.content || draftData.message || '';
+        }
+
+        if (!textContent || !textContent.trim()) {
+            console.warn('⚠️ [DailyMessage] Le texte du message à publier est vide.');
+            return false;
+        }
+
         const conf = this.getConfig();
         const targetChannelId = conf.channel_id || process.env.DAILY_MESSAGE_CHANNEL_ID;
         const targetGuildId = config.discord?.guild_id || process.env.GUILD_ID;
@@ -212,7 +229,7 @@ class DailyMessageService {
         const finalEmbed = new EmbedBuilder()
             .setColor('#F2C7CE')
             .setTitle('** Le message du jour **')
-            .setDescription(draftData.text)
+            .setDescription(textContent)
             .setTimestamp();
 
         await targetChannel.send({ embeds: [finalEmbed] });
@@ -230,7 +247,7 @@ class DailyMessageService {
                 model: draftData.model || fallbackModel,
                 tokeninput: draftData.messageResponse?.usage?.promptTokens || 0,
                 tokenoutput: draftData.messageResponse?.usage?.completionTokens || 0,
-                content: draftData.text,
+                content: textContent,
                 type: 'daily_message',
                 previousMsgId: draftData.promptResponse?.msgId || null
             });
@@ -262,13 +279,22 @@ class DailyMessageService {
         }
 
         const acceptedDraft = await this.repo.getBotState('daily_msg_accepted_draft');
-        if (acceptedDraft) {
-            const draft = typeof acceptedDraft === 'string' ? JSON.parse(acceptedDraft) : acceptedDraft;
-            await this.executePublication(client, draft);
-            await this.repo.setBotState('daily_msg_accepted_draft', null);
-        } else {
-            console.log('ℹ️ [DailyMessage 09:00] Aucun message validé manuellement. La publication auto aura lieu à 11:00.');
+        if (acceptedDraft && acceptedDraft !== 'null' && acceptedDraft !== 'undefined') {
+            let draft = null;
+            try {
+                draft = typeof acceptedDraft === 'string' ? JSON.parse(acceptedDraft) : acceptedDraft;
+            } catch (e) {
+                draft = acceptedDraft;
+            }
+
+            if (draft && (draft.text || (typeof draft === 'string' && draft.trim()))) {
+                await this.executePublication(client, draft);
+                await this.repo.setBotState('daily_msg_accepted_draft', null);
+                return;
+            }
         }
+
+        console.log('ℹ️ [DailyMessage 09:00] Aucun message validé manuellement. La publication auto aura lieu à 11:00.');
     }
 
     /**
@@ -287,15 +313,25 @@ class DailyMessageService {
         }
 
         let draft = await this.repo.getBotState('daily_msg_accepted_draft');
-        if (draft) {
-            draft = typeof draft === 'string' ? JSON.parse(draft) : draft;
+        if (draft && draft !== 'null' && draft !== 'undefined') {
+            try {
+                draft = typeof draft === 'string' ? JSON.parse(draft) : draft;
+            } catch (e) {
+                // keep as string
+            }
         } else {
+            draft = null;
+        }
+
+        if (!draft || (!draft.text && typeof draft !== 'string')) {
             console.log('🔄 [DailyMessage 11:00] Génération automatique du message...');
             draft = await this.generateDailyMessageContent(new Date());
         }
 
-        await this.executePublication(client, draft);
-        await this.repo.setBotState('daily_msg_accepted_draft', null);
+        if (draft) {
+            await this.executePublication(client, draft);
+            await this.repo.setBotState('daily_msg_accepted_draft', null);
+        }
     }
 
     /**

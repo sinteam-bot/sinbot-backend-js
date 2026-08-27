@@ -248,7 +248,7 @@ function initDiscordEventTracker(client) {
                 summary,
                 data: { id: member.id, username, roles: Array.from(member.roles?.cache?.keys() || []) }
             });
-            await db.markMemberLeft(member.id);
+            await db.markMemberLeft(member.id, username, member.guild?.id);
         } catch (e) {
             console.error('Erreur tracker guildMemberRemove:', e);
         }

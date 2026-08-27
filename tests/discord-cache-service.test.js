@@ -245,6 +245,28 @@ describe('Discord Cache Service Tests', () => {
         assert.strictEqual(res.rows[0].presence, 'offline');
     });
 
+    test('markMemberLeft & logMemberEvent: safely handle missing username and guildId without constraint errors', async () => {
+        const dbHelper = require('../src/database.js');
+        // Insérer un membre de test
+        await dbHelper.registerNewMember({
+            user_id: 'user_leave_test',
+            username: 'LeaverUser',
+            discriminator: '0001',
+            guild_id: 'guild_123'
+        });
+
+        // Appeler markMemberLeft sans username ni guildId
+        const res = await dbHelper.markMemberLeft('user_leave_test');
+        assert.ok(res);
+        assert.strictEqual(res.userId, 'user_leave_test');
+
+        const historyRes = await pool.query('SELECT * FROM member_history WHERE user_id = $1', ['user_leave_test']);
+        assert.ok(historyRes.rows.length >= 1);
+        const leaveEvent = historyRes.rows.find(r => r.action === 'leave');
+        assert.ok(leaveEvent);
+        assert.strictEqual(leaveEvent.username, 'LeaverUser');
+    });
+
     test('syncAllDiscordCache: executes full sync without error', async () => {
         const mockGuild = {
             id: 'guild_123',

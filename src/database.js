@@ -667,13 +667,30 @@ async function registerNewMember(memberData) {
 
 async function logMemberEvent(userId, username, action, guildId, metadata = {}) {
     try {
+        let safeUsername = username;
+        let safeGuildId = guildId || process.env.GUILD_ID || 'unknown';
+
+        if (!safeUsername && userId) {
+            try {
+                const [existing] = await db.select({ username: schema.serverMembers.username })
+                    .from(schema.serverMembers)
+                    .where(eq(schema.serverMembers.userId, userId))
+                    .limit(1);
+                if (existing && existing.username) {
+                    safeUsername = existing.username;
+                }
+            } catch (e) {}
+        }
+
+        safeUsername = safeUsername || 'Inconnu';
+
         const [entry] = await db.insert(schema.memberHistory)
             .values({
-                userId,
-                username,
-                action,
-                guildId,
-                metadata: JSON.stringify(metadata)
+                userId: String(userId),
+                username: safeUsername,
+                action: action || 'event',
+                guildId: safeGuildId,
+                metadata: JSON.stringify(metadata || {})
             })
             .returning();
 
@@ -704,15 +721,34 @@ async function updateMemberRoles(userId, roles) {
 
 async function markMemberLeft(userId, username, guildId) {
     try {
+        let safeUsername = username;
+        let safeGuildId = guildId || process.env.GUILD_ID || 'unknown';
+
+        if (!safeUsername && userId) {
+            try {
+                const [existing] = await db.select({ username: schema.serverMembers.username })
+                    .from(schema.serverMembers)
+                    .where(eq(schema.serverMembers.userId, userId))
+                    .limit(1);
+                if (existing && existing.username) {
+                    safeUsername = existing.username;
+                }
+            } catch (e) {}
+        }
+
+        safeUsername = safeUsername || 'Inconnu';
+
         const [updated] = await db.update(schema.serverMembers)
             .set({
                 leftAt: sql`CURRENT_TIMESTAMP`,
+                deletedAt: sql`CURRENT_TIMESTAMP`,
+                presence: 'offline',
                 updatedAt: sql`CURRENT_TIMESTAMP`
             })
             .where(eq(schema.serverMembers.userId, userId))
             .returning();
 
-        await logMemberEvent(userId, username, 'leave', guildId);
+        await logMemberEvent(userId, safeUsername, 'leave', safeGuildId);
         return updated;
     } catch (error) {
         console.error('❌ Erreur markMemberLeft:', error);
