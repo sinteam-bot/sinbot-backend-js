@@ -263,13 +263,25 @@ function initDiscordEventTracker(client) {
 
     client.on('stickerUpdate', async (oldSticker, newSticker) => {
         try {
-            const summary = `Sticker modifié : ${oldSticker.name} -> ${newSticker.name}`;
+            const hasNameChanged = oldSticker.name !== newSticker.name;
+            const hasDescChanged = oldSticker.description !== newSticker.description;
+            const hasTagsChanged = oldSticker.tags !== newSticker.tags;
+
+            if (!hasNameChanged && !hasDescChanged && !hasTagsChanged) {
+                return;
+            }
+
+            let summary = `Sticker modifié : ${newSticker.name}`;
+            if (hasNameChanged) {
+                summary = `Sticker renommé : ${oldSticker.name} -> ${newSticker.name}`;
+            }
+
             logger.info(`[stickerUpdate] ${summary}`, 'EVENT');
             await db.archiveDiscordEvent('stickerUpdate', {
                 guildId: newSticker.guildId || newSticker.guild?.id,
                 targetId: newSticker.id,
                 summary,
-                data: { id: newSticker.id, oldName: oldSticker.name, newName: newSticker.name }
+                data: { id: newSticker.id, oldName: oldSticker.name, newName: newSticker.name, description: newSticker.description }
             });
         } catch (e) {
             console.error('Erreur tracker stickerUpdate:', e);
@@ -507,10 +519,18 @@ function initDiscordEventTracker(client) {
 
     client.on('messageUpdate', async (oldMessage, newMessage) => {
         try {
-            if (oldMessage.content === newMessage.content) return; // ignore embed loads
+            const hasContentChanged = oldMessage.content !== newMessage.content;
+            const hasPinnedChanged = oldMessage.pinned !== newMessage.pinned;
+
+            if (!hasContentChanged && !hasPinnedChanged) return; // ignore embeds / link previews updates
+
             const authorName = newMessage.author?.username || 'Inconnu';
             const channelName = newMessage.channel?.name || newMessage.channelId;
-            const summary = `Message édité dans #${channelName} par @${authorName}`;
+            let summary = `Message édité dans #${channelName} par @${authorName}`;
+            if (hasPinnedChanged) {
+                summary = newMessage.pinned ? `Message épinglé dans #${channelName} par @${authorName}` : `Message désépinglé dans #${channelName}`;
+            }
+
             await db.archiveDiscordEvent('messageUpdate', {
                 guildId: newMessage.guildId,
                 targetId: newMessage.id,
@@ -521,7 +541,8 @@ function initDiscordEventTracker(client) {
                     messageId: newMessage.id,
                     channelId: newMessage.channelId,
                     oldContent: oldMessage.content,
-                    newContent: newMessage.content
+                    newContent: newMessage.content,
+                    pinned: newMessage.pinned
                 }
             });
             await db.updateDiscordMessage(newMessage);
@@ -614,7 +635,27 @@ function initDiscordEventTracker(client) {
 
     client.on('threadUpdate', async (oldThread, newThread) => {
         try {
-            const summary = `Thread modifié : "${oldThread.name}" -> "${newThread.name}"`;
+            const hasNameChanged = oldThread.name !== newThread.name;
+            const hasArchivedChanged = oldThread.archived !== newThread.archived;
+            const hasLockedChanged = oldThread.locked !== newThread.locked;
+            const hasRateLimitChanged = oldThread.rateLimitPerUser !== newThread.rateLimitPerUser;
+            const hasAutoArchiveChanged = oldThread.autoArchiveDuration !== newThread.autoArchiveDuration;
+
+            await db.upsertDiscordThread(newThread);
+
+            if (!hasNameChanged && !hasArchivedChanged && !hasLockedChanged && !hasRateLimitChanged && !hasAutoArchiveChanged) {
+                return;
+            }
+
+            let summary = `Thread modifié : "${newThread.name}"`;
+            if (hasNameChanged) {
+                summary = `Thread renommé : "${oldThread.name}" -> "${newThread.name}"`;
+            } else if (hasArchivedChanged) {
+                summary = newThread.archived ? `Thread archivé : "${newThread.name}"` : `Thread désarchivé : "${newThread.name}"`;
+            } else if (hasLockedChanged) {
+                summary = newThread.locked ? `Thread verrouillé : "${newThread.name}"` : `Thread déverrouillé : "${newThread.name}"`;
+            }
+
             logger.info(`[threadUpdate] ${summary}`, 'EVENT');
             await db.archiveDiscordEvent('threadUpdate', {
                 guildId: newThread.guildId || newThread.guild?.id,
@@ -628,7 +669,6 @@ function initDiscordEventTracker(client) {
                     locked: newThread.locked
                 }
             });
-            await db.upsertDiscordThread(newThread);
         } catch (e) {
             console.error('Erreur tracker threadUpdate:', e);
         }
@@ -674,7 +714,28 @@ function initDiscordEventTracker(client) {
 
     client.on('guildUpdate', async (oldGuild, newGuild) => {
         try {
-            const summary = `Serveur Discord mis à jour : "${oldGuild.name}" -> "${newGuild.name}"`;
+            const hasNameChanged = oldGuild.name !== newGuild.name;
+            const hasIconChanged = oldGuild.icon !== newGuild.icon;
+            const hasBannerChanged = oldGuild.banner !== newGuild.banner;
+            const hasDescriptionChanged = oldGuild.description !== newGuild.description;
+            const hasOwnerChanged = oldGuild.ownerId !== newGuild.ownerId;
+            const hasVanityChanged = oldGuild.vanityURLCode !== newGuild.vanityURLCode;
+
+            if (!hasNameChanged && !hasIconChanged && !hasBannerChanged && !hasDescriptionChanged && !hasOwnerChanged && !hasVanityChanged) {
+                return;
+            }
+
+            let summary = `Serveur Discord mis à jour : "${newGuild.name}"`;
+            if (hasNameChanged) {
+                summary = `Serveur Discord renommé : "${oldGuild.name}" -> "${newGuild.name}"`;
+            } else if (hasIconChanged) {
+                summary = `Icône du serveur mise à jour (${newGuild.name})`;
+            } else if (hasBannerChanged) {
+                summary = `Bannière du serveur mise à jour (${newGuild.name})`;
+            } else if (hasOwnerChanged) {
+                summary = `Propriétaire du serveur modifié : ID ${oldGuild.ownerId} -> ${newGuild.ownerId}`;
+            }
+
             logger.info(`[guildUpdate] ${summary}`, 'EVENT');
             await db.archiveDiscordEvent('guildUpdate', {
                 guildId: newGuild.id,
