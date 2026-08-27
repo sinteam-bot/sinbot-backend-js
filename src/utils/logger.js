@@ -43,6 +43,86 @@ class BotLogger extends EventEmitter {
         return path.join(this.logsDir, 'error.log');
     }
 
+    /**
+     * Localise l'appelant via la stack trace (Style Winston / Pino)
+     * Extrait le fichier source, la ligne, la méthode et déduit le module d'origine
+     * @returns {{ file: string, path: string, fullPath: string, line: number, method: string, inferredModule: string|null }|null}
+     */
+    getCallerLocation() {
+        try {
+            const err = new Error();
+            const stack = err.stack ? err.stack.split('\n') : [];
+
+            for (let i = 2; i < stack.length; i++) {
+                const line = stack[i];
+                if (!line) continue;
+                if (line.includes('logger.js') || line.includes('node:internal') || line.includes('node_modules')) {
+                    continue;
+                }
+
+                // Format standard V8 : at FunctionName (path/to/file.js:123:45) ou at path/to/file.js:123:45
+                const match = line.match(/at\s+(?:(.*?)\s+\()?([^()]+):(\d+):(\d+)\)?/);
+                if (match) {
+                    const fullPath = match[2];
+                    const lineNumber = parseInt(match[3], 10);
+                    const methodName = match[1] || 'anonymous';
+                    
+                    const projectRoot = path.resolve(__dirname, '../../');
+                    let relativePath = path.relative(projectRoot, fullPath);
+                    if (relativePath.startsWith('../')) {
+                        relativePath = path.basename(fullPath);
+                    }
+                    const fileName = path.basename(fullPath);
+                    const inferredModule = this.inferModuleFromPath(relativePath);
+
+                    return {
+                        file: `${fileName}:${lineNumber}`,
+                        path: relativePath,
+                        fullPath,
+                        line: lineNumber,
+                        method: methodName,
+                        inferredModule
+                    };
+                }
+            }
+        } catch (e) {
+            // Ignorer en cas d'erreur de stack trace
+        }
+        return null;
+    }
+
+    /**
+     * Déduit le module d'origine à partir du chemin du fichier source
+     * @param {string} relPath
+     * @returns {string|null}
+     */
+    inferModuleFromPath(relPath) {
+        if (!relPath || typeof relPath !== 'string') return null;
+        const p = relPath.replace(/\\/g, '/').toLowerCase();
+
+        if (p.includes('modules/service_bump-reminder') || p.includes('modules/bump')) return 'BUMP';
+        if (p.includes('modules/feature_welcome') || p.includes('modules/welcome')) return 'WELCOME';
+        if (p.includes('modules/feature_daily-message') || p.includes('modules/daily')) return 'DAILY';
+        if (p.includes('modules/security_question') || p.includes('modules/security_captcha') || p.includes('modules/captcha')) return 'CAPTCHA';
+        if (p.includes('modules/feature_xp-level') || p.includes('modules/xp')) return 'XP';
+        if (p.includes('modules/game_count-down') || p.includes('modules/countdown')) return 'COUNTDOWN';
+        if (p.includes('modules/game_road-to-infinite') || p.includes('modules/infinite')) return 'INFINITE';
+        if (p.includes('modules/notifier_startup') || p.includes('modules/startup')) return 'STARTUP';
+        
+        if (p.includes('services/imageproxyservice')) return 'API';
+        if (p.includes('services/discordcacheservice')) return 'DISCORD';
+        if (p.includes('src/database') || p.includes('src/db/')) return 'DATABASE';
+        if (p.includes('src/web/') || p.includes('webrouter')) return 'API';
+        if (p.includes('src/events/') || p.includes('eventbus')) return 'EVENT';
+        if (p.includes('src/commands/')) return 'COMMANDS';
+        if (p.includes('src/config/')) return 'CONFIG';
+        if (p.includes('src/core/scheduler') || p.includes('cron')) return 'SCHEDULER';
+        if (p.includes('src/core/modulemanager') || p.includes('src/core/container')) return 'SYSTEM';
+        if (p.includes('src/index.js')) return 'SYSTEM';
+
+        return null;
+    }
+
     loadRecentLogsFromFile() {
         try {
             const todayFile = this.getLogFilePath();
@@ -52,7 +132,21 @@ class BotLogger extends EventEmitter {
                 const recentLines = lines.slice(-300);
 
                 recentLines.forEach(line => {
-                    // Pattern avec 3 blocs entre crochets : [timestamp] [level] [category] message
+                    // Pattern 4 blocs : [timestamp] [level] [category] [file:line] message
+                    const match4 = line.match(/^\[(.*?)\]\s*\[([a-zA-Z0-9_-]+)\]\s*\[([a-zA-Z0-9_ -]+)\]\s*\[([a-zA-Z0-9_.-]+:\d+)\]\s*(.*)$/);
+                    if (match4) {
+                        this.logs.push({
+                            id: Math.random().toString(36).substring(2, 9),
+                            timestamp: match4[1],
+                            level: match4[2].toUpperCase(),
+                            category: match4[3].toUpperCase(),
+                            caller: { file: match4[4] },
+                            message: match4[5]
+                        });
+                        return;
+                    }
+
+                    // Pattern 3 blocs : [timestamp] [level] [category] message
                     const match3 = line.match(/^\[(.*?)\]\s*\[([a-zA-Z0-9_-]+)\]\s*\[([a-zA-Z0-9_ -]+)\]\s*(.*)$/);
                     if (match3) {
                         this.logs.push({
@@ -65,7 +159,7 @@ class BotLogger extends EventEmitter {
                         return;
                     }
 
-                    // Pattern avec 2 blocs entre crochets : [timestamp] [level] message
+                    // Pattern 2 blocs : [timestamp] [level] message
                     const match2 = line.match(/^\[(.*?)\]\s*\[([a-zA-Z0-9_-]+)\]\s*(.*)$/);
                     if (match2) {
                         const lvl = match2[2].toUpperCase();
@@ -106,7 +200,8 @@ class BotLogger extends EventEmitter {
             this.originalConsole.log(...args);
             const msg = formatArgs(args);
             if (msg.trim()) {
-                this.addLog('INFO', msg, this.detectCategory(msg));
+                const caller = this.getCallerLocation();
+                this.addLog('INFO', msg, this.detectCategory(msg, caller), null, caller);
             }
         };
 
@@ -114,7 +209,8 @@ class BotLogger extends EventEmitter {
             this.originalConsole.info(...args);
             const msg = formatArgs(args);
             if (msg.trim()) {
-                this.addLog('INFO', msg, this.detectCategory(msg));
+                const caller = this.getCallerLocation();
+                this.addLog('INFO', msg, this.detectCategory(msg, caller), null, caller);
             }
         };
 
@@ -122,7 +218,8 @@ class BotLogger extends EventEmitter {
             this.originalConsole.warn(...args);
             const msg = formatArgs(args);
             if (msg.trim()) {
-                this.addLog('WARN', msg, this.detectCategory(msg));
+                const caller = this.getCallerLocation();
+                this.addLog('WARN', msg, this.detectCategory(msg, caller), null, caller);
             }
         };
 
@@ -130,7 +227,8 @@ class BotLogger extends EventEmitter {
             this.originalConsole.error(...args);
             const msg = formatArgs(args);
             if (msg.trim()) {
-                this.addLog('ERROR', msg, this.detectCategory(msg));
+                const caller = this.getCallerLocation();
+                this.addLog('ERROR', msg, this.detectCategory(msg, caller), null, caller);
             }
         };
 
@@ -138,17 +236,24 @@ class BotLogger extends EventEmitter {
             this.originalConsole.debug(...args);
             const msg = formatArgs(args);
             if (msg.trim()) {
-                this.addLog('DEBUG', msg, this.detectCategory(msg));
+                const caller = this.getCallerLocation();
+                this.addLog('DEBUG', msg, this.detectCategory(msg, caller), null, caller);
             }
         };
     }
 
-    detectCategory(message) {
-        if (!message || typeof message !== 'string') return 'SYSTEM';
+    /**
+     * Détecte la catégorie/module d'un message avec localisation Winston
+     * @param {string} message
+     * @param {object|null} caller
+     * @returns {string}
+     */
+    detectCategory(message, caller = null) {
+        if (!message || typeof message !== 'string') return caller?.inferredModule || 'SYSTEM';
         const msg = message.trim();
         const msgUpper = msg.toUpperCase();
 
-        // 1. Détection explicite par tags entre crochets [TAG]
+        // 1. Détection prioritaire par tags explicites entre crochets [TAG]
         if (/\[(SECURITY_QUESTION|CAPTCHA|SECURITYQUESTION)\]/i.test(msg)) return 'CAPTCHA';
         if (/\[(BUMP|BUMP_REMINDER|BUMP SERVICE)\]/i.test(msg)) return 'BUMP';
         if (/\[(DAILY|DAILY_MESSAGE|DAILYMESSAGE)\]/i.test(msg)) return 'DAILY';
@@ -164,7 +269,12 @@ class BotLogger extends EventEmitter {
         if (/\[(DATABASE|DB|POSTGRES|DRIZZLE|SQLITE)\]/i.test(msg)) return 'DATABASE';
         if (/\[(WEB|API|ROUTER|EXPRESS|WEBHOOK|PROXY|IMAGE_PROXY)\]/i.test(msg)) return 'API';
 
-        // 2. Détection contextuelle par mots-clés et symboles
+        // 2. Détection par fichier source appelant (Winston Source Localization)
+        if (caller && caller.inferredModule && caller.inferredModule !== 'SYSTEM') {
+            return caller.inferredModule;
+        }
+
+        // 3. Détection contextuelle par mots-clés et symboles
         if (msgUpper.includes('ROUTE API MONTÉE') || msgUpper.includes('SERVEUR WEBHOOK') || msgUpper.includes('HEALTH:')) return 'API';
         if (msgUpper.includes('TÂCHE CRON PLANIFIÉE') || msgUpper.includes('SCHEDULER')) return 'SCHEDULER';
         if (msgUpper.includes('ÉVÉNEMENT DISCORD BRANCHÉ') || msgUpper.includes('LISTENER DISCORD')) return 'EVENT';
@@ -180,7 +290,7 @@ class BotLogger extends EventEmitter {
         if (msgUpper.includes('BIENVENUE') || msgUpper.includes('WELCOME')) return 'WELCOME';
         if (msgUpper.includes('STARTUP') || msgUpper.includes('NOTIFICATION DE DÉMARRAGE')) return 'STARTUP';
 
-        return 'SYSTEM';
+        return caller?.inferredModule || 'SYSTEM';
     }
 
     writeToLogFile(entry) {
@@ -188,7 +298,8 @@ class BotLogger extends EventEmitter {
             const date = new Date(entry.timestamp);
             const filePath = this.getLogFilePath(isNaN(date.getTime()) ? new Date() : date);
             const cleanMessage = entry.message.replace(/\r?\n/g, ' ');
-            const logLine = `[${entry.timestamp}] [${entry.level}] [${entry.category}] ${cleanMessage}\n`;
+            const callerTag = entry.caller?.file ? ` [${entry.caller.file}]` : '';
+            const logLine = `[${entry.timestamp}] [${entry.level}] [${entry.category}]${callerTag} ${cleanMessage}\n`;
 
             fs.appendFile(filePath, logLine, () => {});
 
@@ -201,12 +312,18 @@ class BotLogger extends EventEmitter {
         }
     }
 
-    addLog(level, message, category = 'SYSTEM', metadata = null) {
+    addLog(level, message, category = null, metadata = null, caller = null) {
+        const callerLoc = caller || this.getCallerLocation();
+        const finalCategory = (category && category !== 'SYSTEM') 
+            ? category 
+            : this.detectCategory(message, callerLoc);
+
         const entry = {
             id: Date.now().toString(36) + Math.random().toString(36).substring(2, 7),
             timestamp: new Date().toISOString(),
             level: (level || 'INFO').toUpperCase(),
-            category: category || 'SYSTEM',
+            category: finalCategory || 'SYSTEM',
+            caller: callerLoc ? { file: callerLoc.file, path: callerLoc.path, method: callerLoc.method } : undefined,
             message: typeof message === 'string' ? message : JSON.stringify(message),
             metadata
         };
@@ -223,23 +340,53 @@ class BotLogger extends EventEmitter {
         return entry;
     }
 
-    info(message, category = 'SYSTEM', metadata = null) {
-        this.originalConsole.info(`[INFO] [${category}] ${message}`);
-        return this.addLog('INFO', message, category, metadata);
+    /**
+     * Crée un logger enfant typé pour un module donné (Style Winston)
+     * @param {string} category
+     * @param {object} defaultMeta
+     * @returns {object}
+     */
+    createLogger(category, defaultMeta = {}) {
+        return {
+            info: (msg, meta) => this.info(msg, category, { ...defaultMeta, ...meta }),
+            warn: (msg, meta) => this.warn(msg, category, { ...defaultMeta, ...meta }),
+            error: (msg, meta) => this.error(msg, category, { ...defaultMeta, ...meta }),
+            debug: (msg, meta) => this.debug(msg, category, { ...defaultMeta, ...meta }),
+            event: (msg, meta) => this.addLog('EVENT', msg, category, { ...defaultMeta, ...meta })
+        };
     }
 
-    warn(message, category = 'SYSTEM', metadata = null) {
-        this.originalConsole.warn(`[WARN] [${category}] ${message}`);
-        return this.addLog('WARN', message, category, metadata);
+    info(message, category = null, metadata = null) {
+        const caller = this.getCallerLocation();
+        const finalCategory = (category && category !== 'SYSTEM') ? category : this.detectCategory(message, caller);
+        this.originalConsole.info(`[INFO] [${finalCategory}] ${message}`);
+        return this.addLog('INFO', message, finalCategory, metadata, caller);
     }
 
-    error(message, category = 'SYSTEM', metadata = null) {
-        this.originalConsole.error(`[ERROR] [${category}] ${message}`);
-        return this.addLog('ERROR', message, category, metadata);
+    warn(message, category = null, metadata = null) {
+        const caller = this.getCallerLocation();
+        const finalCategory = (category && category !== 'SYSTEM') ? category : this.detectCategory(message, caller);
+        this.originalConsole.warn(`[WARN] [${finalCategory}] ${message}`);
+        return this.addLog('WARN', message, finalCategory, metadata, caller);
+    }
+
+    error(message, category = null, metadata = null) {
+        const caller = this.getCallerLocation();
+        const finalCategory = (category && category !== 'SYSTEM') ? category : this.detectCategory(message, caller);
+        this.originalConsole.error(`[ERROR] [${finalCategory}] ${message}`);
+        return this.addLog('ERROR', message, finalCategory, metadata, caller);
+    }
+
+    debug(message, category = null, metadata = null) {
+        const caller = this.getCallerLocation();
+        const finalCategory = (category && category !== 'SYSTEM') ? category : this.detectCategory(message, caller);
+        this.originalConsole.debug(`[DEBUG] [${finalCategory}] ${message}`);
+        return this.addLog('DEBUG', message, finalCategory, metadata, caller);
     }
 
     event(message, metadata = null) {
-        return this.addLog('EVENT', message, 'EVENT', metadata);
+        const caller = this.getCallerLocation();
+        return this.addLog('EVENT', message, 'EVENT', metadata, caller);
     }
 
     getLogs(options = {}) {
@@ -258,7 +405,11 @@ class BotLogger extends EventEmitter {
 
         if (search) {
             const query = search.toLowerCase();
-            result = result.filter(l => l.message.toLowerCase().includes(query) || (l.category && l.category.toLowerCase().includes(query)));
+            result = result.filter(l => 
+                l.message.toLowerCase().includes(query) || 
+                (l.category && l.category.toLowerCase().includes(query)) ||
+                (l.caller?.file && l.caller.file.toLowerCase().includes(query))
+            );
         }
 
         if (since) {
