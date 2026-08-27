@@ -84,6 +84,18 @@ class BumpReminderController {
         await this.service.sendBumpReminder(client, lastBump);
         return { success: true, message: 'Rappel de bump envoyé avec succès.' };
     }
+
+    async cleanupTests(req) {
+        await this.service.repo.deleteTestBumps();
+        return { success: true, message: 'Données de test nettoyées avec succès.' };
+    }
+
+    async deleteLog(req) {
+        const id = req.params?.id || req.body?.id;
+        if (!id) return { success: false, error: 'ID manquant' };
+        await this.service.repo.deleteBump(id);
+        return { success: true, message: `Entrée de bump #${id} supprimée.` };
+    }
 }
 
 Controller('/api/bump')(BumpReminderController);
@@ -92,6 +104,8 @@ Get('/status')(BumpReminderController.prototype, 'getStatus');
 Post('/config')(BumpReminderController.prototype, 'saveConfig');
 Post('/remind-now')(BumpReminderController.prototype, 'remindNow');
 Post('/test-reminder')(BumpReminderController.prototype, 'remindNow');
+Post('/cleanup-tests')(BumpReminderController.prototype, 'cleanupTests');
+Post('/delete-log')(BumpReminderController.prototype, 'deleteLog');
 
 module.exports = {
     BumpReminderController

@@ -120,6 +120,32 @@ class BumpReminderRepository {
             reminder_sent: r.reminderSent
         }));
     }
+
+    /**
+     * Supprime les bumps créés lors des tests unitaires et mocks
+     */
+    async deleteTestBumps() {
+        const { or, like } = require('drizzle-orm');
+        return await this.db.delete(this.schema.bumpLogs)
+            .where(
+                or(
+                    eq(this.schema.bumpLogs.guildId, 'test_guild_bump'),
+                    eq(this.schema.bumpLogs.channelId, 'test_channel_bump'),
+                    like(this.schema.bumpLogs.userId, 'user_bumper%'),
+                    eq(this.schema.bumpLogs.username, 'SuperBumper'),
+                    eq(this.schema.bumpLogs.username, 'BumperMan'),
+                    eq(this.schema.bumpLogs.username, 'TestUser')
+                )
+            );
+    }
+
+    /**
+     * Supprime un bump spécifique par son identifiant
+     */
+    async deleteBump(bumpId) {
+        return await this.db.delete(this.schema.bumpLogs)
+            .where(eq(this.schema.bumpLogs.id, Number(bumpId)));
+    }
 }
 
 Repository()(BumpReminderRepository);

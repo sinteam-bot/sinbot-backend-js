@@ -1,4 +1,4 @@
-const { test, describe } = require('node:test');
+const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert');
 const { container } = require('../src/core/container.js');
 const { BumpReminderRepository } = require('../src/modules/service_bump-reminder/bump-reminder.repository.js');
@@ -9,6 +9,16 @@ describe('Service: Bump Reminder Module Tests', () => {
 
     const guildId = 'test_guild_bump';
     const channelId = 'test_channel_bump';
+
+    before(async () => {
+        const repo = container.resolve(BumpReminderRepository);
+        await repo.deleteTestBumps();
+    });
+
+    after(async () => {
+        const repo = container.resolve(BumpReminderRepository);
+        await repo.deleteTestBumps();
+    });
 
     test('Repository: should save bump and retrieve last bump', async () => {
         const repo = container.resolve(BumpReminderRepository);

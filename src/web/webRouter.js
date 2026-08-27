@@ -1633,6 +1633,32 @@ function createWebRouter(client) {
         }
     });
 
+    router.post('/bump/cleanup-tests', async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { BumpReminderController } = require('../modules/service_bump-reminder/bump-reminder.controller.js');
+            const controller = container.resolve(BumpReminderController);
+            const result = await controller.cleanupTests(req);
+            res.json(result);
+        } catch (error) {
+            logger.error(`Erreur POST /api/bump/cleanup-tests: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/bump/delete-log', async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { BumpReminderController } = require('../modules/service_bump-reminder/bump-reminder.controller.js');
+            const controller = container.resolve(BumpReminderController);
+            const result = await controller.deleteLog(req);
+            res.json(result);
+        } catch (error) {
+            logger.error(`Erreur POST /api/bump/delete-log: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
     // ============================================
     // 9. JEUX : COMPTEUR & COUNTDOWN
     // ============================================
