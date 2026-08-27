@@ -10,6 +10,7 @@ const { AutoModModule } = require('./feature_automod/automod.module.js');
 const { TicketsModule } = require('./feature_tickets/tickets.module.js');
 const { LogsModule } = require('./feature_logs/logs.module.js');
 const { CardsModule } = require('./feature_cards/cards.module.js');
+const { EngagementModule } = require('./feature_engagement/engagement.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -26,7 +27,8 @@ const appModules = [
     AutoModModule,
     TicketsModule,
     LogsModule,
-    CardsModule
+    CardsModule,
+    EngagementModule
 ];
 
 module.exports = {
@@ -42,5 +44,6 @@ module.exports = {
     AutoModModule,
     TicketsModule,
     LogsModule,
-    CardsModule
+    CardsModule,
+    EngagementModule
 };
