@@ -47,7 +47,30 @@ function initDiscordEventTracker(client) {
 
     client.on('channelUpdate', async (oldChannel, newChannel) => {
         try {
-            const summary = `Salon modifié : #${oldChannel.name} -> #${newChannel.name}`;
+            const hasNameChanged = oldChannel.name !== newChannel.name;
+            const hasTopicChanged = oldChannel.topic !== newChannel.topic;
+            const hasPositionChanged = oldChannel.position !== newChannel.position;
+            const hasParentChanged = oldChannel.parentId !== newChannel.parentId;
+            const hasNsfwChanged = oldChannel.nsfw !== newChannel.nsfw;
+            const hasRateLimitChanged = oldChannel.rateLimitPerUser !== newChannel.rateLimitPerUser;
+
+            // Toujours mettre à jour le cache sans logger inutilement
+            await db.upsertDiscordChannel(newChannel);
+
+            // Ne logger et n'archiver que si un changement réel et visible est survenu
+            if (!hasNameChanged && !hasTopicChanged && !hasPositionChanged && !hasParentChanged && !hasNsfwChanged && !hasRateLimitChanged) {
+                return;
+            }
+
+            let summary = `Salon modifié : #${newChannel.name}`;
+            if (hasNameChanged) {
+                summary = `Salon renommé : #${oldChannel.name} -> #${newChannel.name}`;
+            } else if (hasTopicChanged) {
+                summary = `Description modifiée pour #${newChannel.name}`;
+            } else if (hasPositionChanged) {
+                summary = `Position modifiée pour #${newChannel.name} (${oldChannel.position} -> ${newChannel.position})`;
+            }
+
             logger.info(`[channelUpdate] ${summary}`, 'EVENT');
             await db.archiveDiscordEvent('channelUpdate', {
                 guildId: newChannel.guild?.id || newChannel.guildId,
@@ -58,10 +81,11 @@ function initDiscordEventTracker(client) {
                     oldName: oldChannel.name,
                     newName: newChannel.name,
                     oldTopic: oldChannel.topic,
-                    newTopic: newChannel.topic
+                    newTopic: newChannel.topic,
+                    oldPosition: oldChannel.position,
+                    newPosition: newChannel.position
                 }
             });
-            await db.upsertDiscordChannel(newChannel);
         } catch (e) {
             console.error('Erreur tracker channelUpdate:', e);
         }
@@ -119,7 +143,27 @@ function initDiscordEventTracker(client) {
 
     client.on('roleUpdate', async (oldRole, newRole) => {
         try {
-            const summary = `Rôle modifié : @${oldRole.name} -> @${newRole.name}`;
+            const hasNameChanged = oldRole.name !== newRole.name;
+            const hasColorChanged = oldRole.color !== newRole.color;
+            const hasPositionChanged = oldRole.position !== newRole.position;
+            const hasPermissionsChanged = oldRole.permissions?.bitfield !== newRole.permissions?.bitfield;
+            const hasHoistChanged = oldRole.hoist !== newRole.hoist;
+
+            await db.upsertDiscordRole(newRole);
+
+            if (!hasNameChanged && !hasColorChanged && !hasPositionChanged && !hasPermissionsChanged && !hasHoistChanged) {
+                return;
+            }
+
+            let summary = `Rôle modifié : @${newRole.name}`;
+            if (hasNameChanged) {
+                summary = `Rôle renommé : @${oldRole.name} -> @${newRole.name}`;
+            } else if (hasColorChanged) {
+                summary = `Couleur modifiée pour @${newRole.name}`;
+            } else if (hasPositionChanged) {
+                summary = `Position modifiée pour @${newRole.name} (${oldRole.position} -> ${newRole.position})`;
+            }
+
             logger.info(`[roleUpdate] ${summary}`, 'EVENT');
             await db.archiveDiscordEvent('roleUpdate', {
                 guildId: newRole.guild?.id,
@@ -133,7 +177,6 @@ function initDiscordEventTracker(client) {
                     newColor: newRole.color
                 }
             });
-            await db.upsertDiscordRole(newRole);
         } catch (e) {
             console.error('Erreur tracker roleUpdate:', e);
         }
@@ -174,6 +217,7 @@ function initDiscordEventTracker(client) {
 
     client.on('emojiUpdate', async (oldEmoji, newEmoji) => {
         try {
+            if (oldEmoji.name === newEmoji.name) return;
             const summary = `Emoji modifié : :${oldEmoji.name}: -> :${newEmoji.name}:`;
             logger.info(`[emojiUpdate] ${summary}`, 'EVENT');
             await db.archiveDiscordEvent('emojiUpdate', {
@@ -256,8 +300,27 @@ function initDiscordEventTracker(client) {
 
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
         try {
+            const hasNickChanged = oldMember.nickname !== newMember.nickname;
+            const hasRolesChanged = oldMember.roles?.cache?.size !== newMember.roles?.cache?.size || 
+                                    !oldMember.roles?.cache?.equals(newMember.roles?.cache);
+            const hasAvatarChanged = oldMember.avatar !== newMember.avatar;
+
+            const roles = Array.from(newMember.roles.cache.values()).map(r => r.name);
+            await db.updateMemberRoles(newMember.id, roles);
+
+            if (!hasNickChanged && !hasRolesChanged && !hasAvatarChanged) {
+                return;
+            }
+
             const username = newMember.user?.username || newMember.displayName;
-            const summary = `Membre mis à jour : @${username}`;
+            let summary = `Membre mis à jour : @${username}`;
+            if (hasNickChanged) {
+                summary = `Surnom modifié pour @${username} (${oldMember.nickname || 'aucun'} -> ${newMember.nickname || 'aucun'})`;
+            } else if (hasRolesChanged) {
+                summary = `Rôles mis à jour pour @${username}`;
+            }
+
+            logger.info(`[guildMemberUpdate] ${summary}`, 'EVENT');
             await db.archiveDiscordEvent('guildMemberUpdate', {
                 guildId: newMember.guild?.id,
                 targetId: newMember.id,
@@ -271,8 +334,6 @@ function initDiscordEventTracker(client) {
                     rolesCount: newMember.roles?.cache?.size || 0
                 }
             });
-            const roles = Array.from(newMember.roles.cache.values()).map(r => r.name);
-            await db.updateMemberRoles(newMember.id, roles);
         } catch (e) {
             console.error('Erreur tracker guildMemberUpdate:', e);
         }
@@ -280,7 +341,18 @@ function initDiscordEventTracker(client) {
 
     client.on('userUpdate', async (oldUser, newUser) => {
         try {
+            const hasUsernameChanged = oldUser.username !== newUser.username;
+            const hasAvatarChanged = oldUser.avatar !== newUser.avatar;
+            const hasGlobalNameChanged = oldUser.globalName !== newUser.globalName;
+
+            await db.saveDumpUser(newUser);
+
+            if (!hasUsernameChanged && !hasAvatarChanged && !hasGlobalNameChanged) {
+                return;
+            }
+
             const summary = `Utilisateur modifié : @${oldUser.username} -> @${newUser.username}`;
+            logger.info(`[userUpdate] ${summary}`, 'EVENT');
             await db.archiveDiscordEvent('userUpdate', {
                 targetId: newUser.id,
                 userId: newUser.id,
@@ -294,7 +366,6 @@ function initDiscordEventTracker(client) {
                     newAvatar: newUser.avatar
                 }
             });
-            await db.saveDumpUser(newUser);
         } catch (e) {
             console.error('Erreur tracker userUpdate:', e);
         }
