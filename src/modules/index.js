@@ -8,6 +8,7 @@ const { DailyMessageModule } = require('./feature_daily-message/daily-message.mo
 const { WelcomeModule } = require('./feature_welcome/welcome.module.js');
 const { AutoModModule } = require('./feature_automod/automod.module.js');
 const { TicketsModule } = require('./feature_tickets/tickets.module.js');
+const { LogsModule } = require('./feature_logs/logs.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -22,7 +23,8 @@ const appModules = [
     DailyMessageModule,
     WelcomeModule,
     AutoModModule,
-    TicketsModule
+    TicketsModule,
+    LogsModule
 ];
 
 module.exports = {
@@ -36,5 +38,6 @@ module.exports = {
     DailyMessageModule,
     WelcomeModule,
     AutoModModule,
-    TicketsModule
+    TicketsModule,
+    LogsModule
 };

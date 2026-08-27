@@ -282,7 +282,7 @@ app.use((req, res, next) => {
 
 // Démarrer le serveur Express
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
     console.log('');
     console.log('╔══════════════════════════════════════╗');
     console.log('║   🌐 SERVEUR WEBHOOK DÉMARRÉ !      ║');
@@ -295,6 +295,24 @@ app.listen(PORT, () => {
     console.log(`❤️  Health: http://localhost:${PORT}/health`);
     console.log('');
 });
+
+// WebSocket Live Feed des logs (Phase 4)
+try {
+    const { LogsService } = require('./modules/feature_logs/services/logs.service.js');
+    const { attachLogsWs } = require('./utils/wsLogsServer.js');
+    const { container } = require('./core/index.js');
+    let logsService = null;
+    if (container.has('LogsService')) {
+        logsService = container.resolve('LogsService');
+    } else {
+        logsService = new LogsService();
+    }
+    const authConfig = (config && config.web && config.web.auth) || {};
+    attachLogsWs(httpServer, logsService, authConfig);
+    console.log('🔌 WS /ws/logs prêt (live feed)');
+} catch (err) {
+    console.warn(`⚠️  WS logs non disponible: ${err.message}`);
+}
 
 // ============================================
 // GESTION DES ERREURS
