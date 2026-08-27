@@ -542,6 +542,64 @@ const PG_TABLES_DDL = `
         expires_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_welcome_cards_user ON welcome_cards(guild_id, user_id, template);
+
+    -- Phase 5: Giveaways
+    CREATE TABLE IF NOT EXISTS giveaways (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        message_id TEXT,
+        host_id TEXT NOT NULL,
+        prize TEXT NOT NULL,
+        description TEXT,
+        winners_count INTEGER NOT NULL DEFAULT 1,
+        required_role_id TEXT,
+        starts_at INTEGER NOT NULL,
+        ends_at INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        winners_json TEXT,
+        color TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_giveaways_guild_status ON giveaways(guild_id, status);
+    CREATE INDEX IF NOT EXISTS idx_giveaways_ends_at ON giveaways(ends_at);
+    CREATE INDEX IF NOT EXISTS idx_giveaways_channel ON giveaways(channel_id);
+
+    CREATE TABLE IF NOT EXISTS giveaway_entries (
+        giveaway_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        entered_at INTEGER NOT NULL,
+        PRIMARY KEY (giveaway_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_giveaway_entries_user ON giveaway_entries(user_id);
+
+    -- Phase 5: Polls
+    CREATE TABLE IF NOT EXISTS polls (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        message_id TEXT,
+        question TEXT NOT NULL,
+        options_json TEXT NOT NULL,
+        multi_choice INTEGER NOT NULL DEFAULT 0,
+        anonymous INTEGER NOT NULL DEFAULT 0,
+        ends_at INTEGER,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_by TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_polls_guild_status ON polls(guild_id, status);
+    CREATE INDEX IF NOT EXISTS idx_polls_message ON polls(message_id);
+
+    CREATE TABLE IF NOT EXISTS poll_votes (
+        poll_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        option_index INTEGER NOT NULL,
+        voted_at INTEGER NOT NULL,
+        PRIMARY KEY (poll_id, user_id, option_index)
+    );
+    CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id);
 `;
 
 /**

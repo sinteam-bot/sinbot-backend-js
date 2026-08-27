@@ -517,6 +517,70 @@ const welcomeCards = pgTable('welcome_cards', {
     index('idx_pg_welcome_cards_user').on(table.guildId, table.userId, table.template)
 ]);
 
+// 38. giveaways (Phase 5)
+const giveaways = pgTable('giveaways', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    messageId: text('message_id'),
+    hostId: text('host_id').notNull(),
+    prize: text('prize').notNull(),
+    description: text('description'),
+    winnersCount: integer('winners_count').notNull().default(1),
+    requiredRoleId: text('required_role_id'),
+    startsAt: integer('starts_at').notNull(),
+    endsAt: integer('ends_at').notNull(),
+    status: text('status').notNull().default('active'),
+    winnersJson: text('winners_json'),
+    color: text('color'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull()
+}, (table) => [
+    index('idx_pg_giveaways_guild_status').on(table.guildId, table.status),
+    index('idx_pg_giveaways_ends_at').on(table.endsAt),
+    index('idx_pg_giveaways_channel').on(table.channelId)
+]);
+
+// 39. giveaway_entries (Phase 5)
+const giveawayEntries = pgTable('giveaway_entries', {
+    giveawayId: text('giveaway_id').notNull(),
+    userId: text('user_id').notNull(),
+    enteredAt: integer('entered_at').notNull()
+}, (table) => [
+    primaryKey({ columns: [table.giveawayId, table.userId] }),
+    index('idx_pg_giveaway_entries_user').on(table.userId)
+]);
+
+// 40. polls (Phase 5)
+const polls = pgTable('polls', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    messageId: text('message_id'),
+    question: text('question').notNull(),
+    optionsJson: text('options_json').notNull(),
+    multiChoice: integer('multi_choice').notNull().default(0),
+    anonymous: integer('anonymous').notNull().default(0),
+    endsAt: integer('ends_at'),
+    status: text('status').notNull().default('active'),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at').notNull()
+}, (table) => [
+    index('idx_pg_polls_guild_status').on(table.guildId, table.status),
+    index('idx_pg_polls_message').on(table.messageId)
+]);
+
+// 41. poll_votes (Phase 5)
+const pollVotes = pgTable('poll_votes', {
+    pollId: text('poll_id').notNull(),
+    userId: text('user_id').notNull(),
+    optionIndex: integer('option_index').notNull(),
+    votedAt: integer('voted_at').notNull()
+}, (table) => [
+    primaryKey({ columns: [table.pollId, table.userId, table.optionIndex] }),
+    index('idx_pg_poll_votes_poll').on(table.pollId)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -554,5 +618,9 @@ module.exports = {
     tickets,
     ticketMessages,
     eventLog,
-    welcomeCards
+    welcomeCards,
+    giveaways,
+    giveawayEntries,
+    polls,
+    pollVotes
 };
