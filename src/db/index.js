@@ -105,12 +105,18 @@ const PG_TABLES_DDL = `
         tag TEXT,
         display_name TEXT,
         avatar_url TEXT,
+        display_color TEXT,
+        highest_role_id TEXT,
+        highest_role_name TEXT,
+        highest_role_color TEXT,
         joined_at TEXT,
         account_created_at TEXT,
         is_bot INTEGER DEFAULT 0,
         rejoin_count INTEGER DEFAULT 0,
         left_at TEXT,
         roles TEXT,
+        presence TEXT DEFAULT 'offline',
+        deleted_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -277,6 +283,7 @@ const PG_TABLES_DDL = `
         topic TEXT,
         is_nsfw INTEGER DEFAULT 0,
         created_at TEXT,
+        deleted_at TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -291,6 +298,7 @@ const PG_TABLES_DDL = `
         message_count INTEGER DEFAULT 0,
         member_count INTEGER DEFAULT 0,
         created_at TEXT,
+        deleted_at TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -319,6 +327,7 @@ const PG_TABLES_DDL = `
         attachments_json TEXT,
         reactions_json TEXT,
         created_at TEXT NOT NULL,
+        deleted_at TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -357,12 +366,17 @@ const PG_TABLES_DDL = `
         guild_id TEXT NOT NULL,
         name TEXT NOT NULL,
         color INTEGER DEFAULT 0,
+        color_hex TEXT,
+        icon_url TEXT,
+        unicode_emoji TEXT,
+        member_count INTEGER DEFAULT 0,
         hoist INTEGER DEFAULT 0,
         position INTEGER DEFAULT 0,
         permissions TEXT,
         managed INTEGER DEFAULT 0,
         mentionable INTEGER DEFAULT 0,
         created_at TEXT,
+        deleted_at TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -377,6 +391,18 @@ const PG_TABLES_DDL = `
         data_json TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS discord_emojis (
+        emoji_id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        animated INTEGER DEFAULT 0,
+        url TEXT,
+        roles_json TEXT,
+        created_at TEXT,
+        deleted_at TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
 `;
 
 /**
@@ -384,6 +410,33 @@ const PG_TABLES_DDL = `
  */
 async function initPgTables(client) {
     await client.query(PG_TABLES_DDL);
+
+    // Migration progressive automatique des colonnes manquantes pour PostgreSQL
+    const migrationStatements = [
+        `ALTER TABLE discord_roles ADD COLUMN IF NOT EXISTS color_hex TEXT;`,
+        `ALTER TABLE discord_roles ADD COLUMN IF NOT EXISTS icon_url TEXT;`,
+        `ALTER TABLE discord_roles ADD COLUMN IF NOT EXISTS unicode_emoji TEXT;`,
+        `ALTER TABLE discord_roles ADD COLUMN IF NOT EXISTS member_count INTEGER DEFAULT 0;`,
+        `ALTER TABLE discord_roles ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`,
+        `ALTER TABLE server_members ADD COLUMN IF NOT EXISTS display_color TEXT;`,
+        `ALTER TABLE server_members ADD COLUMN IF NOT EXISTS highest_role_id TEXT;`,
+        `ALTER TABLE server_members ADD COLUMN IF NOT EXISTS highest_role_name TEXT;`,
+        `ALTER TABLE server_members ADD COLUMN IF NOT EXISTS highest_role_color TEXT;`,
+        `ALTER TABLE server_members ADD COLUMN IF NOT EXISTS presence TEXT DEFAULT 'offline';`,
+        `ALTER TABLE server_members ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`,
+        `ALTER TABLE discord_channels ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`,
+        `ALTER TABLE discord_threads ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`,
+        `ALTER TABLE discord_messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`,
+        `ALTER TABLE discord_emojis ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`
+    ];
+
+    for (const stmt of migrationStatements) {
+        try {
+            await client.query(stmt);
+        } catch (e) {
+            // Ignorer si déjà existant ou non supporté
+        }
+    }
 }
 
 /**
@@ -501,9 +554,14 @@ function initDatabase() {
             .catch(err => console.warn(`ℹ️ [PostgreSQL] Initialisation tables différée (${err.message})`));
     }
 
+    if (db) {
+        db.pool = rawClient;
+    }
+
     return {
         db,
         rawClient,
+        pool: rawClient,
         schema: pgSchema,
         dialect: 'postgres',
         isPostgres: true,
@@ -516,5 +574,6 @@ const dbContext = initDatabase();
 
 module.exports = {
     ...dbContext,
-    initDatabase
+    initDatabase,
+    initPgTables
 };

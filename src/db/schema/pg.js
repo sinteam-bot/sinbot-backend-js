@@ -105,12 +105,18 @@ const serverMembers = pgTable('server_members', {
     tag: text('tag'),
     displayName: text('display_name'),
     avatarUrl: text('avatar_url'),
+    displayColor: text('display_color'),
+    highestRoleId: text('highest_role_id'),
+    highestRoleName: text('highest_role_name'),
+    highestRoleColor: text('highest_role_color'),
     joinedAt: text('joined_at'),
     accountCreatedAt: text('account_created_at'),
     isBot: integer('is_bot').default(0),
     rejoinCount: integer('rejoin_count').default(0),
     leftAt: text('left_at'),
     roles: text('roles'),
+    presence: text('presence').default('offline'),
+    deletedAt: text('deleted_at'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 });
@@ -226,6 +232,7 @@ const discordChannels = pgTable('discord_channels', {
     topic: text('topic'),
     isNsfw: integer('is_nsfw').default(0),
     createdAt: text('created_at'),
+    deletedAt: text('deleted_at'),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 });
 
@@ -241,6 +248,7 @@ const discordThreads = pgTable('discord_threads', {
     messageCount: integer('message_count').default(0),
     memberCount: integer('member_count').default(0),
     createdAt: text('created_at'),
+    deletedAt: text('deleted_at'),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 });
 
@@ -271,6 +279,7 @@ const discordMessages = pgTable('discord_messages', {
     attachmentsJson: text('attachments_json'),
     reactionsJson: text('reactions_json'),
     createdAt: text('created_at').notNull(),
+    deletedAt: text('deleted_at'),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 });
 
@@ -315,12 +324,17 @@ const discordRoles = pgTable('discord_roles', {
     guildId: text('guild_id').notNull(),
     name: text('name').notNull(),
     color: integer('color').default(0),
+    colorHex: text('color_hex'),
+    iconUrl: text('icon_url'),
+    unicodeEmoji: text('unicode_emoji'),
+    memberCount: integer('member_count').default(0),
     hoist: integer('hoist').default(0),
     position: integer('position').default(0),
     permissions: text('permissions'),
     managed: integer('managed').default(0),
     mentionable: integer('mentionable').default(0),
     createdAt: text('created_at'),
+    deletedAt: text('deleted_at'),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 });
 
@@ -339,6 +353,19 @@ const discordEventsArchive = pgTable('discord_events_archive', {
     index('idx_pg_events_name').on(table.eventName),
     index('idx_pg_events_created').on(table.createdAt)
 ]);
+
+// 28. discord_emojis
+const discordEmojis = pgTable('discord_emojis', {
+    emojiId: text('emoji_id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    name: text('name').notNull(),
+    animated: integer('animated').default(0),
+    url: text('url'),
+    rolesJson: text('roles_json'),
+    createdAt: text('created_at'),
+    deletedAt: text('deleted_at'),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
+});
 
 module.exports = {
     userEvents,
@@ -367,5 +394,6 @@ module.exports = {
     countdownScores,
     botVersionState,
     discordRoles,
-    discordEventsArchive
+    discordEventsArchive,
+    discordEmojis
 };

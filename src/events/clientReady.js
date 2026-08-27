@@ -20,5 +20,15 @@ module.exports = {
         
         // Définir le statut du bot
         client.user.setActivity('les commandes !help', { type: 'LISTENING' });
+
+        // Synchronisation du cache BDD de toutes les données Discord
+        const DiscordCacheService = require("../services/discordCacheService.js");
+        const guildId = process.env.GUILD_ID;
+        const guild = guildId ? client.guilds.cache.get(guildId) : client.guilds.cache.first();
+        if (guild) {
+            DiscordCacheService.syncAllDiscordCache(guild).catch(err => {
+                console.error('❌ [Discord Cache] Erreur sync initiale:', err.message);
+            });
+        }
     }
 };

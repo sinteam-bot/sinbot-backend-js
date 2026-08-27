@@ -1,10 +1,16 @@
 const { logUserEvent } = require("../database.js");
 const { executeCommand } = require("../utils/commandHandler.js");
+const DiscordCacheService = require("../services/discordCacheService.js");
 
 module.exports = {
     name: 'messageCreate',
 
     async execute(message) {
+        // Mettre en cache le message et son auteur en BDD
+        try {
+            DiscordCacheService.cacheDiscordMessage(message);
+        } catch (e) {}
+
         // Ignorer les messages du bot lui-même
         if (message.author.bot) return;
 

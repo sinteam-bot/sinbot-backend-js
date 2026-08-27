@@ -22,6 +22,60 @@ class DiscordEventBus extends EventEmitter {
     init(discordClient) {
         this.client = discordClient;
         console.log('⚡ [EventBus] Bus d\'événements Discord initialisé.');
+
+        // Attacher les écouteurs de mise en cache BDD en temps réel avec Soft Delete
+        try {
+            const DiscordCacheService = require('../services/discordCacheService.js');
+
+            discordClient.on('guildMemberAdd', member => {
+                DiscordCacheService.cacheSingleMember(member).catch(() => {});
+            });
+            discordClient.on('guildMemberUpdate', (oldM, newM) => {
+                DiscordCacheService.cacheSingleMember(newM).catch(() => {});
+            });
+            discordClient.on('guildMemberRemove', member => {
+                DiscordCacheService.softDeleteMember(member.id).catch(() => {});
+            });
+            discordClient.on('roleCreate', role => {
+                if (role.guild) DiscordCacheService.cacheGuildRoles(role.guild).catch(() => {});
+            });
+            discordClient.on('roleUpdate', (oldR, newR) => {
+                if (newR.guild) DiscordCacheService.cacheGuildRoles(newR.guild).catch(() => {});
+            });
+            discordClient.on('roleDelete', role => {
+                DiscordCacheService.softDeleteRole(role.id).catch(() => {});
+            });
+            discordClient.on('emojiCreate', emoji => {
+                if (emoji.guild) DiscordCacheService.cacheGuildEmojis(emoji.guild).catch(() => {});
+            });
+            discordClient.on('emojiUpdate', (oldE, newE) => {
+                if (newE.guild) DiscordCacheService.cacheGuildEmojis(newE.guild).catch(() => {});
+            });
+            discordClient.on('emojiDelete', emoji => {
+                DiscordCacheService.softDeleteEmoji(emoji.id).catch(() => {});
+            });
+            discordClient.on('channelCreate', ch => {
+                if (ch.guild) DiscordCacheService.cacheGuildChannels(ch.guild).catch(() => {});
+            });
+            discordClient.on('channelUpdate', (oldC, newC) => {
+                if (newC.guild) DiscordCacheService.cacheGuildChannels(newC.guild).catch(() => {});
+            });
+            discordClient.on('channelDelete', ch => {
+                DiscordCacheService.softDeleteChannel(ch.id).catch(() => {});
+            });
+            discordClient.on('threadDelete', thread => {
+                DiscordCacheService.softDeleteChannel(thread.id).catch(() => {});
+            });
+            discordClient.on('messageDelete', message => {
+                DiscordCacheService.softDeleteMessage(message.id).catch(() => {});
+            });
+            discordClient.on('messageDeleteBulk', messages => {
+                const ids = Array.from(messages.keys ? messages.keys() : messages.map(m => m.id));
+                DiscordCacheService.softDeleteMessages(ids).catch(() => {});
+            });
+        } catch (err) {
+            console.error('⚠️ [EventBus] Impossible d\'attacher les écouteurs de cache BDD:', err.message);
+        }
     }
 
     /**

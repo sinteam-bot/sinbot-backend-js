@@ -77,13 +77,46 @@ function createWebRouter(client) {
     router.get('/emojis', async (req, res) => {
         try {
             const guild = await getGuild();
-            const emojis = guild ? Array.from(guild.emojis.cache.values()).map(e => ({
-                id: e.id,
-                name: e.name,
-                animated: !!e.animated,
-                url: e.imageURL ? e.imageURL({ extension: e.animated ? 'gif' : 'png', size: 64 }) : `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? 'gif' : 'png'}?size=64&quality=lossless`
-            })) : [];
+            let emojis = [];
+
+            if (guild && guild.emojis) {
+                emojis = Array.from(guild.emojis.cache.values()).map(e => ({
+                    id: e.id,
+                    name: e.name,
+                    animated: !!e.animated,
+                    url: e.imageURL ? e.imageURL({ extension: e.animated ? 'gif' : 'png', size: 64 }) : `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? 'gif' : 'png'}?size=64&quality=lossless`
+                }));
+            }
+
+            // Fallback vers le cache BDD si bot non connecté ou emojis vides
+            if (emojis.length === 0) {
+                try {
+                    const dbRes = await db.pool.query('SELECT emoji_id, name, animated, url FROM discord_emojis WHERE deleted_at IS NULL ORDER BY name ASC');
+                    emojis = dbRes.rows.map(r => ({
+                        id: r.emoji_id,
+                        name: r.name,
+                        animated: r.animated === 1,
+                        url: r.url
+                    }));
+                } catch (e) {}
+            }
+
             res.json({ success: true, data: emojis });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // Endpoint pour forcer une resynchronisation complète du cache BDD
+    router.post('/cache/sync', async (req, res) => {
+        try {
+            const guild = await getGuild();
+            if (!guild) {
+                return res.status(400).json({ success: false, error: 'Serveur Discord inaccessible pour la synchronisation' });
+            }
+            const DiscordCacheService = require('../services/discordCacheService.js');
+            await DiscordCacheService.syncAllDiscordCache(guild);
+            res.json({ success: true, message: 'Cache Discord synchronisé avec succès en base de données.' });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
@@ -178,10 +211,10 @@ function createWebRouter(client) {
 
                 categories.push(...sortedCategories);
             } else {
-                // Fallback BDD SQLite si Discord offline
+                // Fallback BDD si Discord offline
                 try {
                     const dbChannelsRes = await db.pool.query(`
-                        SELECT * FROM discord_channels ORDER BY position ASC
+                        SELECT * FROM discord_channels WHERE deleted_at IS NULL ORDER BY position ASC
                     `);
                     const dbChannels = dbChannelsRes.rows;
 
@@ -886,16 +919,24 @@ function createWebRouter(client) {
                     });
                 });
             } else {
-                // Fallback BDD SQLite
+                // Fallback BDD PostgreSQL / SQLite
                 const dbRes = await db.pool.query(`
                     SELECT sm.*, ux.xp, ux.level, ux.messages_count, ux.voice_minutes
                     FROM server_members sm
                     LEFT JOIN user_xp ux ON sm.user_id = ux.user_id
+                    WHERE sm.deleted_at IS NULL AND sm.left_at IS NULL
                 `);
 
                 membersList = dbRes.rows.map(row => {
                     let roles = [];
                     try { roles = JSON.parse(row.roles || '[]'); } catch (e) { }
+                    const avatar = row.avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png';
+                    const highestRole = row.highest_role_id ? {
+                        id: row.highest_role_id,
+                        name: row.highest_role_name,
+                        color: row.highest_role_color
+                    } : null;
+
                     return {
                         id: row.user_id,
                         username: row.username,
@@ -903,7 +944,11 @@ function createWebRouter(client) {
                         displayName: row.display_name || row.username,
                         discriminator: row.discriminator || '0000',
                         tag: row.tag || `${row.username}#${row.discriminator || '0000'}`,
-                        avatar: row.avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png',
+                        avatar: avatar,
+                        avatarUrl: avatar,
+                        displayColor: row.display_color || row.highest_role_color || null,
+                        highestRole: highestRole,
+                        presence: row.presence || 'offline',
                         isBot: !!row.is_bot,
                         joinedAt: row.joined_at,
                         createdAt: row.account_created_at,
@@ -1038,6 +1083,29 @@ function createWebRouter(client) {
                         memberCount: r.members ? r.members.size : 0
                     }))
                     .sort((a, b) => b.position - a.position);
+            }
+
+            // Fallback vers le cache BDD discord_roles
+            if (rolesList.length === 0) {
+                try {
+                    const dbRes = await db.pool.query(`
+                        SELECT role_id, name, color, color_hex, icon_url, unicode_emoji, member_count, hoist, position
+                        FROM discord_roles
+                        WHERE deleted_at IS NULL
+                        ORDER BY position DESC
+                    `);
+                    rolesList = dbRes.rows.map(r => ({
+                        id: r.role_id,
+                        name: r.name,
+                        color: r.color_hex || (r.color && r.color !== 0 ? `#${r.color.toString(16).padStart(6, '0')}` : '#99aab5'),
+                        rawColor: r.color || 0,
+                        position: r.position || 0,
+                        icon: r.icon_url || null,
+                        unicodeEmoji: r.unicode_emoji || null,
+                        hoist: r.hoist === 1,
+                        memberCount: r.member_count || 0
+                    }));
+                } catch (e) {}
             }
 
             res.json({ success: true, data: rolesList });
