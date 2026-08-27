@@ -187,7 +187,7 @@ function applyEnvironmentOverrides(config) {
     config.daily_message.ai_config = config.daily_message.ai_config || {};
     config.captcha = config.captcha || {};
     config.welcome = config.welcome || {};
-    config.welcome.xp = config.welcome.xp || config.xp || {};
+    config.xp = config.xp|| {};
 
     config.counter = config.counter || {};
     config.counter.emojis = config.counter.emojis || {};
@@ -357,12 +357,7 @@ function saveConfig(newConfig) {
 function saveModuleConfig(moduleName, moduleData) {
     const config = getConfig();
 
-    if (moduleName === 'xp') {
-        config.welcome = config.welcome || {};
-        config.welcome.xp = moduleData;
-    } else {
-        config[moduleName] = moduleData;
-    }
+    config[moduleName] = moduleData;
 
     saveConfig(config);
     return config;

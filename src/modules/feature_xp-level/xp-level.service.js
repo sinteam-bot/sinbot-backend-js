@@ -15,6 +15,11 @@ class XPLevelService {
         return currentConfig.xp || {};
     }
 
+    isXPEnabled() {
+        const conf = this.getConfig();
+        return conf.enabled === true;
+    }
+
     /**
      * Formule de niveau : Niveau = floor(sqrt(XP / 100))
      */
@@ -175,13 +180,24 @@ class XPLevelService {
      */
     async checkAndAssignRewardRoles(guild, member, level) {
         if (!guild || !member) return;
+        const conf = this.getConfig();
+        if (conf.enabled === false) return;
+
         try {
+            if (typeof this.repo.getRewardRoles !== 'function') return;
             const rewardRoles = await this.repo.getRewardRoles(guild.id);
+            if (!Array.isArray(rewardRoles)) return;
+
             for (const r of rewardRoles) {
                 if (r.levelRequired <= level) {
-                    const role = guild.roles.cache.get(r.roleId);
+                    let role = guild.roles.cache.get(r.roleId);
+                    if (!role) {
+                        role = guild.roles.cache.find(roleObj => roleObj.name.toLowerCase() === String(r.roleId).toLowerCase());
+                    }
                     if (role && !member.roles.cache.has(role.id)) {
-                        await member.roles.add(role.id).catch(() => {});
+                        await member.roles.add(role.id).catch(err => {
+                            console.warn(`⚠️ [XP] Impossible d'ajouter le rôle "${role.name}" à ${member.user.tag}: ${err.message}`);
+                        });
                         console.log(`🎖️ [XP] Rôle "${role.name}" attribué à ${member.user.tag} pour le niveau ${r.levelRequired}`);
                     }
                 }

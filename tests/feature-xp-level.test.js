@@ -54,7 +54,7 @@ describe('Feature: XP & Level Module Tests', () => {
         assert.ok(ended.durationMinutes >= 1);
     });
 
-    test('Controller: should return leaderboard and user profile', async () => {
+    test('Controller: should return leaderboard, user profile and reward roles', async () => {
         const controller = container.resolve(XPLevelController);
 
         const resLb = await controller.getLeaderboard({ query: { limit: '10' } });
@@ -65,6 +65,40 @@ describe('Feature: XP & Level Module Tests', () => {
         assert.ok(resProfile.success);
         assert.strictEqual(resProfile.data.userId, userId);
         assert.ok(resProfile.data.progress);
+
+        const resRewards = await controller.getRewardRoles({ query: {} });
+        assert.ok(resRewards.success);
+        assert.ok(Array.isArray(resRewards.data));
+    });
+
+    test('Service & Repository: should fetch reward roles and assign them safely', async () => {
+        const repo = container.resolve(XPLevelRepository);
+        const service = container.resolve(XPLevelService);
+
+        const roles = await repo.getRewardRoles('guild_123');
+        assert.ok(Array.isArray(roles));
+
+        let roleAdded = false;
+        const mockMember = {
+            id: userId,
+            user: { tag: 'LevelMaster#0001' },
+            roles: {
+                cache: new Map(),
+                add: async (roleId) => { roleAdded = true; }
+            }
+        };
+
+        const mockGuild = {
+            id: 'guild_123',
+            roles: {
+                cache: new Map([
+                    ['5', { id: '5', name: 'Membre Actif' }],
+                    ['role_veteran', { id: 'role_veteran', name: 'Vétéran' }]
+                ])
+            }
+        };
+
+        await service.checkAndAssignRewardRoles(mockGuild, mockMember, 10);
     });
 
 });

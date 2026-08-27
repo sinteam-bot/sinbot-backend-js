@@ -182,6 +182,32 @@ class XPLevelRepository {
             durationMinutes
         };
     }
+
+    /**
+     * Récupère les rôles de récompense configurés par niveau
+     */
+    async getRewardRoles(guildId = null) {
+        const { config: globalConfig, getConfig: getGlobalConfig } = require('../../config/index.js');
+        const fullConfig = getGlobalConfig ? getGlobalConfig() : globalConfig;
+        const x = fullConfig.xp || {};
+        const levelRoles = x.level_roles || x.LEVEL_ROLES || {};
+
+        const results = [];
+        for (const [levelStr, roleIdentifier] of Object.entries(levelRoles)) {
+            const level = parseInt(levelStr, 10);
+            if (!isNaN(level) && roleIdentifier) {
+                results.push({
+                    levelRequired: level,
+                    roleId: String(roleIdentifier),
+                    roleName: typeof roleIdentifier === 'string' ? roleIdentifier : null
+                });
+            }
+        }
+
+        // Trier par niveau croissant
+        results.sort((a, b) => a.levelRequired - b.levelRequired);
+        return results;
+    }
 }
 
 Repository()(XPLevelRepository);

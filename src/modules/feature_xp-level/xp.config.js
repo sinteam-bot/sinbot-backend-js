@@ -91,20 +91,19 @@ module.exports = new Proxy({}, {
         if (prop in conf) {
             return conf[prop];
         }
-        const x = getConfig().welcome?.xp || getConfig().xp || {};
+        const x = getConfig().xp || {};
         return x[prop];
     },
     set(target, prop, value) {
         const fullConfig = getConfig();
-        fullConfig.welcome = fullConfig.welcome || {};
-        fullConfig.welcome.xp = fullConfig.welcome.xp || {};
-        fullConfig.welcome.xp[prop] = value;
-        saveModuleConfig('xp', fullConfig.welcome.xp);
+        fullConfig.xp = fullConfig.xp || {};
+        fullConfig.xp[prop] = value;
+        saveModuleConfig('xp', fullConfig.xp);
         return true;
     },
     ownKeys() {
         const conf = getXpConfig();
-        const x = getConfig().welcome?.xp || getConfig().xp || {};
+        const x = getConfig().xp || getConfig().xp || {};
         return Array.from(new Set([...Object.keys(conf), ...Object.keys(x)]));
     },
     getOwnPropertyDescriptor(target, prop) {
