@@ -8,6 +8,8 @@ data/
 logs/
 .deno_lsp/
 config.yml
+config.*.yml
+-config.example.yml
 public
 frontend/dist
 frontend/.nuxt/
