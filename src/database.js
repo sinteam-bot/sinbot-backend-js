@@ -926,7 +926,7 @@ async function saveOpenAIMessage(data) {
                 msgid: data.msgid,
                 prompt: data.prompt,
                 instruction: data.instruction || null,
-                model: data.model || 'gpt-4o-mini',
+                model: data.model || 'unknow',
                 tokeninput: parseInt(data.tokeninput, 10) || 0,
                 tokenoutput: parseInt(data.tokenoutput, 10) || 0,
                 content: data.content,
@@ -939,7 +939,7 @@ async function saveOpenAIMessage(data) {
                 set: {
                     prompt: data.prompt,
                     instruction: data.instruction || null,
-                    model: data.model || 'gpt-4o-mini',
+                    model: data.model || 'unknow',
                     tokeninput: parseInt(data.tokeninput, 10) || 0,
                     tokenoutput: parseInt(data.tokenoutput, 10) || 0,
                     content: data.content,

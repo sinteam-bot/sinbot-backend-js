@@ -179,7 +179,6 @@ function applyEnvironmentOverrides(config) {
     config.discord.commands.allowed_channels = config.discord.commands.allowed_channels || [];
     config.discord.commands.permissions = config.discord.commands.permissions || {};
 
-    config.openai = config.openai || {};
     config.openrouter = config.openrouter || {};
     config.startup_notifier = config.startup_notifier || {};
     config.startup_notifier.github = config.startup_notifier.github || {};
@@ -235,15 +234,11 @@ function applyEnvironmentOverrides(config) {
     if (env.COUNTER_CHANNEL_ID) config.counter.channel_id = env.COUNTER_CHANNEL_ID;
     if (env.COUNTDOWN_CHANNEL_ID) config.countdown.channel_id = env.COUNTDOWN_CHANNEL_ID;
 
-    // OpenAI
-    if (env.OPENAI_API_KEY) config.openai.api_key = env.OPENAI_API_KEY;
-    if (env.OPENAI_MODEL) config.openai.default_model = env.OPENAI_MODEL;
-    if (env.OPENAI_MAX_TOKENS) config.openai.max_tokens = parseInt(env.OPENAI_MAX_TOKENS, 10);
-    if (env.OPENAI_TEMPERATURE) config.openai.temperature = parseFloat(env.OPENAI_TEMPERATURE);
-
     // OpenRouter
     if (env.OPENROUTER_API_KEY) config.openrouter.api_key = env.OPENROUTER_API_KEY;
     if (env.OPENROUTER_MODEL) config.openrouter.default_model = env.OPENROUTER_MODEL;
+    if (env.OPENROUTER_MAX_TOKENS) config.openrouter.max_tokens = parseInt(env.OPENROUTER_MAX_TOKENS, 10);
+    if (env.OPENROUTER_TEMPERATURE) config.openrouter.temperature = parseFloat(env.OPENROUTER_TEMPERATURE);
 
     // Notifications & GitHub
     if (env.LOG_CHANNEL_ID || env.NOTIFICATION_CHANNEL_ID) {
@@ -283,9 +278,6 @@ function applyEnvironmentOverrides(config) {
     if (config.discord?.client_id && !process.env.CLIENT_ID) process.env.CLIENT_ID = config.discord.client_id;
     if (config.discord?.guild_id && !process.env.GUILD_ID) process.env.GUILD_ID = config.discord.guild_id;
     if (config.discord?.default_color && !process.env.BOT_COLOR) process.env.BOT_COLOR = config.discord.default_color;
-
-    if (config.openai?.api_key && !process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = config.openai.api_key;
-    if (config.openai?.default_model && !process.env.OPENAI_MODEL) process.env.OPENAI_MODEL = config.openai.default_model;
 
     if (config.openrouter?.api_key && !process.env.OPENROUTER_API_KEY) process.env.OPENROUTER_API_KEY = config.openrouter.api_key;
     if (config.openrouter?.default_model && !process.env.OPENROUTER_MODEL) process.env.OPENROUTER_MODEL = config.openrouter.default_model;

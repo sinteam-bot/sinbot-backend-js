@@ -36,12 +36,8 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       DB_PATH: "/app/data/bot.db"
 
-      # Configuration OpenAI API
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-500}
-      OPENAI_TEMPERATURE: ${OPENAI_TEMPERATURE:-0.7}
-
       # Configuration OpenRouter
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-20b:free}
+      OPENROUTER_MAX_TOKENS: ${OPENROUTER_MAX_TOKENS:-500}
+      OPENROUTER_TEMPERATURE: ${OPENROUTER_TEMPERATURE:-0.7}

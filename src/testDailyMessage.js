@@ -234,8 +234,8 @@ if (!process.env.DISCORD_TOKEN) {
     process.exit(1);
 }
 
-if (!process.env.OPENAI_API_KEY) {
-    console.error('❌ OPENAI_API_KEY non trouvé dans .env');
+if (!process.env.OPENROUTER_API_KEY) {
+    console.error('❌ OPENROUTER_API_KEY non trouvé dans .env');
     process.exit(1);
 }
 

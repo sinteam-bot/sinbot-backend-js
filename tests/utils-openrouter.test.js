@@ -33,13 +33,13 @@ describe('OpenRouter Utilities Tests', () => {
 
             const response = await openrouter.callChatGPT('Bonjour', {
                 systemPrompt: 'Tu es un bot assistant.',
-                model: 'openai/gpt-4o-mini'
+                model: 'nvidia/nemotron-3.5-lightning:free'
             });
 
             assert.strictEqual(response.text, 'Bonjour ! Ceci est un test IA réussi.');
             assert.strictEqual(response.usage.promptTokens, 15);
             assert.strictEqual(response.usage.completionTokens, 25);
-            assert.strictEqual(response.model, 'openai/gpt-4o-mini');
+            assert.strictEqual(response.model, 'nvidia/nemotron-3.5-lightning:free');
 
         } finally {
             openrouter.client.chat.completions.create = originalCreate;
