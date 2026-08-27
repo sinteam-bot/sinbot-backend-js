@@ -512,6 +512,23 @@ const PG_TABLES_DDL = `
         created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket ON ticket_messages(ticket_id);
+
+    -- Phase 4: Generic event log
+    CREATE TABLE IF NOT EXISTS event_log (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        actor_id TEXT,
+        target_id TEXT,
+        channel_id TEXT,
+        metadata TEXT,
+        summary TEXT,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_log_guild_type ON event_log(guild_id, event_type);
+    CREATE INDEX IF NOT EXISTS idx_event_log_guild_created ON event_log(guild_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_event_log_actor ON event_log(actor_id);
+    CREATE INDEX IF NOT EXISTS idx_event_log_target ON event_log(target_id);
 `;
 
 /**

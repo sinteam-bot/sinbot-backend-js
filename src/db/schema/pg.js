@@ -485,6 +485,24 @@ const ticketMessages = pgTable('ticket_messages', {
     index('idx_pg_ticket_messages_ticket').on(table.ticketId)
 ]);
 
+// 36. event_log (Phase 4: generic event log)
+const eventLog = pgTable('event_log', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    eventType: text('event_type').notNull(),
+    actorId: text('actor_id'),
+    targetId: text('target_id'),
+    channelId: text('channel_id'),
+    metadata: text('metadata'),
+    summary: text('summary'),
+    createdAt: integer('created_at').notNull()
+}, (table) => [
+    index('idx_pg_event_log_guild_type').on(table.guildId, table.eventType),
+    index('idx_pg_event_log_guild_created').on(table.guildId, table.createdAt),
+    index('idx_pg_event_log_actor').on(table.actorId),
+    index('idx_pg_event_log_target').on(table.targetId)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -520,5 +538,6 @@ module.exports = {
     userSanctions,
     modLogs,
     tickets,
-    ticketMessages
+    ticketMessages,
+    eventLog
 };
