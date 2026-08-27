@@ -452,6 +452,39 @@ const modLogs = pgTable('mod_logs', {
     index('idx_pg_mod_logs_guild_user').on(table.guildId, table.userId)
 ]);
 
+// 34. tickets (Phase 3)
+const tickets = pgTable('tickets', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    userId: text('user_id').notNull(),
+    category: text('category').notNull().default('support'),
+    subject: text('subject'),
+    status: text('status').notNull().default('open'),
+    claimedBy: text('claimed_by'),
+    closedBy: text('closed_by'),
+    closedAt: integer('closed_at'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull()
+}, (table) => [
+    index('idx_pg_tickets_guild_status').on(table.guildId, table.status),
+    index('idx_pg_tickets_user').on(table.userId),
+    index('idx_pg_tickets_channel').on(table.channelId)
+]);
+
+// 35. ticket_messages (Phase 3)
+const ticketMessages = pgTable('ticket_messages', {
+    id: text('id').primaryKey(),
+    ticketId: text('ticket_id').notNull(),
+    authorId: text('author_id').notNull(),
+    content: text('content'),
+    attachments: text('attachments'),
+    isStaff: integer('is_staff').notNull().default(0),
+    createdAt: integer('created_at').notNull()
+}, (table) => [
+    index('idx_pg_ticket_messages_ticket').on(table.ticketId)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -485,5 +518,7 @@ module.exports = {
     featureFlags,
     userWarnings,
     userSanctions,
-    modLogs
+    modLogs,
+    tickets,
+    ticketMessages
 };

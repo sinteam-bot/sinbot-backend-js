@@ -482,6 +482,36 @@ const PG_TABLES_DDL = `
     );
     CREATE INDEX IF NOT EXISTS idx_mod_logs_guild_created ON mod_logs(guild_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_mod_logs_guild_user ON mod_logs(guild_id, user_id);
+
+    -- Phase 3: Tickets
+    CREATE TABLE IF NOT EXISTS tickets (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'support',
+        subject TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        claimed_by TEXT,
+        closed_by TEXT,
+        closed_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tickets_guild_status ON tickets(guild_id, status);
+    CREATE INDEX IF NOT EXISTS idx_tickets_user ON tickets(user_id);
+    CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id);
+
+    CREATE TABLE IF NOT EXISTS ticket_messages (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL,
+        author_id TEXT NOT NULL,
+        content TEXT,
+        attachments TEXT,
+        is_staff INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket ON ticket_messages(ticket_id);
 `;
 
 /**
