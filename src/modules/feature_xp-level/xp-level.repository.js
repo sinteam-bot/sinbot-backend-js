@@ -184,6 +184,26 @@ class XPLevelRepository {
     }
 
     /**
+     * Remet à zéro l'XP d'un utilisateur
+     */
+    async resetUserXP(userId) {
+        const { sql: drizzleSql } = require('drizzle-orm');
+        const [updated] = await this.db.update(this.schema.userXp)
+            .set({
+                xp: 0,
+                level: 0,
+                totalXpEarned: 0,
+                messagesCount: 0,
+                voiceMinutes: 0,
+                lastMessageXp: null,
+                updatedAt: drizzleSql`CURRENT_TIMESTAMP`
+            })
+            .where(eq(this.schema.userXp.userId, userId))
+            .returning();
+        return { reset: !!updated, userId };
+    }
+
+    /**
      * Récupère les rôles de récompense configurés par niveau
      */
     async getRewardRoles(guildId = null) {

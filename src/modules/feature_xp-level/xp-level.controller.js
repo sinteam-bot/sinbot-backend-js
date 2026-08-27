@@ -9,9 +9,20 @@ class XPLevelController {
     }
 
     async getLeaderboard(req) {
-        const limit = parseInt(req.query.limit, 10) || 50;
-        const leaderboard = await this.service.getLeaderboard(limit);
-        return { success: true, data: leaderboard };
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const { entries, total } = await this.service.getLeaderboard(limit, offset);
+        return {
+            success: true,
+            data: {
+                entries,
+                total,
+                limit,
+                offset,
+                page: Math.floor(offset / limit) + 1,
+                pages: Math.ceil(total / limit)
+            }
+        };
     }
 
     async getUserProfile(req) {
@@ -29,6 +40,11 @@ class XPLevelController {
         return { success: true, data: roles };
     }
 
+    async getConfig(req) {
+        const cfg = this.service.getConfig();
+        return { success: true, data: cfg };
+    }
+
     async grantXP(req) {
         const { userId, username, amount, reason } = req.body || {};
         if (!userId || !amount) {
@@ -37,13 +53,32 @@ class XPLevelController {
         const result = await this.service.addXP(userId, username || `User-${userId}`, parseInt(amount, 10), 'admin_grant', reason || 'Ajout manuel administrateur');
         return { success: true, data: result };
     }
+
+    async adjustXP(req) {
+        const { userId, username, delta, reason } = req.body || {};
+        if (!userId || typeof delta !== 'number') {
+            return { success: false, error: 'userId et delta (number) requis' };
+        }
+        const result = await this.service.addXP(userId, username || `User-${userId}`, delta, 'admin_adjust', reason || 'Ajustement administrateur');
+        return { success: true, data: result };
+    }
+
+    async resetUserXP(req) {
+        const { userId } = req.body || {};
+        if (!userId) return { success: false, error: 'userId requis' };
+        const result = await this.service.repo.resetUserXP(userId);
+        return { success: true, data: result };
+    }
 }
 
 Controller('/api/xp')(XPLevelController);
 Get('/leaderboard')(XPLevelController.prototype, 'getLeaderboard');
 Get('/user/:userId')(XPLevelController.prototype, 'getUserProfile');
 Get('/rewards')(XPLevelController.prototype, 'getRewardRoles');
+Get('/config')(XPLevelController.prototype, 'getConfig');
 Post('/grant')(XPLevelController.prototype, 'grantXP');
+Post('/adjust')(XPLevelController.prototype, 'adjustXP');
+Post('/reset')(XPLevelController.prototype, 'resetUserXP');
 
 module.exports = {
     XPLevelController

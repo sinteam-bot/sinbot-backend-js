@@ -1,13 +1,15 @@
 const { EmbedBuilder } = require('discord.js');
 const { Injectable } = require('../../core/index.js');
 const { XPLevelRepository } = require('./xp-level.repository.js');
+const { LevelUpService } = require('./level-up.service.js');
 const { config, getConfig } = require('../../config/index.js');
 
 class XPLevelService {
-    static inject = [XPLevelRepository];
+    static inject = [XPLevelRepository, LevelUpService];
 
-    constructor(repository) {
+    constructor(repository, levelUp) {
         this.repo = repository;
+        this.levelUp = levelUp;
     }
 
     getConfig() {
@@ -91,6 +93,37 @@ class XPLevelService {
     }
 
     /**
+     * Calcule le rang actuel d'un utilisateur dans le leaderboard
+     */
+    async getUserRank(userId) {
+        const leaderboard = await this.repo.getLeaderboard(10000);
+        const idx = leaderboard.findIndex(u => u.userId === userId);
+        return idx >= 0 ? idx + 1 : null;
+    }
+
+    /**
+     * Déclenche l'annonce de level-up + attribution des rôles
+     * Centralisé pour réutilisation par les events et les commandes admin
+     */
+    async triggerLevelUp(guild, user, member, newLevel) {
+        const conf = this.getConfig();
+        const levelUpConf = conf.level_up || conf.LEVEL_UP || {};
+        this.levelUp.setConfig(levelUpConf);
+        const rank = await this.getUserRank(user.id);
+        const totalXp = (await this.repo.getUserXP(user.id))?.xp || 0;
+
+        if (this.levelUp.isEnabled()) {
+            await this.levelUp.announce(guild, user, member, { level: newLevel, totalXp, rank });
+        }
+
+        const levelRoles = conf.level_roles || conf.LEVEL_ROLES || {};
+        if (Object.keys(levelRoles).length > 0) {
+            const options = { cumulable: conf.level_roles_cumulable === true };
+            await this.levelUp.applyRewardRoles(guild, member, newLevel, levelRoles, options);
+        }
+    }
+
+    /**
      * Traite un message pour accorder de l'XP aléatoire
      */
     async handleMessageXP(message) {
@@ -117,8 +150,7 @@ class XPLevelService {
         const result = await this.addXP(message.author.id, message.author.username, xpAmount, 'message', 'Message dans le chat');
 
         if (result.leveledUp) {
-            await this.notifyLevelUp(message.channel, message.member, result.newLevel);
-            await this.checkAndAssignRewardRoles(message.guild, message.member, result.newLevel);
+            await this.triggerLevelUp(message.guild, message.author, message.member, result.newLevel);
         }
     }
 
@@ -135,13 +167,11 @@ class XPLevelService {
         const userId = member.id;
         const username = member.user.username;
 
-        // Connexion à un salon vocal (non afk)
         if (!oldState.channelId && newState.channelId) {
             await this.repo.startVoiceSession(userId, username, newState.channelId, newState.channel?.name || 'Vocal');
             return;
         }
 
-        // Déconnexion d'un salon vocal
         if (oldState.channelId && !newState.channelId) {
             const session = await this.repo.endVoiceSession(userId);
             if (session && session.durationMinutes >= 1) {
@@ -149,61 +179,9 @@ class XPLevelService {
                 const earned = session.durationMinutes * xpPerMin;
                 const res = await this.addXP(userId, username, earned, 'voice', `Session vocale de ${session.durationMinutes} min`);
                 if (res.leveledUp && oldState.guild) {
-                    await this.checkAndAssignRewardRoles(oldState.guild, member, res.newLevel);
+                    await this.triggerLevelUp(oldState.guild, member.user, member, res.newLevel);
                 }
             }
-        }
-    }
-
-    /**
-     * Envoie une annonce de level up
-     */
-    async notifyLevelUp(channel, member, newLevel) {
-        if (!channel || !member) return;
-
-        try {
-            const embed = new EmbedBuilder()
-                .setColor('#f2c7ce')
-                .setTitle('🎉 NIVEAU SUPÉRIEUR !')
-                .setDescription(`Félicitations <@${member.id}> ! Vous venez d'atteindre le **Niveau ${newLevel}** ! 🚀`)
-                .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-                .setTimestamp();
-
-            await channel.send({ embeds: [embed] });
-        } catch (err) {
-            console.error('❌ [XP] Erreur envoi embed level up:', err.message);
-        }
-    }
-
-    /**
-     * Attribue les rôles de récompense selon le niveau atteint
-     */
-    async checkAndAssignRewardRoles(guild, member, level) {
-        if (!guild || !member) return;
-        const conf = this.getConfig();
-        if (conf.enabled === false) return;
-
-        try {
-            if (typeof this.repo.getRewardRoles !== 'function') return;
-            const rewardRoles = await this.repo.getRewardRoles(guild.id);
-            if (!Array.isArray(rewardRoles)) return;
-
-            for (const r of rewardRoles) {
-                if (r.levelRequired <= level) {
-                    let role = guild.roles.cache.get(r.roleId);
-                    if (!role) {
-                        role = guild.roles.cache.find(roleObj => roleObj.name.toLowerCase() === String(r.roleId).toLowerCase());
-                    }
-                    if (role && !member.roles.cache.has(role.id)) {
-                        await member.roles.add(role.id).catch(err => {
-                            console.warn(`⚠️ [XP] Impossible d'ajouter le rôle "${role.name}" à ${member.user.tag}: ${err.message}`);
-                        });
-                        console.log(`🎖️ [XP] Rôle "${role.name}" attribué à ${member.user.tag} pour le niveau ${r.levelRequired}`);
-                    }
-                }
-            }
-        } catch (err) {
-            console.error('❌ [XP] Erreur attribution rôle reward:', err.message);
         }
     }
 
@@ -214,24 +192,26 @@ class XPLevelService {
         const user = await this.repo.getUserXP(userId);
         const totalXp = user?.total_xp || 0;
         const progress = this.getXPProgress(totalXp);
-        const leaderboard = await this.repo.getLeaderboard(1000);
-        const rankIndex = leaderboard.findIndex(u => u.userId === userId);
-        const rank = rankIndex >= 0 ? rankIndex + 1 : leaderboard.length + 1;
+        const rank = await this.getUserRank(userId);
 
         return {
             userId,
             username: user?.username || username || `Utilisateur ${userId}`,
             totalXp,
             level: progress.currentLevel,
-            rank,
+            rank: rank || '?',
             messagesCount: user?.messages_count || user?.messagesCount || 0,
             voiceMinutes: user?.voice_minutes || user?.voiceMinutes || 0,
             progress
         };
     }
 
-    async getLeaderboard(limit = 20) {
-        return await this.repo.getLeaderboard(limit);
+    async getLeaderboard(limit = 20, offset = 0) {
+        const all = await this.repo.getLeaderboard(offset + limit);
+        return {
+            entries: all.slice(offset, offset + limit),
+            total: all.length
+        };
     }
 }
 

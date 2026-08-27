@@ -59,7 +59,8 @@ describe('Feature: XP & Level Module Tests', () => {
 
         const resLb = await controller.getLeaderboard({ query: { limit: '10' } });
         assert.ok(resLb.success);
-        assert.ok(Array.isArray(resLb.data));
+        assert.ok(resLb.data);
+        assert.ok(Array.isArray(resLb.data.entries));
 
         const resProfile = await controller.getUserProfile({ params: { userId } });
         assert.ok(resProfile.success);
@@ -74,6 +75,7 @@ describe('Feature: XP & Level Module Tests', () => {
     test('Service & Repository: should fetch reward roles and assign them safely', async () => {
         const repo = container.resolve(XPLevelRepository);
         const service = container.resolve(XPLevelService);
+        const levelUp = container.resolve(require('../src/modules/feature_xp-level/level-up.service.js').LevelUpService);
 
         const roles = await repo.getRewardRoles('guild_123');
         assert.ok(Array.isArray(roles));
@@ -98,7 +100,8 @@ describe('Feature: XP & Level Module Tests', () => {
             }
         };
 
-        await service.checkAndAssignRewardRoles(mockGuild, mockMember, 10);
+        const results = await levelUp.applyRewardRoles(mockGuild, mockMember, 10, { 5: '5', 20: 'role_veteran' }, { cumulable: true });
+        assert.ok(Array.isArray(results.added) || Array.isArray(results.removed));
     });
 
 });
