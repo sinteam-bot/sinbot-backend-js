@@ -396,6 +396,62 @@ const featureFlags = pgTable('feature_flags', {
     index('idx_pg_feature_flags_enabled').on(table.enabled)
 ]);
 
+// 31. user_warnings (Phase 1: automod)
+const userWarnings = pgTable('user_warnings', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    userId: text('user_id').notNull(),
+    modId: text('mod_id').notNull(),
+    reason: text('reason').notNull(),
+    source: text('source').notNull().default('manual'),
+    rule: text('rule'),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at'),
+    active: integer('active').notNull().default(1)
+}, (table) => [
+    index('idx_pg_user_warnings_guild_user').on(table.guildId, table.userId),
+    index('idx_pg_user_warnings_active').on(table.active)
+]);
+
+// 32. user_sanctions (Phase 1: automod)
+const userSanctions = pgTable('user_sanctions', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    userId: text('user_id').notNull(),
+    type: text('type').notNull(),
+    reason: text('reason').notNull(),
+    modId: text('mod_id').notNull(),
+    durationMs: integer('duration_ms'),
+    startsAt: integer('starts_at').notNull(),
+    expiresAt: integer('expires_at'),
+    revokedBy: text('revoked_by'),
+    revokedAt: integer('revoked_at'),
+    revokedReason: text('revoked_reason'),
+    active: integer('active').notNull().default(1),
+    createdAt: integer('created_at').notNull()
+}, (table) => [
+    index('idx_pg_user_sanctions_guild_user').on(table.guildId, table.userId),
+    index('idx_pg_user_sanctions_active').on(table.active)
+]);
+
+// 33. mod_logs (Phase 1: automod audit log)
+const modLogs = pgTable('mod_logs', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    userId: text('user_id').notNull(),
+    modId: text('mod_id'),
+    action: text('action').notNull(),
+    channelId: text('channel_id'),
+    messageId: text('message_id'),
+    reason: text('reason'),
+    metadata: text('metadata'),
+    source: text('source').notNull().default('manual'),
+    createdAt: integer('created_at').notNull()
+}, (table) => [
+    index('idx_pg_mod_logs_guild_created').on(table.guildId, table.createdAt),
+    index('idx_pg_mod_logs_guild_user').on(table.guildId, table.userId)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -426,5 +482,8 @@ module.exports = {
     discordEventsArchive,
     discordEmojis,
     guildSettings,
-    featureFlags
+    featureFlags,
+    userWarnings,
+    userSanctions,
+    modLogs
 };

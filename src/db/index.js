@@ -431,6 +431,57 @@ const PG_TABLES_DDL = `
     );
 
     CREATE INDEX IF NOT EXISTS idx_feature_flags_enabled ON feature_flags(enabled);
+
+    -- Phase 1: AutoMod tables
+    CREATE TABLE IF NOT EXISTS user_warnings (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        mod_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual',
+        rule TEXT,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        active INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_warnings_guild_user ON user_warnings(guild_id, user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_warnings_active ON user_warnings(active);
+
+    CREATE TABLE IF NOT EXISTS user_sanctions (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        mod_id TEXT NOT NULL,
+        duration_ms INTEGER,
+        starts_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        revoked_by TEXT,
+        revoked_at INTEGER,
+        revoked_reason TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_sanctions_guild_user ON user_sanctions(guild_id, user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_sanctions_active ON user_sanctions(active);
+
+    CREATE TABLE IF NOT EXISTS mod_logs (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        mod_id TEXT,
+        action TEXT NOT NULL,
+        channel_id TEXT,
+        message_id TEXT,
+        reason TEXT,
+        metadata TEXT,
+        source TEXT NOT NULL DEFAULT 'manual',
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mod_logs_guild_created ON mod_logs(guild_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_mod_logs_guild_user ON mod_logs(guild_id, user_id);
 `;
 
 /**
