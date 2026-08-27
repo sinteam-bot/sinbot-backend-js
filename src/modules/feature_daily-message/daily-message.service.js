@@ -38,55 +38,62 @@ class DailyMessageService {
 
         const aiConfig = this.getConfig().ai_config || {};
         const conf = getConfig ? getConfig() : config;
-        const selectedModel = aiConfig.model || conf.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
-
-        // Étape 1 : Méta-prompt créatif
-        const promptGenerationOptions = {
-            model: selectedModel,
-            temperature: 1.2,
-            maxTokens: 500
-        };
-
-        const metaPrompt = requestPrompt(targetDate);
-        const promptResponse = await callResponseCustom(metaPrompt, promptGenerationOptions);
+        const selectedModel = aiConfig.model || conf.openrouter?.default_model || process.env.OPENROUTER_MODEL || 'openai/gpt-oss-20b:free';
 
         try {
-            await this.repo.saveAiMessage({
-                msgid: promptResponse.msgId,
-                prompt: metaPrompt,
-                instruction: promptGenerationOptions.systemPrompt || null,
-                model: promptResponse.model,
-                tokeninput: promptResponse.usage?.promptTokens || 0,
-                tokenoutput: promptResponse.usage?.completionTokens || 0,
-                content: promptResponse.text,
-                type: 'prompt_generation'
-            });
-        } catch (err) {
-            console.warn('⚠️ [DailyMessage] Erreur sauvegarde prompt DB:', err.message);
+            // Étape 1 : Méta-prompt créatif
+            const promptGenerationOptions = {
+                model: selectedModel,
+                temperature: 1.2,
+                maxTokens: 500,
+                allowFallback: true
+            };
+
+            const metaPrompt = requestPrompt(targetDate);
+            const promptResponse = await callResponseCustom(metaPrompt, promptGenerationOptions);
+
+            try {
+                await this.repo.saveAiMessage({
+                    msgid: promptResponse.msgId,
+                    prompt: metaPrompt,
+                    instruction: promptGenerationOptions.systemPrompt || null,
+                    model: promptResponse.model,
+                    tokeninput: promptResponse.usage?.promptTokens || 0,
+                    tokenoutput: promptResponse.usage?.completionTokens || 0,
+                    content: promptResponse.text,
+                    type: 'prompt_generation'
+                });
+            } catch (err) {
+                console.warn('⚠️ [DailyMessage] Erreur sauvegarde prompt DB:', err.message);
+            }
+
+            // Étape 2 : Message final
+            const { prompt: finalPrompt, instruction: finalInstruction } = formatFinalPrompt(promptResponse.text, targetDate);
+
+            const messageOptions = {
+                model: selectedModel,
+                systemPrompt: finalInstruction,
+                temperature: aiConfig.temperature !== undefined ? aiConfig.temperature : 0.8,
+                maxTokens: aiConfig.max_tokens || 300,
+                allowFallback: true
+            };
+
+            const messageResponse = await callResponseCustom(finalPrompt, messageOptions);
+
+            return {
+                date: targetDate,
+                metaPrompt,
+                promptResponse,
+                finalPrompt,
+                finalInstruction,
+                messageResponse,
+                text: messageResponse.text,
+                model: messageResponse.model || messageOptions.model
+            };
+        } catch (error) {
+            console.error('❌ [DailyMessage] Erreur lors de la génération IA:', error.message);
+            throw new Error(`Échec de génération IA (${error.message}). Vérifiez votre clé OpenRouter ou votre modèle configuré.`);
         }
-
-        // Étape 2 : Message final
-        const { prompt: finalPrompt, instruction: finalInstruction } = formatFinalPrompt(promptResponse.text, targetDate);
-
-        const messageOptions = {
-            model: selectedModel,
-            systemPrompt: finalInstruction,
-            temperature: aiConfig.temperature !== undefined ? aiConfig.temperature : 0.8,
-            maxTokens: aiConfig.max_tokens || 300
-        };
-
-        const messageResponse = await callResponseCustom(finalPrompt, messageOptions);
-
-        return {
-            date: targetDate,
-            metaPrompt,
-            promptResponse,
-            finalPrompt,
-            finalInstruction,
-            messageResponse,
-            text: messageResponse.text,
-            model: messageResponse.model || messageOptions.model
-        };
     }
 
     buildActionButtons(disabled = false) {
