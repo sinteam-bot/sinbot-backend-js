@@ -181,6 +181,11 @@ const { appModules } = require('./modules/index.js');
 moduleManager.init(client, app);
 moduleManager.registerModules(appModules);
 
+// Routeur Features (Phase 0) — branché après l'enregistrement des modules
+// pour que le FeatureRegistry connaisse déjà toutes les features déclarées.
+const createFeaturesRouter = require('./web/featuresRouter.js');
+app.use('/api/features', createFeaturesRouter());
+
 // Endpoint pour envoyer un message depuis n8n
 app.post('/webhook/send-message', async (req, res) => {
     const { channelId, message, embed } = req.body;
