@@ -503,6 +503,20 @@ const eventLog = pgTable('event_log', {
     index('idx_pg_event_log_target').on(table.targetId)
 ]);
 
+// 37. welcome_cards (Phase 6: cached SVG cards)
+const welcomeCards = pgTable('welcome_cards', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    userId: text('user_id').notNull(),
+    template: text('template').notNull(),
+    payload: text('payload').notNull(),
+    svg: text('svg').notNull(),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at')
+}, (table) => [
+    index('idx_pg_welcome_cards_user').on(table.guildId, table.userId, table.template)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -539,5 +553,6 @@ module.exports = {
     modLogs,
     tickets,
     ticketMessages,
-    eventLog
+    eventLog,
+    welcomeCards
 };

@@ -529,6 +529,19 @@ const PG_TABLES_DDL = `
     CREATE INDEX IF NOT EXISTS idx_event_log_guild_created ON event_log(guild_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_event_log_actor ON event_log(actor_id);
     CREATE INDEX IF NOT EXISTS idx_event_log_target ON event_log(target_id);
+
+    -- Phase 6: Welcome card cache
+    CREATE TABLE IF NOT EXISTS welcome_cards (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        template TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        svg TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_welcome_cards_user ON welcome_cards(guild_id, user_id, template);
 `;
 
 /**
