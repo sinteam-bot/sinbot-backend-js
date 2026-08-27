@@ -1,5 +1,6 @@
-const { Controller, Get, Post } = require('../../core/index.js');
+const { Controller, Get, Post, Put } = require('../../core/index.js');
 const { XPLevelService } = require('./xp-level.service.js');
+const { getConfig, saveModuleConfig } = require('../../config/index.js');
 
 class XPLevelController {
     static inject = [XPLevelService];
@@ -45,6 +46,31 @@ class XPLevelController {
         return { success: true, data: cfg };
     }
 
+    async updateConfig(req) {
+        try {
+            const patch = req.body || {};
+            const current = this.service.getConfig();
+            const merged = this._deepMerge(current, patch);
+            saveModuleConfig('xp', merged);
+            return { success: true, data: merged };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    _deepMerge(target, source) {
+        if (typeof source !== 'object' || source === null) return source;
+        const out = Array.isArray(target) ? [...target] : { ...(target || {}) };
+        for (const [k, v] of Object.entries(source)) {
+            if (v && typeof v === 'object' && !Array.isArray(v)) {
+                out[k] = this._deepMerge(out[k], v);
+            } else {
+                out[k] = v;
+            }
+        }
+        return out;
+    }
+
     async grantXP(req) {
         const { userId, username, amount, reason } = req.body || {};
         if (!userId || !amount) {
@@ -76,6 +102,7 @@ Get('/leaderboard')(XPLevelController.prototype, 'getLeaderboard');
 Get('/user/:userId')(XPLevelController.prototype, 'getUserProfile');
 Get('/rewards')(XPLevelController.prototype, 'getRewardRoles');
 Get('/config')(XPLevelController.prototype, 'getConfig');
+Put('/config')(XPLevelController.prototype, 'updateConfig');
 Post('/grant')(XPLevelController.prototype, 'grantXP');
 Post('/adjust')(XPLevelController.prototype, 'adjustXP');
 Post('/reset')(XPLevelController.prototype, 'resetUserXP');
