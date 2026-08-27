@@ -7,6 +7,9 @@ const { XPLevelModule } = require('./feature_xp-level/xp-level.module.js');
 const { DailyMessageModule } = require('./feature_daily-message/daily-message.module.js');
 const { WelcomeModule } = require('./feature_welcome/welcome.module.js');
 
+const { declareExistingFeatures } = require('./feature-declarations.js');
+declareExistingFeatures();
+
 const appModules = [
     RoadToInfiniteModule,
     CountDownModule,
