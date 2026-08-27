@@ -1446,6 +1446,27 @@ function createWebRouter(client) {
         }
     });
 
+    router.get(['/captcha-logs/messages', '/captcha-logs/:channelId/messages', '/captcha/messages'], async (req, res) => {
+        try {
+            const { container } = require('../core/container.js');
+            const { SecurityQuestionService } = require('../modules/security_question/security-question.service.js');
+            const service = container.resolve(SecurityQuestionService);
+            const channelId = req.params?.channelId || req.query?.channel_id || req.query?.channelId;
+            const userId = req.query?.user_id || req.query?.userId;
+            const guildId = req.query?.guild_id || req.query?.guildId;
+
+            const history = await service.getChannelHistory(channelId, userId, guildId);
+            res.json({
+                success: true,
+                data: history
+            });
+        } catch (error) {
+            logger.error(`Erreur GET /api/captcha-logs/messages: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+
     // ============================================
     // 8. SERVICE : RAPPELS DE BUMP DISBOARD
     // ============================================

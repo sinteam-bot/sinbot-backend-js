@@ -33,6 +33,15 @@ class SecurityQuestionController {
         };
     }
 
+    async getChannelMessages(req) {
+        const channelId = req?.params?.channelId || req?.query?.channel_id || req?.query?.channelId;
+        const userId = req?.query?.user_id || req?.query?.userId;
+        const guildId = req?.query?.guild_id || req?.query?.guildId;
+
+        const data = await this.service.getChannelHistory(channelId, userId, guildId);
+        return { success: true, data };
+    }
+
     async verifyUser(req) {
         const { userId, guildId } = req?.body || {};
         if (!userId || !guildId) {
@@ -47,9 +56,13 @@ class SecurityQuestionController {
 Controller('/api/security-question')(SecurityQuestionController);
 Get('')(SecurityQuestionController.prototype, 'getLogs');
 Get('/logs')(SecurityQuestionController.prototype, 'getLogs');
+Get('/messages')(SecurityQuestionController.prototype, 'getChannelMessages');
+Get('/messages/:channelId')(SecurityQuestionController.prototype, 'getChannelMessages');
+Get('/channel/:channelId')(SecurityQuestionController.prototype, 'getChannelMessages');
 Get('/status')(SecurityQuestionController.prototype, 'getStatus');
 Post('/verify')(SecurityQuestionController.prototype, 'verifyUser');
 
 module.exports = {
     SecurityQuestionController
 };
+

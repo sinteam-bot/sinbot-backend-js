@@ -51,7 +51,22 @@ describe('Security Question (Captcha) Module Tests', () => {
         assert.strictEqual(service.numberToFrench(10), 'dix');
     });
 
-    test('Controller: should return overview and status', async () => {
+    test('Repository & Service: should retrieve channel details and message history', async () => {
+        const repo = container.resolve(SecurityQuestionRepository);
+        const service = container.resolve(SecurityQuestionService);
+
+        const details = await repo.getCaptchaChannelDetails(channelId, userId);
+        assert.ok(details);
+        assert.ok(details.channel);
+        assert.ok(Array.isArray(details.messages));
+        assert.ok(Array.isArray(details.events));
+
+        const serviceHistory = await service.getChannelHistory(channelId, userId);
+        assert.ok(serviceHistory);
+        assert.ok(serviceHistory.channel);
+    });
+
+    test('Controller: should return overview, status and channel messages', async () => {
         const controller = container.resolve(SecurityQuestionController);
         const resLogs = await controller.getLogs();
         assert.ok(resLogs.success);
@@ -60,6 +75,12 @@ describe('Security Question (Captcha) Module Tests', () => {
 
         const resStatus = await controller.getStatus();
         assert.ok(resStatus.success);
-    });
 
+        const resMessages = await controller.getChannelMessages({
+            query: { channel_id: channelId, user_id: userId }
+        });
+        assert.ok(resMessages.success);
+        assert.ok(resMessages.data);
+        assert.ok(Array.isArray(resMessages.data.messages));
+    });
 });

@@ -1,4 +1,4 @@
-const { eq, and, desc, sql } = require('drizzle-orm');
+const { eq, and, desc, asc, sql } = require('drizzle-orm');
 const { db, schema } = require('../../db/index.js');
 const { Repository } = require('../../core/index.js');
 
@@ -78,21 +78,170 @@ class SecurityQuestionRepository {
      * Récupère l'historique complet de tous les captchas
      */
     async getAllCaptchas(limit = 100) {
-        const rows = await this.db.select()
-            .from(this.schema.userCaptchas)
-            .orderBy(desc(this.schema.userCaptchas.createdAt))
-            .limit(limit);
+        const rows = await this.db.select({
+            captcha: this.schema.userCaptchas,
+            channelName: this.schema.discordChannels.name,
+            channelDeletedAt: this.schema.discordChannels.deletedAt
+        })
+        .from(this.schema.userCaptchas)
+        .leftJoin(
+            this.schema.discordChannels,
+            eq(this.schema.userCaptchas.channelId, this.schema.discordChannels.channelId)
+        )
+        .orderBy(desc(this.schema.userCaptchas.createdAt))
+        .limit(limit);
 
-        return rows.map(c => ({
-            ...c,
-            user_id: c.userId,
-            guild_id: c.guildId,
-            channel_id: c.channelId,
-            is_verified: c.isVerified,
-            created_at: c.createdAt,
-            expires_at: c.expiresAt,
-            verified_at: c.verifiedAt
+        return rows.map(r => ({
+            ...r.captcha,
+            user_id: r.captcha.userId,
+            guild_id: r.captcha.guildId,
+            channel_id: r.captcha.channelId,
+            channel_name: r.channelName || (r.captcha.username ? `captcha-${r.captcha.username.toLowerCase()}` : `captcha-${r.captcha.userId}`),
+            channel_deleted_at: r.channelDeletedAt,
+            is_verified: r.captcha.isVerified,
+            created_at: r.captcha.createdAt,
+            expires_at: r.captcha.expiresAt,
+            verified_at: r.captcha.verifiedAt
         }));
+    }
+
+    /**
+     * Récupère l'historique des messages et informations du salon Captcha
+     */
+    async getCaptchaChannelDetails(channelId, userId = null) {
+        let channelInfo = null;
+
+        if (channelId) {
+            const [ch] = await this.db.select()
+                .from(this.schema.discordChannels)
+                .where(eq(this.schema.discordChannels.channelId, channelId))
+                .limit(1);
+
+            if (ch) {
+                channelInfo = {
+                    id: ch.channelId,
+                    name: ch.name,
+                    type: ch.type,
+                    parentId: ch.parentId,
+                    isDeleted: !!ch.deletedAt,
+                    createdAt: ch.createdAt,
+                    deletedAt: ch.deletedAt
+                };
+            }
+        }
+
+        // Récupérer les messages associés au salon ou à l'utilisateur
+        let messages = [];
+        if (channelId) {
+            const msgRows = await this.db.select()
+                .from(this.schema.discordMessages)
+                .where(eq(this.schema.discordMessages.channelId, channelId))
+                .orderBy(asc(this.schema.discordMessages.createdAt));
+
+            messages = msgRows;
+        }
+
+        // Si aucun message trouvé par channelId et qu'un userId est fourni
+        if (messages.length === 0 && userId) {
+            const userMsgRows = await this.db.select()
+                .from(this.schema.discordMessages)
+                .where(eq(this.schema.discordMessages.authorId, userId))
+                .orderBy(asc(this.schema.discordMessages.createdAt))
+                .limit(25);
+
+            if (userMsgRows.length > 0) {
+                messages = userMsgRows;
+            }
+        }
+
+        // Récupérer les événements archivés liés au salon ou à l'utilisateur
+        let events = [];
+        if (channelId || userId) {
+            try {
+                const eventConditions = [];
+                if (channelId) {
+                    eventConditions.push(eq(this.schema.discordEventsArchive.targetId, channelId));
+                }
+                if (userId) {
+                    eventConditions.push(eq(this.schema.discordEventsArchive.userId, userId));
+                }
+
+                if (eventConditions.length > 0) {
+                    const evtRows = await this.db.select()
+                        .from(this.schema.discordEventsArchive)
+                        .where(channelId && userId ? sql`${this.schema.discordEventsArchive.targetId} = ${channelId} OR ${this.schema.discordEventsArchive.userId} = ${userId}` : eventConditions[0])
+                        .orderBy(asc(this.schema.discordEventsArchive.createdAt))
+                        .limit(20);
+
+                    events = evtRows;
+                }
+            } catch (e) {}
+        }
+
+        // Récupérer le captcha lié pour avoir le contexte (question/réponse)
+        let captchaInfo = null;
+        if (userId) {
+            const [c] = await this.db.select()
+                .from(this.schema.userCaptchas)
+                .where(eq(this.schema.userCaptchas.userId, userId))
+                .limit(1);
+            if (c) captchaInfo = c;
+        } else if (channelId) {
+            const [c] = await this.db.select()
+                .from(this.schema.userCaptchas)
+                .where(eq(this.schema.userCaptchas.channelId, channelId))
+                .limit(1);
+            if (c) captchaInfo = c;
+        }
+
+        return {
+            channel: channelInfo || {
+                id: channelId,
+                name: captchaInfo?.username ? `captcha-${captchaInfo.username.toLowerCase()}` : (channelId ? `salon-${channelId}` : 'salon-captcha'),
+                isDeleted: true
+            },
+            captcha: captchaInfo ? {
+                userId: captchaInfo.userId,
+                username: captchaInfo.username,
+                question: captchaInfo.question,
+                answer: captchaInfo.answer,
+                attempts: captchaInfo.attempts,
+                isVerified: captchaInfo.isVerified === 1,
+                createdAt: captchaInfo.createdAt,
+                verifiedAt: captchaInfo.verifiedAt,
+                expiresAt: captchaInfo.expiresAt
+            } : null,
+            messages: messages.map(m => {
+                let embeds = null;
+                let attachments = null;
+                try {
+                    if (m.embedsJson) embeds = JSON.parse(m.embedsJson);
+                } catch (_) {}
+                try {
+                    if (m.attachmentsJson) attachments = JSON.parse(m.attachmentsJson);
+                } catch (_) {}
+
+                return {
+                    id: m.messageId,
+                    channelId: m.channelId,
+                    authorId: m.authorId,
+                    authorUsername: m.authorUsername,
+                    content: m.content,
+                    embeds,
+                    attachments,
+                    createdAt: m.createdAt,
+                    deletedAt: m.deletedAt
+                };
+            }),
+            events: events.map(e => ({
+                id: e.id,
+                eventName: e.eventName,
+                summary: e.summary,
+                userId: e.userId,
+                username: e.username,
+                createdAt: e.createdAt
+            }))
+        };
     }
 
     /**

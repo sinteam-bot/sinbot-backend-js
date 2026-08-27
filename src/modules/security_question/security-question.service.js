@@ -3,6 +3,7 @@ const { Injectable } = require('../../core/index.js');
 const { SecurityQuestionRepository } = require('./security-question.repository.js');
 const { config, getConfig } = require('../../config/index.js');
 const { sendCaptchaLog } = require('./captcha-logger.js');
+const DiscordCacheService = require('../../services/discordCacheService.js');
 const logger = require('../../utils/logger.js');
 
 class SecurityQuestionService {
@@ -186,7 +187,12 @@ class SecurityQuestionService {
             const instructions = captchaConfig.messages?.instructions || "Répondez avec le nombre en chiffres uniquement (exemple: 12) dans les 10 minutes.";
 
             const content = `${member.user}, ${welcomeMsg}\n\n**${mathQuestion.question}**\n\n${instructions}`;
-            await channel.send(content);
+            const sentMsg = await channel.send(content);
+            if (sentMsg) {
+                try {
+                    await DiscordCacheService.cacheDiscordMessage(sentMsg);
+                } catch (_) {}
+            }
 
             console.log(`🔒 [SecurityQuestion] Captcha envoyé à ${member.user.tag} dans ${channel.name} : "${mathQuestion.question}" (Réponse: ${mathQuestion.answer})`);
 
@@ -208,18 +214,29 @@ class SecurityQuestionService {
 
         if (!isCaptchaChannel) return false;
 
+        // Cacher le message de l'utilisateur pour l'historique
+        try {
+            await DiscordCacheService.cacheDiscordMessage(message);
+        } catch (_) {}
+
         try {
             const captcha = await this.repo.getUserCaptcha(message.author.id, message.guild?.id);
             if (!captcha) return false;
 
             if (captcha.is_verified) {
-                await message.reply("Vous êtes déjà vérifié !");
+                const rep = await message.reply("Vous êtes déjà vérifié !");
+                if (rep) {
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
+                }
                 return true;
             }
 
             // Vérifier expiration
             if (captcha.expires_at && new Date() > new Date(captcha.expires_at)) {
-                await message.reply("❌ Le temps imparti pour répondre au captcha a expiré.");
+                const rep = await message.reply("❌ Le temps imparti pour répondre au captcha a expiré.");
+                if (rep) {
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
+                }
                 return true;
             }
 
@@ -230,7 +247,10 @@ class SecurityQuestionService {
             if (userAnswer === captcha.answer) {
                 // ✅ Succès
                 await this.repo.markVerified(message.author.id, message.guild.id);
-                await message.reply("✅ Bravo ! Vous avez validé le captcha avec succès.");
+                const rep = await message.reply("✅ Bravo ! Vous avez validé le captcha avec succès.");
+                if (rep) {
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
+                }
 
                 const role = await this.getVerifiedRole(message.guild);
                 if (role && message.member) {
@@ -255,7 +275,10 @@ class SecurityQuestionService {
                 await this.repo.updateAttempts(message.author.id, message.guild.id, nextAttempts);
 
                 if (nextAttempts >= maxAttempts) {
-                    await message.reply("❌ Trop de tentatives infructueuses. Vous allez être expulsé du serveur.");
+                    const rep = await message.reply("❌ Trop de tentatives infructueuses. Vous allez être expulsé du serveur.");
+                    if (rep) {
+                        try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
+                    }
                     if (message.member) {
                         await message.member.kick('Échec vérification captcha').catch(() => {});
                     }
@@ -270,7 +293,10 @@ class SecurityQuestionService {
                 }
 
                 const remaining = maxAttempts - nextAttempts;
-                await message.reply(`❌ Réponse incorrecte. Il vous reste **${remaining}** tentative(s).`);
+                const rep = await message.reply(`❌ Réponse incorrecte. Il vous reste **${remaining}** tentative(s).`);
+                if (rep) {
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
+                }
                 await sendCaptchaLog(message.guild, 'Tentative échouée', `**${message.author.tag}** - Réponse incorrecte (${nextAttempts}/${maxAttempts})`, '#f39c12');
                 return true;
             }
@@ -307,6 +333,9 @@ class SecurityQuestionService {
                 status,
                 isVerified: c.is_verified === 1,
                 channelId: c.channel_id,
+                channelName: c.channel_name || (c.username ? `captcha-${c.username.toLowerCase()}` : `captcha-${c.user_id}`),
+                channelDeletedAt: c.channel_deleted_at || null,
+                isChannelDeleted: !!c.channel_deleted_at,
                 createdAt: c.created_at,
                 expiresAt: c.expires_at,
                 verifiedAt: c.verified_at
@@ -343,6 +372,13 @@ class SecurityQuestionService {
             logs: captchaLogs
         };
     }
+
+    /**
+     * Récupère l'historique complet des messages et détails d'un salon Captcha
+     */
+    async getChannelHistory(channelId, userId = null, guildId = null) {
+        return await this.repo.getCaptchaChannelDetails(channelId, userId);
+    }
 }
 
 Injectable()(SecurityQuestionService);
@@ -350,3 +386,4 @@ Injectable()(SecurityQuestionService);
 module.exports = {
     SecurityQuestionService
 };
+
