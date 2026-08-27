@@ -9,6 +9,7 @@ const { WelcomeModule } = require('./feature_welcome/welcome.module.js');
 const { AutoModModule } = require('./feature_automod/automod.module.js');
 const { TicketsModule } = require('./feature_tickets/tickets.module.js');
 const { LogsModule } = require('./feature_logs/logs.module.js');
+const { CardsModule } = require('./feature_cards/cards.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -24,7 +25,8 @@ const appModules = [
     WelcomeModule,
     AutoModModule,
     TicketsModule,
-    LogsModule
+    LogsModule,
+    CardsModule
 ];
 
 module.exports = {
@@ -39,5 +41,6 @@ module.exports = {
     WelcomeModule,
     AutoModModule,
     TicketsModule,
-    LogsModule
+    LogsModule,
+    CardsModule
 };
