@@ -6,6 +6,7 @@ const { BumpReminderModule } = require('./service_bump-reminder/bump-reminder.mo
 const { XPLevelModule } = require('./feature_xp-level/xp-level.module.js');
 const { DailyMessageModule } = require('./feature_daily-message/daily-message.module.js');
 const { WelcomeModule } = require('./feature_welcome/welcome.module.js');
+const { AutoModModule } = require('./feature_automod/automod.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -18,7 +19,8 @@ const appModules = [
     BumpReminderModule,
     XPLevelModule,
     DailyMessageModule,
-    WelcomeModule
+    WelcomeModule,
+    AutoModModule
 ];
 
 module.exports = {
@@ -30,5 +32,6 @@ module.exports = {
     BumpReminderModule,
     XPLevelModule,
     DailyMessageModule,
-    WelcomeModule
+    WelcomeModule,
+    AutoModModule
 };
