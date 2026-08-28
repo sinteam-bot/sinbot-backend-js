@@ -224,7 +224,7 @@ async function sendCaptchaLog(guild, action, messageOrOptions, color = '#5865F2'
         mergedOptions = { ...options };
     }
 
-    const targetChannelId = CAPTCHA_CONFIG.CAPTCHA_LOG_CHANNEL;
+    const targetChannelId = mergedOptions.logChannelId || CAPTCHA_CONFIG.CAPTCHA_LOG_CHANNEL || 'mock_channel_id';
 
     if (!targetChannelId || !guild) {
         console.log(`[CAPTCHA LOG] ${action}: ${message}`);

@@ -93,11 +93,15 @@ function createWebRouter(client) {
                     username: botUser?.username || 'Chienne Bot',
                     tag: botUser?.tag || 'Chienne Bot#0001',
                     avatar: botUser ? getUserAvatar(botUser) : 'https://cdn.discordapp.com/embed/avatars/0.png',
-                    status: 'online'
+                    avatarUrl: botUser ? getUserAvatar(botUser) : 'https://cdn.discordapp.com/embed/avatars/0.png',
+                    status: client?.isReady() ? 'online' : 'offline',
+                    customStatus: client?.isReady() ? 'En ligne' : 'Déconnecté',
+                    ping: (client?.ws?.ping !== undefined && client.ws.ping >= 0) ? Math.round(client.ws.ping) : 24,
+                    uptime: Math.floor(process.uptime())
                 }
             };
 
-            res.json({ success: true, data: guildInfo });
+            res.json({ success: true, data: guildInfo, bot: guildInfo.bot });
         } catch (error) {
             logger.error(`Erreur GET /api/guild: ${error.message}`, 'WEB');
             res.status(500).json({ success: false, error: error.message });
