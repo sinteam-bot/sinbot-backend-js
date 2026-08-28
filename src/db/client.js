@@ -13,9 +13,12 @@ const fs = require('fs');
 const path = require('path');
 const { drizzle: drizzlePg } = require('drizzle-orm/node-postgres');
 const { drizzle: drizzlePgLite } = require('drizzle-orm/pglite');
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 const { PGlite } = require('@electric-sql/pglite');
 const { config } = require('../config/index.js');
+
+// Parser les colonnes BIGINT (OID 20) en Number JavaScript pour éviter les strings
+types.setTypeParser(20, val => (val === null ? null : parseInt(val, 10)));
 
 let _legacySchemaSql = null;
 function _loadLegacySchema() {

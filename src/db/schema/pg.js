@@ -631,7 +631,7 @@ const birthdayHistory = pgTable('birthday_history', {
     age: integer('age'),
     messageId: text('message_id'),
     giftsGiven: text('gifts_given'),
-    announcedAt: integer('announced_at').notNull()
+    announcedAt: bigint('announced_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_birthday_history_user').on(table.userId, table.guildId, table.announcedAt),
     index('idx_pg_birthday_history_guild').on(table.guildId, table.announcedAt)
@@ -649,8 +649,8 @@ const reactionRoles = pgTable('reaction_roles', {
     mode: text('mode').notNull().default('toggle'),
     kind: text('kind').notNull().default('reaction'),
     metadata: text('metadata'),
-    createdAt: integer('created_at').notNull(),
-    updatedAt: integer('updated_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_reaction_roles_message').on(table.guildId, table.messageId),
     index('idx_pg_reaction_roles_guild').on(table.guildId),
@@ -661,13 +661,13 @@ const reactionRoles = pgTable('reaction_roles', {
 const userEconomy = pgTable('user_economy', {
     userId: text('user_id').notNull(),
     guildId: text('guild_id').notNull(),
-    balance: integer('balance').notNull().default(0),
-    bankBalance: integer('bank_balance').notNull().default(0),
-    lastDailyClaimAt: integer('last_daily_claim_at'),
-    totalEarned: integer('total_earned').notNull().default(0),
-    totalSpent: integer('total_spent').notNull().default(0),
-    createdAt: integer('created_at').notNull(),
-    updatedAt: integer('updated_at').notNull()
+    balance: bigint('balance', { mode: 'number' }).notNull().default(0),
+    bankBalance: bigint('bank_balance', { mode: 'number' }).notNull().default(0),
+    lastDailyClaimAt: bigint('last_daily_claim_at', { mode: 'number' }),
+    totalEarned: bigint('total_earned', { mode: 'number' }).notNull().default(0),
+    totalSpent: bigint('total_spent', { mode: 'number' }).notNull().default(0),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 }, (table) => [
     primaryKey({ columns: [table.userId, table.guildId] }),
     index('idx_pg_user_economy_balance').on(table.guildId, table.balance)
@@ -678,12 +678,12 @@ const economyTransactions = pgTable('economy_transactions', {
     id: text('id').primaryKey(),
     guildId: text('guild_id').notNull(),
     userId: text('user_id').notNull(),
-    amount: integer('amount').notNull(),
+    amount: bigint('amount', { mode: 'number' }).notNull(),
     type: text('type').notNull(),
     counterpartyId: text('counterparty_id'),
     reason: text('reason'),
     metadata: text('metadata'),
-    createdAt: integer('created_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_economy_tx_user').on(table.guildId, table.userId, table.createdAt),
     index('idx_pg_economy_tx_created').on(table.guildId, table.createdAt)
@@ -696,14 +696,14 @@ const shopItems = pgTable('shop_items', {
     name: text('name').notNull(),
     description: text('description'),
     emoji: text('emoji'),
-    price: integer('price').notNull(),
+    price: bigint('price', { mode: 'number' }).notNull(),
     roleRewardId: text('role_reward_id'),
-    xpReward: integer('xp_reward'),
+    xpReward: bigint('xp_reward', { mode: 'number' }),
     isTradeable: integer('is_tradeable').notNull().default(1),
     isDroppable: integer('is_droppable').notNull().default(1),
     maxPerUser: integer('max_per_user'),
-    createdAt: integer('created_at').notNull(),
-    updatedAt: integer('updated_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_shop_items_guild').on(table.guildId)
 ]);
@@ -714,7 +714,7 @@ const userInventory = pgTable('user_inventory', {
     guildId: text('guild_id').notNull(),
     itemId: text('item_id').notNull(),
     quantity: integer('quantity').notNull().default(1),
-    acquiredAt: integer('acquired_at').notNull()
+    acquiredAt: bigint('acquired_at', { mode: 'number' }).notNull()
 }, (table) => [
     primaryKey({ columns: [table.userId, table.guildId, table.itemId] }),
     index('idx_pg_user_inventory_item').on(table.guildId, table.itemId),
@@ -729,10 +729,10 @@ const inventoryDrops = pgTable('inventory_drops', {
     messageId: text('message_id'),
     itemId: text('item_id').notNull(),
     quantity: integer('quantity').notNull().default(1),
-    startedAt: integer('started_at').notNull(),
-    expiresAt: integer('expires_at').notNull(),
+    startedAt: bigint('started_at', { mode: 'number' }).notNull(),
+    expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
     claimedBy: text('claimed_by'),
-    claimedAt: integer('claimed_at'),
+    claimedAt: bigint('claimed_at', { mode: 'number' }),
     status: text('status').notNull().default('active')
 }, (table) => [
     index('idx_pg_inventory_drops_status').on(table.guildId, table.status, table.expiresAt),
@@ -748,8 +748,8 @@ const inventoryTransfers = pgTable('inventory_transfers', {
     itemId: text('item_id').notNull(),
     quantity: integer('quantity').notNull().default(1),
     type: text('type').notNull(),
-    price: integer('price'),
-    createdAt: integer('created_at').notNull()
+    price: bigint('price', { mode: 'number' }),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_inventory_transfers_to').on(table.guildId, table.toUserId, table.createdAt)
 ]);
@@ -759,7 +759,7 @@ const stickyRoles = pgTable('sticky_roles', {
     userId: text('user_id').notNull(),
     guildId: text('guild_id').notNull(),
     roleId: text('role_id').notNull(),
-    savedAt: bigint('saved_at', { mode: 'bigint' }).notNull()
+    savedAt: bigint('saved_at', { mode: 'number' }).notNull()
 }, (table) => [
     primaryKey({ columns: [table.userId, table.guildId, table.roleId] }),
     index('idx_pg_sticky_roles_user').on(table.guildId, table.userId)
@@ -770,7 +770,7 @@ const guildStats = pgTable('guild_stats', {
     guildId: text('guild_id').notNull(),
     statKey: text('stat_key').notNull(),
     statValue: text('stat_value').notNull(),
-    updatedAt: bigint('updated_at', { mode: 'bigint' }).notNull()
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 }, (table) => [
     primaryKey({ columns: [table.guildId, table.statKey] })
 ]);
@@ -782,8 +782,8 @@ const reminders = pgTable('reminders', {
     channelId: text('channel_id'),
     userId: text('user_id').notNull(),
     reminderText: text('reminder_text').notNull(),
-    fireAt: integer('fire_at').notNull(),
-    createdAt: integer('created_at').notNull(),
+    fireAt: bigint('fire_at', { mode: 'number' }).notNull(),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
     status: text('status').notNull().default('pending'),
     sourceMessageId: text('source_message_id')
 }, (table) => [
@@ -803,8 +803,8 @@ const wordTriggers = pgTable('word_triggers', {
     excludeRoleIdsJson: text('exclude_role_ids_json'),
     cooldownSeconds: integer('cooldown_seconds').notNull().default(10),
     createdBy: text('created_by'),
-    createdAt: integer('created_at').notNull(),
-    updatedAt: integer('updated_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_word_triggers_guild').on(table.guildId)
 ]);
@@ -820,8 +820,8 @@ const customCommands = pgTable('custom_commands', {
     restrictRoleIdsJson: text('restrict_role_ids_json'),
     cooldownSeconds: integer('cooldown_seconds').notNull().default(5),
     createdBy: text('created_by'),
-    createdAt: integer('created_at').notNull(),
-    updatedAt: integer('updated_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 }, (table) => [
     unique('idx_pg_custom_commands_unique').on(table.guildId, table.name),
     index('idx_pg_custom_commands_guild').on(table.guildId)
@@ -837,7 +837,7 @@ const tempVoiceConfig = pgTable('temp_voice_config', {
     lockedRoleId: text('locked_role_id'),
     joinChannelsJson: text('join_channels_json'),
     enabled: integer('enabled').notNull().default(0),
-    updatedAt: integer('updated_at').notNull()
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 });
 
 // 59. temp_voice_state (Phase 12b)
@@ -845,8 +845,8 @@ const tempVoiceState = pgTable('temp_voice_state', {
     channelId: text('channel_id').primaryKey(),
     guildId: text('guild_id').notNull(),
     creatorId: text('creator_id'),
-    lastEmptyAt: integer('last_empty_at').notNull().default(0),
-    createdAt: integer('created_at').notNull()
+    lastEmptyAt: bigint('last_empty_at', { mode: 'number' }).notNull().default(0),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_temp_voice_state_guild').on(table.guildId)
 ]);
@@ -863,8 +863,8 @@ const reports = pgTable('reports', {
     category: text('category').notNull().default('other'),
     status: text('status').notNull().default('open'),
     resolvedBy: text('resolved_by'),
-    resolvedAt: integer('resolved_at'),
-    createdAt: integer('created_at').notNull()
+    resolvedAt: bigint('resolved_at', { mode: 'number' }),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_reports_guild_status').on(table.guildId, table.status, table.createdAt),
     index('idx_pg_reports_reporter').on(table.guildId, table.reporterId, table.createdAt),
@@ -878,7 +878,7 @@ const reportActions = pgTable('report_actions', {
     staffId: text('staff_id').notNull(),
     action: text('action').notNull(),
     notes: text('notes'),
-    createdAt: integer('created_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_report_actions_report').on(table.reportId, table.createdAt)
 ]);

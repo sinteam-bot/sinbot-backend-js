@@ -327,13 +327,13 @@ class EconomyRepository {
         return {
             userId: row.user_id,
             guildId: row.guild_id,
-            balance: row.balance,
-            bankBalance: row.bank_balance,
-            lastDailyClaimAt: row.last_daily_claim_at,
-            totalEarned: row.total_earned,
-            totalSpent: row.total_spent,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at
+            balance: Number(row.balance || 0),
+            bankBalance: Number(row.bank_balance || 0),
+            lastDailyClaimAt: row.last_daily_claim_at ? Number(row.last_daily_claim_at) : null,
+            totalEarned: Number(row.total_earned || 0),
+            totalSpent: Number(row.total_spent || 0),
+            createdAt: Number(row.created_at || 0),
+            updatedAt: Number(row.updated_at || 0)
         };
     }
 
@@ -342,12 +342,12 @@ class EconomyRepository {
             id: row.id,
             guildId: row.guild_id,
             userId: row.user_id,
-            amount: row.amount,
+            amount: Number(row.amount || 0),
             type: row.type,
             counterpartyId: row.counterparty_id,
             reason: row.reason,
             metadata: row.metadata ? safeJson(row.metadata) : null,
-            createdAt: row.created_at
+            createdAt: Number(row.created_at || 0)
         };
     }
 
@@ -358,14 +358,14 @@ class EconomyRepository {
             name: row.name,
             description: row.description,
             emoji: row.emoji,
-            price: row.price,
+            price: Number(row.price || 0),
             roleRewardId: row.role_reward_id,
-            xpReward: row.xp_reward,
+            xpReward: row.xp_reward ? Number(row.xp_reward) : null,
             isTradeable: !!row.is_tradeable,
             isDroppable: !!row.is_droppable,
-            maxPerUser: row.max_per_user,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at
+            maxPerUser: row.max_per_user ? Number(row.max_per_user) : null,
+            createdAt: Number(row.created_at || 0),
+            updatedAt: Number(row.updated_at || 0)
         };
     }
 
@@ -374,8 +374,8 @@ class EconomyRepository {
             userId: row.user_id,
             guildId: row.guild_id,
             itemId: row.item_id,
-            quantity: row.quantity,
-            acquiredAt: row.acquired_at
+            quantity: Number(row.quantity || 1),
+            acquiredAt: Number(row.acquired_at || 0)
         };
     }
 
@@ -386,11 +386,11 @@ class EconomyRepository {
             channelId: row.channel_id,
             messageId: row.message_id,
             itemId: row.item_id,
-            quantity: row.quantity,
-            startedAt: row.started_at,
-            expiresAt: row.expires_at,
+            quantity: Number(row.quantity || 1),
+            startedAt: Number(row.started_at || 0),
+            expiresAt: Number(row.expires_at || 0),
             claimedBy: row.claimed_by,
-            claimedAt: row.claimed_at,
+            claimedAt: row.claimed_at ? Number(row.claimed_at) : null,
             status: row.status
         };
     }

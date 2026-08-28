@@ -690,13 +690,13 @@
     CREATE TABLE IF NOT EXISTS user_economy (
         user_id TEXT NOT NULL,
         guild_id TEXT NOT NULL,
-        balance INTEGER NOT NULL DEFAULT 0,
-        bank_balance INTEGER NOT NULL DEFAULT 0,
-        last_daily_claim_at INTEGER,
-        total_earned INTEGER NOT NULL DEFAULT 0,
-        total_spent INTEGER NOT NULL DEFAULT 0,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
+        balance BIGINT NOT NULL DEFAULT 0,
+        bank_balance BIGINT NOT NULL DEFAULT 0,
+        last_daily_claim_at BIGINT,
+        total_earned BIGINT NOT NULL DEFAULT 0,
+        total_spent BIGINT NOT NULL DEFAULT 0,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
         PRIMARY KEY (user_id, guild_id)
     );
     CREATE INDEX IF NOT EXISTS idx_user_economy_guild ON user_economy(guild_id, balance DESC);
@@ -705,12 +705,12 @@
         id TEXT PRIMARY KEY,
         guild_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
-        amount INTEGER NOT NULL,
+        amount BIGINT NOT NULL,
         type TEXT NOT NULL,
         counterparty_id TEXT,
         reason TEXT,
         metadata TEXT,
-        created_at INTEGER NOT NULL
+        created_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_economy_tx_user ON economy_transactions(guild_id, user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_economy_tx_created ON economy_transactions(guild_id, created_at);
@@ -721,14 +721,14 @@
         name TEXT NOT NULL,
         description TEXT,
         emoji TEXT,
-        price INTEGER NOT NULL,
+        price BIGINT NOT NULL,
         role_reward_id TEXT,
-        xp_reward INTEGER,
+        xp_reward BIGINT,
         is_tradeable INTEGER NOT NULL DEFAULT 1,
         is_droppable INTEGER NOT NULL DEFAULT 1,
         max_per_user INTEGER,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_shop_items_guild ON shop_items(guild_id);
 
@@ -737,7 +737,7 @@
         guild_id TEXT NOT NULL,
         item_id TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 1,
-        acquired_at INTEGER NOT NULL,
+        acquired_at BIGINT NOT NULL,
         PRIMARY KEY (user_id, guild_id, item_id)
     );
     CREATE INDEX IF NOT EXISTS idx_user_inventory_item ON user_inventory(guild_id, item_id);
@@ -750,10 +750,10 @@
         message_id TEXT,
         item_id TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 1,
-        started_at INTEGER NOT NULL,
-        expires_at INTEGER NOT NULL,
+        started_at BIGINT NOT NULL,
+        expires_at BIGINT NOT NULL,
         claimed_by TEXT,
-        claimed_at INTEGER,
+        claimed_at BIGINT,
         status TEXT NOT NULL DEFAULT 'active'
     );
     CREATE INDEX IF NOT EXISTS idx_inventory_drops_status ON inventory_drops(guild_id, status, expires_at);
@@ -767,8 +767,8 @@
         item_id TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 1,
         type TEXT NOT NULL,
-        price INTEGER,
-        created_at INTEGER NOT NULL
+        price BIGINT,
+        created_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_inventory_transfers_user ON inventory_transfers(guild_id, to_user_id, created_at);
 
@@ -777,7 +777,7 @@
         user_id TEXT NOT NULL,
         guild_id TEXT NOT NULL,
         role_id TEXT NOT NULL,
-        saved_at INTEGER NOT NULL,
+        saved_at BIGINT NOT NULL,
         PRIMARY KEY (user_id, guild_id, role_id)
     );
     CREATE INDEX IF NOT EXISTS idx_sticky_roles_user ON sticky_roles(guild_id, user_id);
@@ -787,7 +787,7 @@
         guild_id TEXT NOT NULL,
         stat_key TEXT NOT NULL,
         stat_value TEXT NOT NULL,
-        updated_at INTEGER NOT NULL,
+        updated_at BIGINT NOT NULL,
         PRIMARY KEY (guild_id, stat_key)
     );
 
@@ -798,8 +798,8 @@
         channel_id TEXT,
         user_id TEXT NOT NULL,
         reminder_text TEXT NOT NULL,
-        fire_at INTEGER NOT NULL,
-        created_at INTEGER NOT NULL,
+        fire_at BIGINT NOT NULL,
+        created_at BIGINT NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending',
         source_message_id TEXT
     );
@@ -818,8 +818,8 @@
         exclude_role_ids_json TEXT,
         cooldown_seconds INTEGER NOT NULL DEFAULT 10,
         created_by TEXT,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_word_triggers_guild ON word_triggers(guild_id);
 
@@ -833,8 +833,8 @@
         restrict_role_ids_json TEXT,
         cooldown_seconds INTEGER NOT NULL DEFAULT 5,
         created_by TEXT,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
         UNIQUE (guild_id, name)
     );
     CREATE INDEX IF NOT EXISTS idx_custom_commands_guild ON custom_commands(guild_id);
@@ -849,15 +849,15 @@
         locked_role_id TEXT,
         join_channels_json TEXT,
         enabled INTEGER NOT NULL DEFAULT 0,
-        updated_at INTEGER NOT NULL
+        updated_at BIGINT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS temp_voice_state (
         channel_id TEXT PRIMARY KEY,
         guild_id TEXT NOT NULL,
         creator_id TEXT,
-        last_empty_at INTEGER NOT NULL DEFAULT 0,
-        created_at INTEGER NOT NULL
+        last_empty_at BIGINT NOT NULL DEFAULT 0,
+        created_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_temp_voice_state_guild ON temp_voice_state(guild_id);
 
