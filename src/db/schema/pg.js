@@ -827,6 +827,38 @@ const customCommands = pgTable('custom_commands', {
     index('idx_pg_custom_commands_guild').on(table.guildId)
 ]);
 
+// 58. reports (Phase 12)
+const reports = pgTable('reports', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    reporterId: text('reporter_id').notNull(),
+    reportedId: text('reported_id').notNull(),
+    channelId: text('channel_id'),
+    messageId: text('message_id'),
+    reason: text('reason').notNull(),
+    category: text('category').notNull().default('other'),
+    status: text('status').notNull().default('open'),
+    resolvedBy: text('resolved_by'),
+    resolvedAt: integer('resolved_at'),
+    createdAt: integer('created_at').notNull()
+}, (table) => [
+    index('idx_pg_reports_guild_status').on(table.guildId, table.status, table.createdAt),
+    index('idx_pg_reports_reporter').on(table.guildId, table.reporterId, table.createdAt),
+    index('idx_pg_reports_reported').on(table.guildId, table.reportedId, table.status)
+]);
+
+// 59. report_actions (Phase 12)
+const reportActions = pgTable('report_actions', {
+    id: text('id').primaryKey(),
+    reportId: text('report_id').notNull(),
+    staffId: text('staff_id').notNull(),
+    action: text('action').notNull(),
+    notes: text('notes'),
+    createdAt: integer('created_at').notNull()
+}, (table) => [
+    index('idx_pg_report_actions_report').on(table.reportId, table.createdAt)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -884,5 +916,7 @@ module.exports = {
     guildStats,
     reminders,
     wordTriggers,
-    customCommands
+    customCommands,
+    reports,
+    reportActions
 };

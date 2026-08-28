@@ -653,6 +653,35 @@ const PG_TABLES_DDL = `
     CREATE INDEX IF NOT EXISTS idx_birthday_history_user ON birthday_history(user_id, guild_id, announced_at);
     CREATE INDEX IF NOT EXISTS idx_birthday_history_guild ON birthday_history(guild_id, announced_at);
 
+    -- Phase 12: Reports
+    CREATE TABLE IF NOT EXISTS reports (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        reporter_id TEXT NOT NULL,
+        reported_id TEXT NOT NULL,
+        channel_id TEXT,
+        message_id TEXT,
+        reason TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'other',
+        status TEXT NOT NULL DEFAULT 'open',
+        resolved_by TEXT,
+        resolved_at INTEGER,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_reports_guild_status ON reports(guild_id, status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(guild_id, reporter_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_reports_reported ON reports(guild_id, reported_id, status);
+
+    CREATE TABLE IF NOT EXISTS report_actions (
+        id TEXT PRIMARY KEY,
+        report_id TEXT NOT NULL,
+        staff_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        notes TEXT,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_report_actions_report ON report_actions(report_id, created_at);
+
     -- Phase RR: Reaction Roles (v1 + v2 : components)
     CREATE TABLE IF NOT EXISTS reaction_roles (
         id TEXT PRIMARY KEY,
