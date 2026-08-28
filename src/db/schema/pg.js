@@ -631,10 +631,28 @@ const birthdayHistory = pgTable('birthday_history', {
     age: integer('age'),
     messageId: text('message_id'),
     giftsGiven: text('gifts_given'),
-    announcedAt: bigint('announced_at', { mode: 'number' }).notNull()
+    announcedAt: integer('announced_at').notNull()
 }, (table) => [
     index('idx_pg_birthday_history_user').on(table.userId, table.guildId, table.announcedAt),
     index('idx_pg_birthday_history_guild').on(table.guildId, table.announcedAt)
+]);
+
+// 46. reaction_roles (Phase RR)
+const reactionRoles = pgTable('reaction_roles', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    messageId: text('message_id').notNull(),
+    emoji: text('emoji').notNull(),
+    roleId: text('role_id').notNull(),
+    description: text('description'),
+    mode: text('mode').notNull().default('toggle'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull()
+}, (table) => [
+    uniqueIndex('idx_pg_reaction_roles_unique').on(table.messageId, table.emoji),
+    index('idx_pg_reaction_roles_message').on(table.guildId, table.messageId),
+    index('idx_pg_reaction_roles_guild').on(table.guildId)
 ]);
 
 module.exports = {
@@ -682,5 +700,6 @@ module.exports = {
     birthdayGuildSettings,
     birthdayVisibility,
     birthdayChangeLog,
-    birthdayHistory
+    birthdayHistory,
+    reactionRoles
 };
