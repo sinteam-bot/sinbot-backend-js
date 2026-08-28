@@ -47,6 +47,10 @@ class WordTriggerService {
         return { ok: true, data: created };
     }
 
+    async get(id) {
+        return this.repo.getTrigger(id);
+    }
+
     async list(guildId) {
         return this.repo.listTriggers(guildId);
     }
@@ -59,8 +63,22 @@ class WordTriggerService {
     /**
      * Trouve le premier trigger qui matche le contenu d'un message
      * dans un guild. Le matching est 'exact' ou 'contains'.
+     *
+     * Utilise la cache en mémoire si disponible (loadCache),
+     * sinon fait un lookup direct en BDD.
      */
-    findMatching(guildId, content) {
+    async findMatching(guildId, content) {
+        return this._match(guildId, content);
+    }
+
+    /**
+     * Sync version of findMatching (assumes cache is already loaded)
+     */
+    findMatchingSync(guildId, content) {
+        return this._match(guildId, content);
+    }
+
+    _match(guildId, content) {
         const list = this._cache?.get(guildId) || [];
         const lc = content.toLowerCase();
         for (const t of list) {

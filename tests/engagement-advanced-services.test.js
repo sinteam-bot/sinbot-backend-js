@@ -1,5 +1,4 @@
 /**
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the engagement-advanced services (Phase 11.6)
  *
  * ReminderService / WordTriggerService / CustomCommandService
@@ -23,7 +22,14 @@ class FakeRepo {
     }
     async insertReminder(r) {
         const id = r.id || 'r' + Math.random();
-        const rem = { id, userId: r.userId, reminderText: r.reminderText || r.text, fireAt: r.fireAt, status: r.status || 'pending', createdAt: r.createdAt || Date.now() };
+        const rem = {
+            id,
+            userId: r.userId,
+            reminderText: r.reminderText || r.text,
+            fireAt: r.fireAt,
+            status: r.status || 'pending',
+            createdAt: r.createdAt || Date.now()
+        };
         this.reminders.set(id, rem);
         return rem;
     }
@@ -86,7 +92,8 @@ class FakeRepo {
     }
     async getCustomCommand(id) { return this.customCommands.get(id) || null; }
     async getCustomCommandByName(guildId, name) {
-        return [...this.customCommands.values()].find(c => c.guildId === guildId && c.name === name) || null;
+        const lc = name.toLowerCase();
+        return [...this.customCommands.values()].find(c => c.guildId === guildId && c.name === lc) || null;
     }
     async listCustomCommands(guildId, limit = 100) {
         return [...this.customCommands.values()].filter(c => c.guildId === guildId).slice(0, limit);
@@ -131,7 +138,9 @@ describe('ReminderService', () => {
     });
 
     test('tick marque到期 done', async () => {
-        await svc.createReminder({ userId: 'u1', text: 't1', fireAt: Date.now() - 1000 });
+        // On insère directement via le fakeRepo car le service refuse les fireAt dans le passé
+        const fireAt = Date.now() - 1000;
+        await repo.insertReminder({ userId: 'u1', reminderText: 't1', fireAt, createdAt: fireAt - 1000 });
         const due = await svc.tick();
         assert.strictEqual(due.length, 1);
         assert.strictEqual(due[0].status, 'done');
@@ -283,20 +292,21 @@ describe('CustomCommandService', () => {
     });
 
     test('canRun check channels/roles', async () => {
-        await svc.create({ guildId: 'g1', name: 'x', responseText: 'y', restrictChannelIds: ['c2'], restrictRoleIds: ['r1'] });
-        const cmd = await svc.find('g1', 'x');
+        const cmd = await svc.create({ guildId: 'g1', name: 'x', responseText: 'y', restrictChannelIds: ['c2'], restrictRoleIds: ['r1'], cooldown: 0 });
+        // Reset cooldown interne (le service ajoute un cooldown à la création)
+        svc._cooldowns.clear();
 
         // Bon channel + bon role
-        let r = svc.canRun(cmd, { channelId: 'c2' }, makeMember([{ id: 'r1' }]));
+        let r = svc.canRun(cmd.data, { channelId: 'c2' }, makeMember([{ id: 'r1' }]));
         assert.strictEqual(r.ok, true);
 
         // Mauvais channel
-        r = svc.canRun(cmd, { channelId: 'c1' }, makeMember([{ id: 'r1' }]));
+        r = svc.canRun(cmd.data, { channelId: 'c1' }, makeMember([{ id: 'r1' }]));
         assert.strictEqual(r.ok, false);
         assert.strictEqual(r.reason, 'channel_not_allowed');
 
         // Bon channel mais mauvais role
-        r = svc.canRun(cmd, { channelId: 'c2' }, makeMember([{ id: 'r2' }]));
+        r = svc.canRun(cmd.data, { channelId: 'c2' }, makeMember([{ id: 'r2' }]));
         assert.strictEqual(r.ok, false);
         assert.strictEqual(r.reason, 'role_required');
     });

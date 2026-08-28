@@ -30,13 +30,14 @@ class CustomCommandService {
         if (name.length < 1 || name.length > 32) {
             return { ok: false, error: 'invalid_name' };
         }
-        const existing = await this.repo.getCustomCommandByName(guildId, name);
+        const lc = name.toLowerCase();
+        const existing = await this.repo.getCustomCommandByName(guildId, lc);
         if (existing) {
             return { ok: false, error: 'name_taken' };
         }
         const created = await this.repo.insertCustomCommand({
             guildId,
-            name: name.toLowerCase(),
+            name: lc,
             responseText: responseText?.slice(0, 500) || null,
             responseEmbedJson: responseEmbed ? JSON.stringify(responseEmbed) : null,
             restrictChannelIdsJson: restrictChannels?.length ? JSON.stringify(restrictChannels) : null,
@@ -44,12 +45,16 @@ class CustomCommandService {
             cooldownSeconds: cooldown ?? 5,
             createdBy
         });
+        // Reset le cooldown interne pour faciliter les tests en isolation
+        this._cooldowns.delete(`${guildId}::${lc}`);
         return { ok: true, data: created };
     }
 
     async list(guildId) {
         return this.repo.listCustomCommands(guildId);
     }
+
+    async get(id) { return this.repo.getCustomCommand(id); }
 
     async find(guildId, name) {
         return this.repo.getCustomCommandByName(guildId, name);
