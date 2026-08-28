@@ -32,17 +32,22 @@ class WelcomeCardService {
      */
     async getCached({ guildId, userId, template, payload }) {
         const hash = this.renderer.hashPayload(payload);
-        const { db } = require('../../../db/index.js');
+        const { db, schema } = require('../../../db/index.js');
+        const { and, eq, desc } = require('drizzle-orm');
         try {
-            const res = await db.pool.query(
-                `SELECT * FROM welcome_cards
-                 WHERE guild_id = $1 AND user_id = $2 AND template = $3
-                 ORDER BY created_at DESC LIMIT 1`,
-                [guildId, userId, template]
-            );
-            const row = res.rows?.[0];
+            const rows = await db.select()
+                .from(schema.welcomeCards)
+                .where(and(
+                    eq(schema.welcomeCards.guildId, guildId),
+                    eq(schema.welcomeCards.userId, userId),
+                    eq(schema.welcomeCards.template, template)
+                ))
+                .orderBy(desc(schema.welcomeCards.createdAt))
+                .limit(1);
+
+            const row = rows?.[0];
             if (!row) return null;
-            if (row.expires_at && row.expires_at < Date.now()) return null;
+            if (row.expiresAt && row.expiresAt < Date.now()) return null;
             if (row.payload !== hash) return null;
             return row.svg;
         } catch (err) {
@@ -78,32 +83,45 @@ class WelcomeCardService {
     }
 
     async _persist({ guildId, userId, template, payload, hash, svg }) {
-        const { db } = require('../../../db/index.js');
+        const { db, schema } = require('../../../db/index.js');
         const now = Date.now();
         const id = newId();
         try {
-            await db.pool.query(
-                `INSERT INTO welcome_cards (id, guild_id, user_id, template, payload, svg, created_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [id, guildId, userId, template, hash, svg, now, now + CACHE_TTL_MS]
-            );
+            await db.insert(schema.welcomeCards)
+                .values({
+                    id,
+                    guildId,
+                    userId,
+                    template,
+                    payload: hash,
+                    svg,
+                    createdAt: now,
+                    expiresAt: now + CACHE_TTL_MS
+                });
         } catch (err) {
             console.error(`[WelcomeCardService] persist failed: ${err.message}`);
         }
     }
 
     async clearCache({ guildId, userId, template } = {}) {
-        const { db } = require('../../../db/index.js');
-        const where = [];
-        const args = [];
-        if (guildId) { args.push(guildId); where.push(`guild_id = $${args.length}`); }
-        if (userId) { args.push(userId); where.push(`user_id = $${args.length}`); }
-        if (template) { args.push(template); where.push(`template = $${args.length}`); }
-        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-        const res = await db.pool.query(
-            `DELETE FROM welcome_cards ${whereSql}`,
-            args
-        );
-        return { deleted: res.rowCount || 0 };
+        const { db, schema } = require('../../../db/index.js');
+        const { and, eq } = require('drizzle-orm');
+        const conditions = [];
+        if (guildId) conditions.push(eq(schema.welcomeCards.guildId, guildId));
+        if (userId) conditions.push(eq(schema.welcomeCards.userId, userId));
+        if (template) conditions.push(eq(schema.welcomeCards.template, template));
+
+        try {
+            let query = db.delete(schema.welcomeCards);
+            if (conditions.length > 0) {
+                query = query.where(and(...conditions));
+            }
+            await query;
+            return { success: true };
+        } catch (err) {
+            console.error(`[WelcomeCardService] clearCache failed: ${err.message}`);
+            return { success: false, error: err.message };
+        }
     }
 }
 
