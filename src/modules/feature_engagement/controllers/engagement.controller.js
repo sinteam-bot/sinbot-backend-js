@@ -1,6 +1,7 @@
 /**
- * EngagementController — endpoints REST pour giveaways & polls
+ * engagement.controller.js — endpoints REST pour giveaways & polls
  *
+ * GiveawaysController:
  *   GET    /api/giveaways?status=active
  *   GET    /api/giveaways/:id
  *   POST   /api/giveaways          : crée un giveaway (programmatic)
@@ -8,6 +9,7 @@
  *   POST   /api/giveaways/:id/cancel
  *   GET    /api/giveaways/:id/entries
  *
+ * PollsController:
  *   GET    /api/polls?status=active
  *   GET    /api/polls/:id
  *   POST   /api/polls              : crée un poll
@@ -19,15 +21,12 @@ const { Controller, Get, Post } = require('../../../core/index.js');
 const { GiveawayService } = require('../services/giveaway.service.js');
 const { PollService } = require('../services/poll.service.js');
 
-class EngagementController {
-    static inject = [GiveawayService, PollService];
+class GiveawaysController {
+    static inject = [GiveawayService];
 
-    constructor(giveaway, poll) {
+    constructor (giveaway) {
         this.giveaway = giveaway;
-        this.poll = poll;
     }
-
-    // =================== GIVEAWAYS ===================
 
     async listGiveaways(req) {
         try {
@@ -35,7 +34,7 @@ class EngagementController {
             const list = await this.giveaway.list({
                 guildId,
                 status: req.query.status || null,
-                limit: Math.min(parseInt(req.query.limit) || 50, 200)
+                limit: Math.min(parseInt(req.query.limit, 10) || 50, 200)
             });
             return { success: true, data: list };
         } catch (err) {
@@ -101,8 +100,15 @@ class EngagementController {
             return { success: false, error: err.message };
         }
     }
+}
 
-    // =================== POLLS ===================
+
+class PollsController {
+    static inject = [PollService];
+
+    constructor (poll) {
+        this.poll = poll;
+    }
 
     async listPolls(req) {
         try {
@@ -110,7 +116,7 @@ class EngagementController {
             const list = await this.poll.list({
                 guildId,
                 status: req.query.status || null,
-                limit: Math.min(parseInt(req.query.limit) || 50, 200)
+                limit: Math.min(parseInt(req.query.limit, 10) || 50, 200)
             });
             return { success: true, data: list };
         } catch (err) {
@@ -167,19 +173,22 @@ class EngagementController {
     }
 }
 
-Controller('/api/giveaways')(EngagementController);
-Get('/')(EngagementController.prototype, 'listGiveaways');
-Get('/:id')(EngagementController.prototype, 'getGiveaway');
-Post('/')(EngagementController.prototype, 'createGiveaway');
-Post('/:id/end')(EngagementController.prototype, 'endGiveaway');
-Post('/:id/cancel')(EngagementController.prototype, 'cancelGiveaway');
-Get('/:id/entries')(EngagementController.prototype, 'listEntries');
+Controller('/api/giveaways')(GiveawaysController);
+Get('/')(GiveawaysController.prototype, 'listGiveaways');
+Get('/:id')(GiveawaysController.prototype, 'getGiveaway');
+Post('/')(GiveawaysController.prototype, 'createGiveaway');
+Post('/:id/end')(GiveawaysController.prototype, 'endGiveaway');
+Post('/:id/cancel')(GiveawaysController.prototype, 'cancelGiveaway');
+Get('/:id/entries')(GiveawaysController.prototype, 'listEntries');
+Controller('/api/polls')(PollsController);
+Get('/')(PollsController.prototype, 'listPolls');
+Get('/:id')(PollsController.prototype, 'getPoll');
+Post('/')(PollsController.prototype, 'createPoll');
+Post('/:id/end')(PollsController.prototype, 'endPoll');
+Get('/:id/results')(PollsController.prototype, 'pollResults');
 
-Controller('/api/polls')(EngagementController);
-Get('/')(EngagementController.prototype, 'listPolls');
-Get('/:id')(EngagementController.prototype, 'getPoll');
-Post('/')(EngagementController.prototype, 'createPoll');
-Post('/:id/end')(EngagementController.prototype, 'endPoll');
-Get('/:id/results')(EngagementController.prototype, 'pollResults');
-
-module.exports = { EngagementController };
+module.exports = {
+    GiveawaysController,
+    PollsController,
+    EngagementController: GiveawaysController
+};

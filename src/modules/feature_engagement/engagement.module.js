@@ -11,7 +11,7 @@ const { GiveawayService } = require('./services/giveaway.service.js');
 const { PollService } = require('./services/poll.service.js');
 const { EngagementInteractionListener } = require('./events/interaction-create.listener.js');
 const { EngagementCron } = require('./events/engagement-cron.js');
-const { EngagementController } = require('./controllers/engagement.controller.js');
+const { GiveawaysController, PollsController } = require('./controllers/engagement.controller.js');
 
 featureRegistry.define('engagement', {
     defaults,
@@ -57,7 +57,10 @@ Module({
         PollService,
         EngagementModule
     ],
-    controllers: [EngagementController],
+    controllers: [
+        GiveawaysController,
+        PollsController
+    ],
     events: [
         EngagementInteractionListener,
         EngagementCron
