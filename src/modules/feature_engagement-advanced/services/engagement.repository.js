@@ -13,7 +13,7 @@ function safeParse(str, fallback) {
     try { return JSON.parse(str); } catch { return fallback; }
 }
 
-class EngagementRepository {
+class EngagementAdvancedRepository {
     // =================== REMINDERS ===================
 
     async insertReminder(r) {
@@ -210,4 +210,4 @@ class EngagementRepository {
     }
 }
 
-module.exports = { EngagementRepository };
+module.exports = { EngagementAdvancedRepository, EngagementRepository: EngagementAdvancedRepository };

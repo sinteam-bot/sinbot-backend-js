@@ -24,7 +24,7 @@ function isAdmin(interaction) {
     return interaction.member?.permissions?.has?.(PermissionFlagsBits.ManageGuild);
 }
 
-class EngagementCommands {
+class EngagementAdvancedCommands {
     static inject = [ReminderService, WordTriggerService, CustomCommandService];
 
     constructor(reminder, trigger, customs) {
@@ -254,14 +254,14 @@ const customCmdRemoveBuilder = new SlashCommandBuilder()
     .addStringOption(o => o.setName('name').setDescription('Nom de la commande').setRequired(true).setMaxLength(32))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
-Command({ name: 'remind', builder: remindBuilder })(EngagementCommands.prototype, 'executeRemind');
-Command({ name: 'reminders', builder: remindersListBuilder })(EngagementCommands.prototype, 'executeRemindersList');
-Command({ name: 'reminder-cancel', builder: reminderCancelBuilder })(EngagementCommands.prototype, 'executeReminderCancel');
-Command({ name: 'trigger-add', builder: triggerAddBuilder })(EngagementCommands.prototype, 'executeTriggerAdd');
-Command({ name: 'trigger-list', builder: triggerListBuilder })(EngagementCommands.prototype, 'executeTriggerList');
-Command({ name: 'trigger-remove', builder: triggerRemoveBuilder })(EngagementCommands.prototype, 'executeTriggerRemove');
-Command({ name: 'customcmd-add', builder: customCmdAddBuilder })(EngagementCommands.prototype, 'executeCustomCmdAdd');
-Command({ name: 'customcmd-list', builder: customCmdListBuilder })(EngagementCommands.prototype, 'executeCustomCmdList');
-Command({ name: 'customcmd-remove', builder: customCmdRemoveBuilder })(EngagementCommands.prototype, 'executeCustomCmdRemove');
+Command({ name: 'remind', builder: remindBuilder })(EngagementAdvancedCommands.prototype, 'executeRemind');
+Command({ name: 'reminders', builder: remindersListBuilder })(EngagementAdvancedCommands.prototype, 'executeRemindersList');
+Command({ name: 'reminder-cancel', builder: reminderCancelBuilder })(EngagementAdvancedCommands.prototype, 'executeReminderCancel');
+Command({ name: 'trigger-add', builder: triggerAddBuilder })(EngagementAdvancedCommands.prototype, 'executeTriggerAdd');
+Command({ name: 'trigger-list', builder: triggerListBuilder })(EngagementAdvancedCommands.prototype, 'executeTriggerList');
+Command({ name: 'trigger-remove', builder: triggerRemoveBuilder })(EngagementAdvancedCommands.prototype, 'executeTriggerRemove');
+Command({ name: 'customcmd-add', builder: customCmdAddBuilder })(EngagementAdvancedCommands.prototype, 'executeCustomCmdAdd');
+Command({ name: 'customcmd-list', builder: customCmdListBuilder })(EngagementAdvancedCommands.prototype, 'executeCustomCmdList');
+Command({ name: 'customcmd-remove', builder: customCmdRemoveBuilder })(EngagementAdvancedCommands.prototype, 'executeCustomCmdRemove');
 
-module.exports = { EngagementCommands };
+module.exports = { EngagementAdvancedCommands, EngagementCommands: EngagementAdvancedCommands };

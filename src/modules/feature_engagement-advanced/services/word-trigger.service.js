@@ -13,10 +13,10 @@
  */
 
 const { Injectable } = require('../../../core/index.js');
-const { EngagementRepository } = require('./engagement.repository.js');
+const { EngagementAdvancedRepository } = require('./engagement.repository.js');
 
 class WordTriggerService {
-    static inject = [EngagementRepository];
+    static inject = [EngagementAdvancedRepository];
 
     constructor(repo) {
         this.repo = repo;

@@ -7,14 +7,14 @@ const { Module } = require('../../core/index.js');
 const { featureRegistry } = require('../../core/feature-registry.js');
 
 const defaults = require('./config/defaults.js');
-const { EngagementRepository } = require('./services/engagement.repository.js');
+const { EngagementAdvancedRepository } = require('./services/engagement.repository.js');
 const { ReminderService } = require('./services/reminder.service.js');
 const { WordTriggerService } = require('./services/word-trigger.service.js');
 const { CustomCommandService } = require('./services/custom-command.service.js');
 const { MessageCreateListener } = require('./events/message-create.listener.js');
 const { ReminderCron } = require('./cron/reminder-cron.js');
-const { EngagementController } = require('./controllers/engagement.controller.js');
-const { EngagementCommands } = require('./commands/engagement-commands.js');
+const { EngagementAdvancedController } = require('./controllers/engagement.controller.js');
+const { EngagementAdvancedCommands } = require('./commands/engagement-commands.js');
 
 featureRegistry.define('engagement-advanced', {
     defaults,
@@ -47,15 +47,15 @@ class EngagementAdvancedModule {
 
 Module({
     providers: [
-        EngagementRepository,
+        EngagementAdvancedRepository,
         ReminderService,
         WordTriggerService,
         CustomCommandService,
         EngagementAdvancedModule
     ],
-    controllers: [EngagementController],
+    controllers: [EngagementAdvancedController],
     events: [MessageCreateListener, ReminderCron],
-    commands: [EngagementCommands]
+    commands: [EngagementAdvancedCommands]
 })(EngagementAdvancedModule);
 
 module.exports = { EngagementAdvancedModule };

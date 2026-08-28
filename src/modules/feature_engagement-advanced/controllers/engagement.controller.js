@@ -8,7 +8,7 @@ const { ReminderService } = require('../services/reminder.service.js');
 const { WordTriggerService } = require('../services/word-trigger.service.js');
 const { CustomCommandService } = require('../services/custom-command.service.js');
 
-class EngagementController {
+class EngagementAdvancedController {
     static inject = [ReminderService, WordTriggerService, CustomCommandService];
 
     constructor(reminder, trigger, customs) {
@@ -136,15 +136,15 @@ class EngagementController {
     }
 }
 
-Controller('/api/engagement-advanced')(EngagementController);
-Get('/reminders')(EngagementController.prototype, 'listReminders');
-Post('/reminders')(EngagementController.prototype, 'createReminder');
-Delete('/reminders/:id')(EngagementController.prototype, 'cancelReminder');
-Get('/triggers')(EngagementController.prototype, 'listTriggers');
-Post('/triggers')(EngagementController.prototype, 'createTrigger');
-Delete('/triggers/:id')(EngagementController.prototype, 'deleteTrigger');
-Get('/commands')(EngagementController.prototype, 'listCustomCommands');
-Post('/commands')(EngagementController.prototype, 'createCustomCommand');
-Delete('/commands/:id')(EngagementController.prototype, 'deleteCustomCommand');
+Controller('/api/engagement-advanced')(EngagementAdvancedController);
+Get('/reminders')(EngagementAdvancedController.prototype, 'listReminders');
+Post('/reminders')(EngagementAdvancedController.prototype, 'createReminder');
+Delete('/reminders/:id')(EngagementAdvancedController.prototype, 'cancelReminder');
+Get('/triggers')(EngagementAdvancedController.prototype, 'listTriggers');
+Post('/triggers')(EngagementAdvancedController.prototype, 'createTrigger');
+Delete('/triggers/:id')(EngagementAdvancedController.prototype, 'deleteTrigger');
+Get('/commands')(EngagementAdvancedController.prototype, 'listCustomCommands');
+Post('/commands')(EngagementAdvancedController.prototype, 'createCustomCommand');
+Delete('/commands/:id')(EngagementAdvancedController.prototype, 'deleteCustomCommand');
 
-module.exports = { EngagementController };
+module.exports = { EngagementAdvancedController, EngagementController: EngagementAdvancedController };
