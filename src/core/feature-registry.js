@@ -103,8 +103,7 @@ class FeatureRegistry {
                     };
                 }
             } catch (err) {
-                this._dbAvailable = false;
-                console.warn(`⚠️ [FeatureRegistry] DB indisponible, fallback YAML pour "${name}": ${err.message}`);
+                console.warn(`⚠️ [FeatureRegistry] Erreur lecture DB, fallback YAML pour "${name}": ${err.message}`);
             }
         }
 
@@ -188,7 +187,6 @@ class FeatureRegistry {
                         });
                 }
             } catch (err) {
-                this._dbAvailable = false;
                 throw new Error(`Impossible d'écrire en DB: ${err.message}`);
             }
         }

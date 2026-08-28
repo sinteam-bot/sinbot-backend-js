@@ -414,9 +414,9 @@ const PG_TABLES_DDL = `
         timezone TEXT DEFAULT 'Europe/Paris',
         owner_id TEXT,
         premium_tier INTEGER DEFAULT 0,
-        joined_at INTEGER NOT NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        joined_at BIGINT NOT NULL,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS feature_flags (
@@ -426,7 +426,7 @@ const PG_TABLES_DDL = `
         config_json TEXT NOT NULL DEFAULT '{}',
         allowed_roles TEXT NOT NULL DEFAULT '[]',
         updated_by TEXT,
-        updated_at INTEGER NOT NULL,
+        updated_at BIGINT NOT NULL,
         PRIMARY KEY (guild_id, feature_name)
     );
 
@@ -441,8 +441,8 @@ const PG_TABLES_DDL = `
         reason TEXT NOT NULL,
         source TEXT NOT NULL DEFAULT 'manual',
         rule TEXT,
-        created_at INTEGER NOT NULL,
-        expires_at INTEGER,
+        created_at BIGINT NOT NULL,
+        expires_at BIGINT,
         active INTEGER NOT NULL DEFAULT 1
     );
     CREATE INDEX IF NOT EXISTS idx_user_warnings_guild_user ON user_warnings(guild_id, user_id);
@@ -455,14 +455,14 @@ const PG_TABLES_DDL = `
         type TEXT NOT NULL,
         reason TEXT NOT NULL,
         mod_id TEXT NOT NULL,
-        duration_ms INTEGER,
-        starts_at INTEGER NOT NULL,
-        expires_at INTEGER,
+        duration_ms BIGINT,
+        starts_at BIGINT NOT NULL,
+        expires_at BIGINT,
         revoked_by TEXT,
-        revoked_at INTEGER,
+        revoked_at BIGINT,
         revoked_reason TEXT,
         active INTEGER NOT NULL DEFAULT 1,
-        created_at INTEGER NOT NULL
+        created_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_user_sanctions_guild_user ON user_sanctions(guild_id, user_id);
     CREATE INDEX IF NOT EXISTS idx_user_sanctions_active ON user_sanctions(active);
@@ -478,7 +478,7 @@ const PG_TABLES_DDL = `
         reason TEXT,
         metadata TEXT,
         source TEXT NOT NULL DEFAULT 'manual',
-        created_at INTEGER NOT NULL
+        created_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_mod_logs_guild_created ON mod_logs(guild_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_mod_logs_guild_user ON mod_logs(guild_id, user_id);
@@ -494,9 +494,9 @@ const PG_TABLES_DDL = `
         status TEXT NOT NULL DEFAULT 'open',
         claimed_by TEXT,
         closed_by TEXT,
-        closed_at INTEGER,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        closed_at BIGINT,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_tickets_guild_status ON tickets(guild_id, status);
     CREATE INDEX IF NOT EXISTS idx_tickets_user ON tickets(user_id);
@@ -509,7 +509,7 @@ const PG_TABLES_DDL = `
         content TEXT,
         attachments TEXT,
         is_staff INTEGER NOT NULL DEFAULT 0,
-        created_at INTEGER NOT NULL
+        created_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket ON ticket_messages(ticket_id);
 
@@ -523,7 +523,7 @@ const PG_TABLES_DDL = `
         channel_id TEXT,
         metadata TEXT,
         summary TEXT,
-        created_at INTEGER NOT NULL
+        created_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_event_log_guild_type ON event_log(guild_id, event_type);
     CREATE INDEX IF NOT EXISTS idx_event_log_guild_created ON event_log(guild_id, created_at);
@@ -538,8 +538,8 @@ const PG_TABLES_DDL = `
         template TEXT NOT NULL,
         payload TEXT NOT NULL,
         svg TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        expires_at INTEGER
+        created_at BIGINT NOT NULL,
+        expires_at BIGINT
     );
     CREATE INDEX IF NOT EXISTS idx_welcome_cards_user ON welcome_cards(guild_id, user_id, template);
 
@@ -554,13 +554,13 @@ const PG_TABLES_DDL = `
         description TEXT,
         winners_count INTEGER NOT NULL DEFAULT 1,
         required_role_id TEXT,
-        starts_at INTEGER NOT NULL,
-        ends_at INTEGER NOT NULL,
+        starts_at BIGINT NOT NULL,
+        ends_at BIGINT NOT NULL,
         status TEXT NOT NULL DEFAULT 'active',
         winners_json TEXT,
         color TEXT,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_giveaways_guild_status ON giveaways(guild_id, status);
     CREATE INDEX IF NOT EXISTS idx_giveaways_ends_at ON giveaways(ends_at);
@@ -569,7 +569,7 @@ const PG_TABLES_DDL = `
     CREATE TABLE IF NOT EXISTS giveaway_entries (
         giveaway_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
-        entered_at INTEGER NOT NULL,
+        entered_at BIGINT NOT NULL,
         PRIMARY KEY (giveaway_id, user_id)
     );
     CREATE INDEX IF NOT EXISTS idx_giveaway_entries_user ON giveaway_entries(user_id);
@@ -584,10 +584,10 @@ const PG_TABLES_DDL = `
         options_json TEXT NOT NULL,
         multi_choice INTEGER NOT NULL DEFAULT 0,
         anonymous INTEGER NOT NULL DEFAULT 0,
-        ends_at INTEGER,
+        ends_at BIGINT,
         status TEXT NOT NULL DEFAULT 'active',
         created_by TEXT NOT NULL,
-        created_at INTEGER NOT NULL
+        created_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_polls_guild_status ON polls(guild_id, status);
     CREATE INDEX IF NOT EXISTS idx_polls_message ON polls(message_id);
@@ -596,7 +596,7 @@ const PG_TABLES_DDL = `
         poll_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
         option_index INTEGER NOT NULL,
-        voted_at INTEGER NOT NULL,
+        voted_at BIGINT NOT NULL,
         PRIMARY KEY (poll_id, user_id, option_index)
     );
     CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id);
@@ -612,15 +612,15 @@ const PG_TABLES_DDL = `
         message_template TEXT NOT NULL DEFAULT '🎂 Joyeux anniversaire {user} ! Tu fêtes tes **{age} ans** aujourdhui !',
         temp_role_id TEXT,
         enabled INTEGER NOT NULL DEFAULT 1,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS birthday_visibility (
         user_id TEXT NOT NULL,
         guild_id TEXT NOT NULL,
         enabled INTEGER NOT NULL DEFAULT 1,
-        updated_at INTEGER NOT NULL,
+        updated_at BIGINT NOT NULL,
         PRIMARY KEY (user_id, guild_id)
     );
     CREATE INDEX IF NOT EXISTS idx_birthday_visibility_user ON birthday_visibility(user_id);
@@ -632,8 +632,8 @@ const PG_TABLES_DDL = `
         change_number INTEGER NOT NULL,
         previous_birthdate TEXT,
         new_birthdate TEXT NOT NULL,
-        cooldown_until INTEGER NOT NULL,
-        changed_at INTEGER NOT NULL
+        cooldown_until BIGINT NOT NULL,
+        changed_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_birthday_change_user ON birthday_change_log(user_id, guild_id);
     CREATE INDEX IF NOT EXISTS idx_birthday_change_until ON birthday_change_log(cooldown_until);
@@ -646,7 +646,7 @@ const PG_TABLES_DDL = `
         age INTEGER,
         message_id TEXT,
         gifts_given TEXT,
-        announced_at INTEGER NOT NULL
+        announced_at BIGINT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_birthday_history_user ON birthday_history(user_id, guild_id, announced_at);
     CREATE INDEX IF NOT EXISTS idx_birthday_history_guild ON birthday_history(guild_id, announced_at);
@@ -676,7 +676,40 @@ async function initPgTables(client) {
         `ALTER TABLE discord_channels ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`,
         `ALTER TABLE discord_threads ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`,
         `ALTER TABLE discord_messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`,
-        `ALTER TABLE discord_emojis ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`
+        `ALTER TABLE discord_emojis ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;`,
+        `ALTER TABLE feature_flags ALTER COLUMN updated_at TYPE BIGINT;`,
+        `ALTER TABLE user_warnings ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE user_warnings ALTER COLUMN expires_at TYPE BIGINT;`,
+        `ALTER TABLE user_sanctions ALTER COLUMN duration_ms TYPE BIGINT;`,
+        `ALTER TABLE user_sanctions ALTER COLUMN starts_at TYPE BIGINT;`,
+        `ALTER TABLE user_sanctions ALTER COLUMN expires_at TYPE BIGINT;`,
+        `ALTER TABLE user_sanctions ALTER COLUMN revoked_at TYPE BIGINT;`,
+        `ALTER TABLE user_sanctions ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE mod_logs ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE tickets ALTER COLUMN closed_at TYPE BIGINT;`,
+        `ALTER TABLE tickets ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE tickets ALTER COLUMN updated_at TYPE BIGINT;`,
+        `ALTER TABLE ticket_messages ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE event_log ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE welcome_cards ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE welcome_cards ALTER COLUMN expires_at TYPE BIGINT;`,
+        `ALTER TABLE giveaways ALTER COLUMN starts_at TYPE BIGINT;`,
+        `ALTER TABLE giveaways ALTER COLUMN ends_at TYPE BIGINT;`,
+        `ALTER TABLE giveaways ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE giveaways ALTER COLUMN updated_at TYPE BIGINT;`,
+        `ALTER TABLE giveaway_entries ALTER COLUMN entered_at TYPE BIGINT;`,
+        `ALTER TABLE polls ALTER COLUMN ends_at TYPE BIGINT;`,
+        `ALTER TABLE polls ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE poll_votes ALTER COLUMN voted_at TYPE BIGINT;`,
+        `ALTER TABLE birthday_guild_settings ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE birthday_guild_settings ALTER COLUMN updated_at TYPE BIGINT;`,
+        `ALTER TABLE birthday_visibility ALTER COLUMN updated_at TYPE BIGINT;`,
+        `ALTER TABLE birthday_change_log ALTER COLUMN cooldown_until TYPE BIGINT;`,
+        `ALTER TABLE birthday_change_log ALTER COLUMN changed_at TYPE BIGINT;`,
+        `ALTER TABLE birthday_history ALTER COLUMN announced_at TYPE BIGINT;`,
+        `ALTER TABLE server_members ALTER COLUMN joined_at TYPE BIGINT;`,
+        `ALTER TABLE server_members ALTER COLUMN created_at TYPE BIGINT;`,
+        `ALTER TABLE server_members ALTER COLUMN updated_at TYPE BIGINT;`
     ];
 
     for (const stmt of migrationStatements) {

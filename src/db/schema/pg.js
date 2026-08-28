@@ -1,4 +1,4 @@
-const { pgTable, text, integer, serial, timestamp, primaryKey, index, uniqueIndex } = require('drizzle-orm/pg-core');
+const { pgTable, text, integer, bigint, serial, timestamp, primaryKey, index, uniqueIndex } = require('drizzle-orm/pg-core');
 const { sql } = require('drizzle-orm');
 
 // 1. user_events
@@ -377,9 +377,9 @@ const guildSettings = pgTable('guild_settings', {
     timezone: text('timezone').default('Europe/Paris'),
     ownerId: text('owner_id'),
     premiumTier: integer('premium_tier').default(0),
-    joinedAt: integer('joined_at').notNull(),
-    createdAt: integer('created_at').notNull(),
-    updatedAt: integer('updated_at').notNull()
+    joinedAt: bigint('joined_at', { mode: 'number' }).notNull(),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 });
 
 // 30. feature_flags (Phase 0: per-guild feature toggles + config)
@@ -390,7 +390,7 @@ const featureFlags = pgTable('feature_flags', {
     configJson: text('config_json').notNull().default('{}'),
     allowedRoles: text('allowed_roles').notNull().default('[]'),
     updatedBy: text('updated_by'),
-    updatedAt: integer('updated_at').notNull()
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 }, (table) => [
     primaryKey({ columns: [table.guildId, table.featureName] }),
     index('idx_pg_feature_flags_enabled').on(table.enabled)
@@ -405,8 +405,8 @@ const userWarnings = pgTable('user_warnings', {
     reason: text('reason').notNull(),
     source: text('source').notNull().default('manual'),
     rule: text('rule'),
-    createdAt: integer('created_at').notNull(),
-    expiresAt: integer('expires_at'),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    expiresAt: bigint('expires_at', { mode: 'number' }),
     active: integer('active').notNull().default(1)
 }, (table) => [
     index('idx_pg_user_warnings_guild_user').on(table.guildId, table.userId),
@@ -421,14 +421,14 @@ const userSanctions = pgTable('user_sanctions', {
     type: text('type').notNull(),
     reason: text('reason').notNull(),
     modId: text('mod_id').notNull(),
-    durationMs: integer('duration_ms'),
-    startsAt: integer('starts_at').notNull(),
-    expiresAt: integer('expires_at'),
+    durationMs: bigint('duration_ms', { mode: 'number' }),
+    startsAt: bigint('starts_at', { mode: 'number' }).notNull(),
+    expiresAt: bigint('expires_at', { mode: 'number' }),
     revokedBy: text('revoked_by'),
-    revokedAt: integer('revoked_at'),
+    revokedAt: bigint('revoked_at', { mode: 'number' }),
     revokedReason: text('revoked_reason'),
     active: integer('active').notNull().default(1),
-    createdAt: integer('created_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_user_sanctions_guild_user').on(table.guildId, table.userId),
     index('idx_pg_user_sanctions_active').on(table.active)
@@ -446,7 +446,7 @@ const modLogs = pgTable('mod_logs', {
     reason: text('reason'),
     metadata: text('metadata'),
     source: text('source').notNull().default('manual'),
-    createdAt: integer('created_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_mod_logs_guild_created').on(table.guildId, table.createdAt),
     index('idx_pg_mod_logs_guild_user').on(table.guildId, table.userId)
@@ -463,9 +463,9 @@ const tickets = pgTable('tickets', {
     status: text('status').notNull().default('open'),
     claimedBy: text('claimed_by'),
     closedBy: text('closed_by'),
-    closedAt: integer('closed_at'),
-    createdAt: integer('created_at').notNull(),
-    updatedAt: integer('updated_at').notNull()
+    closedAt: bigint('closed_at', { mode: 'number' }),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_tickets_guild_status').on(table.guildId, table.status),
     index('idx_pg_tickets_user').on(table.userId),
@@ -480,7 +480,7 @@ const ticketMessages = pgTable('ticket_messages', {
     content: text('content'),
     attachments: text('attachments'),
     isStaff: integer('is_staff').notNull().default(0),
-    createdAt: integer('created_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_ticket_messages_ticket').on(table.ticketId)
 ]);
@@ -495,7 +495,7 @@ const eventLog = pgTable('event_log', {
     channelId: text('channel_id'),
     metadata: text('metadata'),
     summary: text('summary'),
-    createdAt: integer('created_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_event_log_guild_type').on(table.guildId, table.eventType),
     index('idx_pg_event_log_guild_created').on(table.guildId, table.createdAt),
@@ -511,8 +511,8 @@ const welcomeCards = pgTable('welcome_cards', {
     template: text('template').notNull(),
     payload: text('payload').notNull(),
     svg: text('svg').notNull(),
-    createdAt: integer('created_at').notNull(),
-    expiresAt: integer('expires_at')
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    expiresAt: bigint('expires_at', { mode: 'number' })
 }, (table) => [
     index('idx_pg_welcome_cards_user').on(table.guildId, table.userId, table.template)
 ]);
@@ -528,13 +528,13 @@ const giveaways = pgTable('giveaways', {
     description: text('description'),
     winnersCount: integer('winners_count').notNull().default(1),
     requiredRoleId: text('required_role_id'),
-    startsAt: integer('starts_at').notNull(),
-    endsAt: integer('ends_at').notNull(),
+    startsAt: bigint('starts_at', { mode: 'number' }).notNull(),
+    endsAt: bigint('ends_at', { mode: 'number' }).notNull(),
     status: text('status').notNull().default('active'),
     winnersJson: text('winners_json'),
     color: text('color'),
-    createdAt: integer('created_at').notNull(),
-    updatedAt: integer('updated_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_giveaways_guild_status').on(table.guildId, table.status),
     index('idx_pg_giveaways_ends_at').on(table.endsAt),
@@ -545,7 +545,7 @@ const giveaways = pgTable('giveaways', {
 const giveawayEntries = pgTable('giveaway_entries', {
     giveawayId: text('giveaway_id').notNull(),
     userId: text('user_id').notNull(),
-    enteredAt: integer('entered_at').notNull()
+    enteredAt: bigint('entered_at', { mode: 'number' }).notNull()
 }, (table) => [
     primaryKey({ columns: [table.giveawayId, table.userId] }),
     index('idx_pg_giveaway_entries_user').on(table.userId)
@@ -561,10 +561,10 @@ const polls = pgTable('polls', {
     optionsJson: text('options_json').notNull(),
     multiChoice: integer('multi_choice').notNull().default(0),
     anonymous: integer('anonymous').notNull().default(0),
-    endsAt: integer('ends_at'),
+    endsAt: bigint('ends_at', { mode: 'number' }),
     status: text('status').notNull().default('active'),
     createdBy: text('created_by').notNull(),
-    createdAt: integer('created_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_polls_guild_status').on(table.guildId, table.status),
     index('idx_pg_polls_message').on(table.messageId)
@@ -575,7 +575,7 @@ const pollVotes = pgTable('poll_votes', {
     pollId: text('poll_id').notNull(),
     userId: text('user_id').notNull(),
     optionIndex: integer('option_index').notNull(),
-    votedAt: integer('voted_at').notNull()
+    votedAt: bigint('voted_at', { mode: 'number' }).notNull()
 }, (table) => [
     primaryKey({ columns: [table.pollId, table.userId, table.optionIndex] }),
     index('idx_pg_poll_votes_poll').on(table.pollId)
@@ -592,8 +592,8 @@ const birthdayGuildSettings = pgTable('birthday_guild_settings', {
     messageTemplate: text('message_template').notNull().default('🎂 Joyeux anniversaire {user} !'),
     tempRoleId: text('temp_role_id'),
     enabled: integer('enabled').notNull().default(1),
-    createdAt: integer('created_at').notNull(),
-    updatedAt: integer('updated_at').notNull()
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 });
 
 // 43. birthday_visibility (Phase 7)
@@ -601,7 +601,7 @@ const birthdayVisibility = pgTable('birthday_visibility', {
     userId: text('user_id').notNull(),
     guildId: text('guild_id').notNull(),
     enabled: integer('enabled').notNull().default(1),
-    updatedAt: integer('updated_at').notNull()
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
 }, (table) => [
     primaryKey({ columns: [table.userId, table.guildId] }),
     index('idx_pg_birthday_visibility_user').on(table.userId)
@@ -615,8 +615,8 @@ const birthdayChangeLog = pgTable('birthday_change_log', {
     changeNumber: integer('change_number').notNull(),
     previousBirthdate: text('previous_birthdate'),
     newBirthdate: text('new_birthdate').notNull(),
-    cooldownUntil: integer('cooldown_until').notNull(),
-    changedAt: integer('changed_at').notNull()
+    cooldownUntil: bigint('cooldown_until', { mode: 'number' }).notNull(),
+    changedAt: bigint('changed_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_birthday_change_user').on(table.userId, table.guildId),
     index('idx_pg_birthday_change_until').on(table.cooldownUntil)
@@ -631,7 +631,7 @@ const birthdayHistory = pgTable('birthday_history', {
     age: integer('age'),
     messageId: text('message_id'),
     giftsGiven: text('gifts_given'),
-    announcedAt: integer('announced_at').notNull()
+    announcedAt: bigint('announced_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_pg_birthday_history_user').on(table.userId, table.guildId, table.announcedAt),
     index('idx_pg_birthday_history_guild').on(table.guildId, table.announcedAt)

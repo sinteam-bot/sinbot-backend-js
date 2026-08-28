@@ -42,6 +42,9 @@ describe('Service: Bump Reminder Module Tests', () => {
         const service = container.resolve(BumpReminderService);
         const repo = container.resolve(BumpReminderRepository);
 
+        const origGetConfig = service.getConfig;
+        service.getConfig = () => ({ enabled: true, reminder_cooldown_hours: 2 });
+
         const mockDisboardMsg = {
             guild: { id: guildId },
             channel: { id: channelId },
@@ -58,11 +61,15 @@ describe('Service: Bump Reminder Module Tests', () => {
             client: { users: { cache: new Map() } }
         };
 
-        await service.handleDisboardMessage(mockDisboardMsg);
-        const last = await repo.getLastBump(guildId);
-        assert.ok(last);
-        assert.strictEqual(last.bumper_id, 'user_bumper_2');
-        await repo.markReminderSent(last.id);
+        try {
+            await service.handleDisboardMessage(mockDisboardMsg);
+            const last = await repo.getLastBump(guildId);
+            assert.ok(last);
+            assert.strictEqual(last.bumper_id, 'user_bumper_2');
+            await repo.markReminderSent(last.id);
+        } finally {
+            service.getConfig = origGetConfig;
+        }
     });
 
     test('Service: should send simple text bump reminder without embed by default', async () => {

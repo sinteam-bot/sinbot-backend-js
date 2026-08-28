@@ -112,6 +112,35 @@ describe('FeatureRegistry', () => {
                 /guildId/
             );
         });
+        test('set persiste et met à jour en DB avec timestamp millisecondes (BIGINT)', async () => {
+            registry.define('logs_feat', {
+                defaults: { enabled: false, channels: { moderation: null } }
+            });
+            const resSet = await registry.set('702103057898668072', 'logs_feat', {
+                enabled: true,
+                config: { channels: { moderation: '123456789' } },
+                allowedRoles: ['987654321']
+            });
+
+            assert.strictEqual(resSet.enabled, true);
+            assert.strictEqual(resSet.config.channels.moderation, '123456789');
+            assert.deepStrictEqual(resSet.allowedRoles, ['987654321']);
+
+            const fromDb = await registry.get('702103057898668072', 'logs_feat');
+            assert.strictEqual(fromDb.enabled, true);
+            assert.strictEqual(fromDb.config.channels.moderation, '123456789');
+            assert.deepStrictEqual(fromDb.allowedRoles, ['987654321']);
+            assert.strictEqual(fromDb.source, 'db');
+
+            // Update existing row
+            const resUpdate = await registry.set('702103057898668072', 'logs_feat', {
+                enabled: false
+            });
+            assert.strictEqual(resUpdate.enabled, false);
+            const fromDb2 = await registry.get('702103057898668072', 'logs_feat');
+            assert.strictEqual(fromDb2.enabled, false);
+            assert.strictEqual(fromDb2.config.channels.moderation, '123456789');
+        });
     });
 
     describe('listForGuild', () => {
