@@ -17,6 +17,7 @@
   "description": "",
   "dependencies": {
     "@discordjs/rest": "^2.6.3",
+    "@electric-sql/pglite": "^0.5.8",
     "better-sqlite3": "^13.0.3",
     "discord-api-types": "^0.38.53",
     "discord.js": "^14.27.0",

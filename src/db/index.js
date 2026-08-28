@@ -1,5 +1,7 @@
-const { drizzle } = require('drizzle-orm/node-postgres');
+const { drizzle: drizzlePg } = require('drizzle-orm/node-postgres');
+const { drizzle: drizzlePgLite } = require('drizzle-orm/pglite');
 const { Pool } = require('pg');
+const { PGlite } = require('@electric-sql/pglite');
 const { config } = require('../config/index.js');
 const pgSchema = require('./schema/pg.js');
 
@@ -825,87 +827,77 @@ async function initPgTables(client) {
 }
 
 /**
- * Crée un adaptateur PostgreSQL en mémoire pour les tests et le développement local
+ * Crée un adaptateur PostgreSQL 100% en mémoire avec PGlite (WASM) pour les tests et dev local
  */
-function createMockPgPool() {
-    const Database = require('better-sqlite3');
-    const memDb = new Database(':memory:');
-    memDb.pragma('journal_mode = WAL');
+function createPGliteAdapter() {
+    const client = new PGlite();
 
-    function convertPgSql(sqlInput) {
-        if (!sqlInput) return '';
-        let sqlText = typeof sqlInput === 'string' ? sqlInput : (sqlInput.text || '');
-
-        // 1. Replace default keyword in VALUES (...)
-        sqlText = sqlText.replace(/values\s*\(([^)]+)\)/gi, (match, inner) => {
-            const cleanedInner = inner.replace(/\bdefault\b/gi, 'NULL');
-            return `VALUES (${cleanedInner})`;
-        });
-
-        // 2. Convert PG specific types and keywords
-        sqlText = sqlText
-            .replace(/\bSERIAL\s+PRIMARY\s+KEY\b/gi, 'INTEGER PRIMARY KEY AUTOINCREMENT')
-            .replace(/::[a-zA-Z]+/g, '')
-            .replace(/\$\d+/g, '?');
-
-        return sqlText;
-    }
-
-    // Initialiser les tables immédiatement et de manière synchrone
-    const syncSql = convertPgSql(PG_TABLES_DDL);
-    memDb.exec(syncSql);
-
-    function executeQuery(queryInput, params = []) {
-        const rawSql = typeof queryInput === 'string' ? queryInput : queryInput.text;
-        const values = typeof queryInput === 'object' && queryInput.values ? queryInput.values : params;
-        const isArrayMode = typeof queryInput === 'object' && queryInput.rowMode === 'array';
-        const cleanSql = convertPgSql(rawSql);
-        const trimmed = cleanSql.trim().toUpperCase();
-
-        if (trimmed.startsWith('SELECT') || trimmed.includes('RETURNING')) {
-            const stmt = memDb.prepare(cleanSql);
-            const rows = isArrayMode ? stmt.raw().all(...values) : stmt.all(...values);
-            const cols = stmt.columns();
-            const fields = cols.map(c => ({ name: c.name, dataTypeID: 0 }));
-            return { rows, rowCount: rows.length, fields };
-        } else {
-            const stmt = memDb.prepare(cleanSql);
-            const info = stmt.run(...values);
-            const rows = isArrayMode ? [[Number(info.lastInsertRowid)]] : [{ id: Number(info.lastInsertRowid) }];
-            return { rows, rowCount: info.changes, fields: [{ name: 'id', dataTypeID: 0 }] };
+    const origQuery = client.query.bind(client);
+    client.query = async function(queryInput, params = []) {
+        if (typeof queryInput === 'object' && queryInput !== null) {
+            const sql = queryInput.text;
+            const values = queryInput.values || [];
+            return origQuery(sql, values);
         }
-    }
-
-    const adapter = {
-        query: async (queryInput, params = []) => {
-            return executeQuery(queryInput, params);
-        },
-        connect: async () => {
-            return {
-                query: async (queryInput, params = []) => {
-                    const rawSql = typeof queryInput === 'string' ? queryInput : queryInput.text;
-                    const trimmed = (rawSql || '').trim().toUpperCase();
-                    if (trimmed === 'BEGIN') {
-                        memDb.exec('BEGIN');
-                        return { rows: [], fields: [] };
-                    } else if (trimmed === 'COMMIT') {
-                        memDb.exec('COMMIT');
-                        return { rows: [], fields: [] };
-                    } else if (trimmed === 'ROLLBACK') {
-                        memDb.exec('ROLLBACK');
-                        return { rows: [], fields: [] };
-                    }
-                    return executeQuery(queryInput, params);
-                },
-                release: () => {}
-            };
-        },
-        end: async () => {
-            memDb.close();
-        }
+        return origQuery(queryInput, params);
     };
 
-    return adapter;
+    client.connect = async function() {
+        return {
+            query: client.query.bind(client),
+            release: () => {}
+        };
+    };
+
+    client.end = async function() {
+        return client.close();
+    };
+
+    // Initialiser les tables immédiatement
+    client.exec(PG_TABLES_DDL)
+        .catch(err => console.error('Erreur DDL PGlite:', err));
+
+    return client;
+}
+
+/**
+ * Crée une instance isolée et propre de base PostgreSQL PGlite pour les tests unitaires
+ */
+async function createTestDb() {
+    const client = new PGlite();
+    const origQuery = client.query.bind(client);
+    client.query = async function(queryInput, params = []) {
+        if (typeof queryInput === 'object' && queryInput !== null) {
+            const sql = queryInput.text;
+            const values = queryInput.values || [];
+            return origQuery(sql, values);
+        }
+        return origQuery(queryInput, params);
+    };
+
+    client.connect = async function() {
+        return {
+            query: client.query.bind(client),
+            release: () => {}
+        };
+    };
+
+    client.end = async function() {
+        return client.close();
+    };
+
+    await client.exec(PG_TABLES_DDL);
+    const testDb = drizzlePgLite(client, { schema: pgSchema });
+    testDb.pool = client;
+
+    return {
+        db: testDb,
+        client,
+        rawClient: client,
+        pool: client,
+        schema: pgSchema,
+        dialect: 'postgres'
+    };
 }
 
 /**
@@ -918,9 +910,9 @@ function initDatabase() {
     const isTest = process.env.NODE_ENV === 'test' || !dbUrl;
 
     if (isTest && !dbUrl && !process.env.PG_HOST) {
-        // En mode test / dev local sans serveur PostgreSQL externe, utiliser l'adaptateur PG en mémoire
-        rawClient = createMockPgPool();
-        db = drizzle(rawClient, { schema: pgSchema });
+        // En mode test / dev local sans serveur PostgreSQL externe, utiliser PGlite (PostgreSQL 16 WASM in-memory)
+        rawClient = createPGliteAdapter();
+        db = drizzlePgLite(rawClient, { schema: pgSchema });
     } else {
         // Mode PostgreSQL Réel (Production / Staging)
         const poolConfig = dbUrl ? { connectionString: dbUrl } : {
@@ -932,7 +924,7 @@ function initDatabase() {
         };
 
         rawClient = new Pool(poolConfig);
-        db = drizzle(rawClient, { schema: pgSchema });
+        db = drizzlePg(rawClient, { schema: pgSchema });
 
         initPgTables(rawClient)
             .then(() => console.log('✅ Base de données PostgreSQL de Production initialisée avec succès avec Drizzle ORM'))
@@ -959,6 +951,8 @@ const dbContext = initDatabase();
 
 module.exports = {
     ...dbContext,
+    PG_TABLES_DDL,
+    createTestDb,
     initDatabase,
     initPgTables
 };
