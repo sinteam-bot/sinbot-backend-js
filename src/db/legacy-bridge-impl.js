@@ -1,10 +1,10 @@
 const { eq, and, or, sql, desc, asc, count, gt, gte, lt, lte, inArray } = require('drizzle-orm');
-const { db, schema, rawClient, isPostgres, isSqlite, dialect } = require('./db/index.js');
-const { toISOStringSafe } = require('./utils/dateUtils.js');
+const { db, schema, rawClient, isPostgres, isSqlite, dialect } = require('./index.js');
+const { toISOStringSafe } = require('../utils/dateUtils.js');
 
 // Configuration XP et Captcha
-const XP_CONFIG = require("./modules/feature_xp-level/xp.config.js");
-const CAPTCHA_CONFIG = require("./modules/security_question/captcha.config.js");
+const XP_CONFIG = require("../modules/feature_xp-level/xp.config.js");
+const CAPTCHA_CONFIG = require("../modules/security_question/captcha.config.js");
 
 // ============================================
 // ADAPTATEUR DE COMPATIBILITÉ POOL POSTGRESQL

@@ -4,7 +4,7 @@
  * Étape 3 : remplacera par des définitions `pgTable` isolées.
  */
 
-const pgSchema = require('../../../db/schema/pg.js');
+const pgSchema = require('../../../db/schemas/index.js');
 
 module.exports = {
     reports: pgSchema.reports,

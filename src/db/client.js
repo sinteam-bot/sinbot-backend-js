@@ -9,28 +9,19 @@
  *  - `@electric-sql/pglite` (PostgreSQL 16 WASM in-memory, dev local + tests)
  */
 
-const fs = require('fs');
-const path = require('path');
 const { drizzle: drizzlePg } = require('drizzle-orm/node-postgres');
 const { drizzle: drizzlePgLite } = require('drizzle-orm/pglite');
+const { migrate: drizzleMigrate } = require('drizzle-orm/pglite/migrator');
 const { Pool, types } = require('pg');
 const { PGlite } = require('@electric-sql/pglite');
+const path = require('path');
 const { config } = require('../config/index.js');
 
 // Parser les colonnes BIGINT (OID 20) en Number JavaScript pour éviter les strings
 types.setTypeParser(20, val => (val === null ? null : parseInt(val, 10)));
 
-let _legacySchemaSql = null;
-function _loadLegacySchema() {
-    if (_legacySchemaSql !== null) return _legacySchemaSql;
-    const p = path.join(__dirname, 'legacy-schema.sql');
-    try {
-        _legacySchemaSql = fs.readFileSync(p, 'utf8');
-    } catch (e) {
-        _legacySchemaSql = '';
-        console.warn(`[db] legacy-schema.sql introuvable (${p}) — ${e.message}`);
-    }
-    return _legacySchemaSql;
+function _resolveMigrationsFolder() {
+    return path.join(__dirname, 'migrations');
 }
 
 let _db = null;
@@ -79,29 +70,31 @@ function _createPGliteAdapter() {
         return client.close();
     };
 
-    // En mode PGlite (dev/test), on instancie immédiatement le DDL legacy
-    // pour préserver la compatibilité avec le code qui fait encore du SQL brut.
-    // En production PostgreSQL, c'est `npm run db:migrate` qui s'en charge.
-    const ddl = _loadLegacySchema();
-    if (ddl) {
-        client.ready = client.exec(ddl).catch((err) => {
-            console.error('Erreur DDL PGlite (legacy-schema.sql):', err);
-        });
-    } else {
-        client.ready = Promise.resolve();
-    }
+    // En mode PGlite (dev/test), on retarde l'application des migrations
+    // jusqu'à ce que l'objet Drizzle soit construit (le migrator a besoin
+    // d'un PgliteDatabase, pas du client brut). Voir `createPgliteContext`.
+    client.ready = null;
 
     return client;
 }
 
 /**
  * Crée un adaptateur PGlite (PostgreSQL 16 WASM in-memory).
+ * Applique automatiquement les migrations Drizzle présentes.
  * @returns {Promise<{db, rawClient, pool, schema, dialect, isPostgres, isSqlite, ready}>}
  */
 async function createPgliteContext(schema) {
     const client = _createPGliteAdapter();
     const dbInstance = drizzlePgLite(client, { schema });
     dbInstance.pool = client;
+
+    // Application des migrations Drizzle (en PGlite mémoire uniquement).
+    // En production PostgreSQL, c'est `npm run db:migrate` qui s'en charge.
+    const migrationsFolder = _resolveMigrationsFolder();
+    if (require('fs').existsSync(migrationsFolder)) {
+        await drizzleMigrate(dbInstance, { migrationsFolder });
+    }
+
     return {
         db: dbInstance,
         rawClient: client,
@@ -147,7 +140,14 @@ function initDatabase(schema) {
     if (creds.kind === 'pglite') {
         _rawClient = _createPGliteAdapter();
         _db = drizzlePgLite(_rawClient, { schema });
-        _ready = Promise.resolve();
+        const migrationsFolder = _resolveMigrationsFolder();
+        if (require('fs').existsSync(migrationsFolder)) {
+            _ready = drizzleMigrate(_db, { migrationsFolder }).catch((err) => {
+                console.error('Erreur migrations PGlite (initDatabase):', err);
+            });
+        } else {
+            _ready = Promise.resolve();
+        }
     } else {
         const poolConfig = creds.connectionString
             ? { connectionString: creds.connectionString }

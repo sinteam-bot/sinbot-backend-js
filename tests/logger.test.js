@@ -20,7 +20,7 @@ describe('BotLogger & Winston-Style Source Localization Tests', () => {
         assert.strictEqual(logger.inferModuleFromPath('src/modules/game_road-to-infinite/road-to-infinite.service.js'), 'INFINITE');
         assert.strictEqual(logger.inferModuleFromPath('src/modules/notifier_startup/startup-notifier.service.js'), 'STARTUP');
         assert.strictEqual(logger.inferModuleFromPath('src/services/imageProxyService.js'), 'API');
-        assert.strictEqual(logger.inferModuleFromPath('src/database.js'), 'DATABASE');
+        assert.strictEqual(logger.inferModuleFromPath('src/db/legacy-bridge.js'), 'DATABASE');
     });
 
     test('addLog records caller location and metadata', () => {

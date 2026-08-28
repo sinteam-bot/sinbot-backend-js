@@ -15,10 +15,6 @@
  * compatible avec `drizzle(client, { schema })`.
  */
 
-const pgSchema = require('../schema/pg.js');
+const pgSchema = require('./legacy.js');
 
-module.exports = {
-    ...pgSchema,
-    schema: pgSchema,
-    pgSchema
-};
+module.exports = pgSchema;

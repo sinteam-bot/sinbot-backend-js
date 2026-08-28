@@ -38,6 +38,12 @@ module.exports = {
     initDatabase,
     createTestDb,
     resetDatabase,
+    /**
+     * Promesse résolvant une fois que la base est initialisée
+     * (migrations Drizzle appliquées en mode PGlite). À `await` avant
+     * la première opération en environnement de test.
+     */
+    ready: dbContext.ready,
     PG_TABLES_DDL: '',
     initPgTables: _removed('initPgTables'),
     createPGliteAdapter: _removed('createPGliteAdapter')

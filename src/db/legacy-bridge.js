@@ -44,7 +44,7 @@
  *                     updateDiscordMessage, deleteDiscordMessage
  */
 
-const legacy = require('../database.js');
+const legacy = require('./legacy-bridge-impl.js');
 
 // Réexport direct de la connexion pour les services qui utilisent `pool`
 // directement (ex. discordCacheService). Sera remplacé par injection via

@@ -1,15 +1,17 @@
 const assert = require('node:assert');
 
-vi.mock('../database.js', () => ({
-    archiveDiscordEvent: vi.fn().mockResolvedValue(undefined),
-    upsertDiscordChannel: vi.fn().mockResolvedValue(undefined),
-    upsertDiscordRole: vi.fn().mockResolvedValue(undefined),
-    upsertDiscordEmoji: vi.fn().mockResolvedValue(undefined),
-    upsertDiscordUser: vi.fn().mockResolvedValue(undefined),
-    upsertDiscordMember: vi.fn().mockResolvedValue(undefined),
-    softDeleteChannel: vi.fn().mockResolvedValue(undefined),
-    softDeleteRole: vi.fn().mockResolvedValue(undefined),
-    softDeleteEmoji: vi.fn().mockResolvedValue(undefined),
+vi.mock('../db/legacy-bridge.js', () => ({
+    legacy: {
+        archiveDiscordEvent: vi.fn().mockResolvedValue(undefined),
+        upsertDiscordChannel: vi.fn().mockResolvedValue(undefined),
+        upsertDiscordRole: vi.fn().mockResolvedValue(undefined),
+        upsertDiscordEmoji: vi.fn().mockResolvedValue(undefined),
+        upsertDiscordUser: vi.fn().mockResolvedValue(undefined),
+        upsertDiscordMember: vi.fn().mockResolvedValue(undefined),
+        softDeleteChannel: vi.fn().mockResolvedValue(undefined),
+        softDeleteRole: vi.fn().mockResolvedValue(undefined),
+        softDeleteEmoji: vi.fn().mockResolvedValue(undefined),
+    }
 }));
 
 vi.mock('./logger.js', () => ({

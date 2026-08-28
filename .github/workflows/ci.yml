@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v2, develop]
+  pull_request:
+    branches: [main, v2, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint DB references (no legacy database.js)
+        run: |
+          echo "=== Vérification : aucun import de database.js ==="
+          if grep -rn "require\(['\"][^'\"]*database\.js['\"]\)" src/ tests/ 2>/dev/null | grep -v "legacy-bridge"; then
+            echo "❌ Des imports de database.js subsistent !"
+            exit 1
+          fi
+          echo "✅ Aucun import legacy de database.js"
+
+      - name: Verify Drizzle migrations consistency (informational)
+        run: |
+          echo "=== Vérification : schema Drizzle vs migrations ==="
+          npx drizzle-kit generate --name=ci_check 2>&1 | tee /tmp/drizzle-out.log || true
+          if grep -i "generated.*migration" /tmp/drizzle-out.log; then
+            echo "⚠️  INFO: Le schema Drizzle diffère de la base de migrations."
+            echo "    Ce n'est pas bloquant tant que la migration baseline 0000"
+            echo "    est cohérente avec le code legacy (legacy-bridge-impl.js)."
+            echo "    Voir docs/plan/db-repository-split.md pour la roadmap."
+          else
+            echo "✅ Migrations à jour"
+          fi
+
+      - name: Run tests
+        run: npm test
+
+      - name: Coverage
+        run: npm run coverage

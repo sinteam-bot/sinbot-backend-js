@@ -6,7 +6,7 @@
  * sera isolé proprement en étape 3.
  */
 
-const pgSchema = require('../../../db/schema/pg.js');
+const pgSchema = require('../../../db/schemas/index.js');
 
 module.exports = {
     userBirthdays: pgSchema.userBirthdays,
