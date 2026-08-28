@@ -39,8 +39,12 @@ class DropReactionListener {
         const r = await this.inventory.claimDrop(drop.id, user.id);
         if (r.ok) {
             try {
-                await reaction.message.channel.send({ content: `🎉 <@${user.id}> a récupéré **${r.data.quantity}x** <:${reaction.emoji.name}:${reaction.emoji.id || ''}> !` }).catch(() => {});
-            } catch {}
+                await reaction.message.channel.send({ content: `🎉 <@${user.id}> a récupéré **${r.data.quantity}x** <:${reaction.emoji.name}:${reaction.emoji.id || ''}> !` }).catch(err => {
+                    console.warn('[DropReactionListener] Impossible d\'envoyer le message de confirmation:', err.message);
+                });
+            } catch (err) {
+                console.warn('[DropReactionListener] Erreur envoi confirmation drop:', err.message);
+            }
         }
     }
 }

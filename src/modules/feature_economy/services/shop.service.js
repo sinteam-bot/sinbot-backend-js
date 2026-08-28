@@ -92,17 +92,23 @@ class ShopService {
                     const member = await guild.members.fetch(userId).catch(() => null);
                     if (member) {
                         if (item.roleRewardId && !member.roles.cache.has(item.roleRewardId)) {
-                            await member.roles.add(item.roleRewardId).catch(() => {});
+                            await member.roles.add(item.roleRewardId).catch(err => {
+                                console.warn(`[ShopService] Impossible d'ajouter le rôle ${item.roleRewardId}:`, err.message);
+                            });
                         }
                         if (item.xpReward && item.xpReward > 0) {
                             try {
                                 const { addXP } = require('../../../database.js');
                                 await addXP(userId, member.user.username, item.xpReward, 'event', `Achat ${item.name}`);
-                            } catch {}
+                            } catch (err) {
+                                console.warn('[ShopService] Erreur ajout XP achat:', err.message);
+                            }
                         }
                     }
                 }
-            } catch {}
+            } catch (err) {
+                console.warn('[ShopService] Erreur traitement récompenses annexes:', err.message);
+            }
         }
 
         // Transfert d'inventaire type 'shop'

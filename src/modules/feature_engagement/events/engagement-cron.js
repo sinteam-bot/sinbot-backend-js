@@ -79,16 +79,22 @@ class EngagementCron {
             const msg = g.winners && g.winners.length
                 ? `🎉 Giveaway terminé ! **${g.prize}** remporté par : ${g.winners.map(id => `<@${id}>`).join(', ')}`
                 : `🎉 Giveaway terminé ! **${g.prize}** — aucun participant.`;
-            await channel.send({ content: msg }).catch(() => {});
+            await channel.send({ content: msg }).catch(err => {
+                console.warn('[EngagementCron] Échec envoi message fin giveaway:', err.message);
+            });
 
             if (g.messageId && (g.winners || []).length) {
                 try {
                     const original = await channel.messages.fetch(g.messageId).catch(() => null);
                     if (original) {
                         const updatedEmbed = await this.giveaway.buildUpdatedEmbed(g, await this.giveaway.countEntries(g.id));
-                        await original.edit({ embeds: [updatedEmbed] }).catch(() => {});
+                        await original.edit({ embeds: [updatedEmbed] }).catch(err => {
+                            console.warn('[EngagementCron] Échec mise à jour embed giveaway:', err.message);
+                        });
                     }
-                } catch {}
+                } catch (err) {
+                    console.warn('[EngagementCron] Erreur mise à jour message giveaway:', err.message);
+                }
             }
         } catch (err) {
             console.error(`[EngagementCron] announce giveaway ${g.id} failed: ${err.message}`);
@@ -106,7 +112,9 @@ class EngagementCron {
                 const original = await channel.messages.fetch(p.messageId).catch(() => null);
                 if (original) {
                     const embed = await this.poll.buildEmbed(p);
-                    await original.edit({ embeds: [embed], components: [] }).catch(() => {});
+                    await original.edit({ embeds: [embed], components: [] }).catch(err => {
+                        console.warn('[EngagementCron] Échec mise à jour embed sondage terminé:', err.message);
+                    });
                 }
             }
         } catch (err) {

@@ -55,8 +55,12 @@ class EngagementInteractionListener {
             const g = await this.giveaway.get(id);
             const count = await this.giveaway.countEntries(id);
             const updatedEmbed = await this.giveaway.buildUpdatedEmbed(g, count);
-            await interaction.message.edit({ embeds: [updatedEmbed] }).catch(() => {});
-        } catch {}
+            await interaction.message.edit({ embeds: [updatedEmbed] }).catch(err => {
+                console.warn('[EngagementListener] Échec edit message giveaway:', err.message);
+            });
+        } catch (err) {
+            console.warn('[EngagementListener] Erreur refresh compteur giveaway:', err.message);
+        }
 
         return interaction.reply({ content: '🎉 Tu participes au giveaway !', ephemeral: true });
     }
@@ -85,8 +89,12 @@ class EngagementInteractionListener {
             const p = await this.poll.get(pollId);
             const showResults = state.config?.polls?.show_results_after_vote !== false;
             const embed = await this.poll.buildEmbed(p, { showResults, voter: interaction.user.id });
-            await interaction.message.edit({ embeds: [embed] }).catch(() => {});
-        } catch {}
+            await interaction.message.edit({ embeds: [embed] }).catch(err => {
+                console.warn('[EngagementListener] Échec edit message sondage:', err.message);
+            });
+        } catch (err) {
+            console.warn('[EngagementListener] Erreur refresh sondage:', err.message);
+        }
 
         return interaction.reply({ content: '✅ Vote enregistré', ephemeral: true });
     }

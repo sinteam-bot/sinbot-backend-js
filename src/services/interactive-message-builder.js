@@ -306,7 +306,9 @@ class InteractiveMessageBuilder {
                     await member.roles.add(opt.roleId);
                     added.push(opt.roleId);
                 }
-            } catch {}
+            } catch (err) {
+                console.warn(`[InteractiveMessageBuilder] Impossible d'ajouter le rôle ${opt.roleId} au membre ${member?.id}:`, err.message);
+            }
         }
         return { ok: true, action: 'select_applied', added, count: added.length };
     }

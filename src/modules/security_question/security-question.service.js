@@ -161,7 +161,9 @@ class SecurityQuestionService {
             if (existing && existing.is_verified) {
                 const role = await this.getVerifiedRole(member.guild);
                 if (role) {
-                    await member.roles.add(role.id).catch(() => {});
+                    await member.roles.add(role.id).catch(err => {
+                        console.warn('[SecurityQuestion] Impossible d\'ajouter le rôle vérifié:', err.message);
+                    });
                 }
                 await sendCaptchaLog(member.guild, 'Déjà vérifié', `**${member.user.tag}** est déjà vérifié sur le serveur. Rôle appliqué directement.`, '#3498db', {
                     member,
@@ -201,7 +203,9 @@ class SecurityQuestionService {
             if (sentMsg) {
                 try {
                     await DiscordCacheService.cacheDiscordMessage(sentMsg);
-                } catch (_) {}
+                } catch (err) {
+                    console.debug('[SecurityQuestion] Erreur mise en cache message envoyé:', err.message);
+                }
             }
 
             console.log(`🔒 [SecurityQuestion] Captcha envoyé à ${member.user.tag} dans ${channel.name} : "${mathQuestion.question}" (Réponse: ${mathQuestion.answer})`);
@@ -227,7 +231,9 @@ class SecurityQuestionService {
         // Cacher le message de l'utilisateur pour l'historique
         try {
             await DiscordCacheService.cacheDiscordMessage(message);
-        } catch (_) {}
+        } catch (err) {
+            console.debug('[SecurityQuestion] Cache incoming message failed:', err.message);
+        }
 
         try {
             const captcha = await this.repo.getUserCaptcha(message.author.id, message.guild?.id);
@@ -236,7 +242,7 @@ class SecurityQuestionService {
             if (captcha.is_verified) {
                 const rep = await message.reply("Vous êtes déjà vérifié !");
                 if (rep) {
-                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[SecurityQuestion] Cache reply failed:', err.message); }
                 }
                 return true;
             }
@@ -245,7 +251,7 @@ class SecurityQuestionService {
             if (captcha.expires_at && new Date() > new Date(captcha.expires_at)) {
                 const rep = await message.reply("❌ Le temps imparti pour répondre au captcha a expiré.");
                 if (rep) {
-                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[SecurityQuestion] Cache reply failed:', err.message); }
                 }
                 return true;
             }
@@ -259,12 +265,14 @@ class SecurityQuestionService {
                 await this.repo.markVerified(message.author.id, message.guild.id);
                 const rep = await message.reply("✅ Bravo ! Vous avez validé le captcha avec succès.");
                 if (rep) {
-                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[SecurityQuestion] Cache reply failed:', err.message); }
                 }
 
                 const role = await this.getVerifiedRole(message.guild);
                 if (role && message.member) {
-                    await message.member.roles.add(role.id).catch(() => {});
+                    await message.member.roles.add(role.id).catch(err => {
+                        console.warn('[SecurityQuestion] Impossible d\'ajouter le rôle vérifié:', err.message);
+                    });
                 }
 
                 await sendCaptchaLog(message.guild, 'Succès captcha', `**${message.author.tag}** a résolu le captcha avec succès et a reçu le rôle vérifié.`, '#2ecc71', {
@@ -283,7 +291,9 @@ class SecurityQuestionService {
                 }
 
                 setTimeout(async () => {
-                    await message.channel.delete().catch(() => {});
+                    await message.channel.delete().catch(err => {
+                        console.warn('[SecurityQuestion] Impossible de supprimer le salon captcha:', err.message);
+                    });
                 }, 3000);
 
                 console.log(`✅ [SecurityQuestion] ${message.author.tag} a validé son captcha !`);
@@ -297,10 +307,12 @@ class SecurityQuestionService {
                 if (nextAttempts >= maxAttempts) {
                     const rep = await message.reply("❌ Trop de tentatives infructueuses. Vous allez être expulsé du serveur.");
                     if (rep) {
-                        try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
+                        try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[SecurityQuestion] Cache reply failed:', err.message); }
                     }
                     if (message.member) {
-                        await message.member.kick('Échec vérification captcha').catch(() => {});
+                        await message.member.kick('Échec vérification captcha').catch(err => {
+                            console.warn('[SecurityQuestion] Impossible de kick le membre:', err.message);
+                        });
                     }
                     await sendCaptchaLog(message.guild, 'Kick utilisateur', `**${message.author.tag}** a été expulsé du serveur suite au dépassement du nombre maximal de tentatives (**${nextAttempts}/${maxAttempts}**).`, '#e74c3c', {
                         member: message.member,
@@ -314,7 +326,9 @@ class SecurityQuestionService {
                     });
 
                     setTimeout(async () => {
-                        await message.channel.delete().catch(() => {});
+                        await message.channel.delete().catch(err => {
+                            console.warn('[SecurityQuestion] Impossible de supprimer le salon captcha:', err.message);
+                        });
                     }, 3000);
 
                     console.log(`🚫 [SecurityQuestion] ${message.author.tag} a dépassé les tentatives max et a été expulsé.`);
@@ -324,7 +338,7 @@ class SecurityQuestionService {
                 const remaining = maxAttempts - nextAttempts;
                 const rep = await message.reply(`❌ Réponse incorrecte. Il vous reste **${remaining}** tentative(s).`);
                 if (rep) {
-                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (_) {}
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[SecurityQuestion] Cache reply failed:', err.message); }
                 }
                 await sendCaptchaLog(message.guild, 'Tentative échouée', `**${message.author.tag}** a soumis une réponse incorrecte (\`${userAnswer}\`). Il lui reste **${remaining}** tentative(s).`, '#f39c12', {
                     member: message.member,

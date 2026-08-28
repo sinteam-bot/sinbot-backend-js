@@ -40,7 +40,9 @@ class EconomyModule {
                 this.shop.setClient(client);
                 this.inventory.setClient(client);
             }
-        } catch {}
+        } catch (err) {
+            console.warn('[EconomyModule] Erreur initialisation Client:', err.message);
+        }
         this._initialized = true;
     }
 }

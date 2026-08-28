@@ -89,7 +89,9 @@ class WordTriggerService {
                 try {
                     const re = new RegExp(t.triggerText, 'i');
                     if (re.test(content)) return t;
-                } catch {}
+                } catch (err) {
+                    console.warn(`[WordTriggerService] Regex invalide "${t.triggerText}":`, err.message);
+                }
             }
         }
         return null;

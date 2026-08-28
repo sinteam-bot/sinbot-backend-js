@@ -42,7 +42,9 @@ class TicketInteractionListener {
                 if (!interaction.replied && !interaction.deferred) {
                     await interaction.reply({ content: `❌ Erreur: ${err.message}`, ephemeral: true });
                 }
-            } catch {}
+            } catch (e) {
+                console.warn('[TicketInteractionListener] Impossible d\'envoyer le message d\'erreur éphémère:', e.message);
+            }
         }
     }
 
@@ -170,7 +172,9 @@ class TicketInteractionListener {
                 if (!this.permissions.isStaff(member, staffRoleIds))
                     return interaction.reply({ content: '❌ Réservé au staff', ephemeral: true });
                 const u = interaction.options.getUser('user');
-                await interaction.channel.permissionOverwrites.delete(u.id).catch(() => {});
+                await interaction.channel.permissionOverwrites.delete(u.id).catch(err => {
+                    console.warn('[TicketInteractionListener] Erreur suppression overwrite:', err.message);
+                });
                 return interaction.reply({ content: `✅ ${u.tag} retiré du ticket.` });
             }
 
@@ -214,12 +218,12 @@ class TicketInteractionListener {
 
         if (config?.settings?.auto_close_after_days) {
             setTimeout(async () => {
-                try { await channel.delete('Auto-close ticket'); } catch {}
+                try { await channel.delete('Auto-close ticket'); } catch (err) { console.warn('[TicketInteractionListener] Impossible de supprimer le salon ticket:', err.message); }
                 await this.ticketService.deleteByChannelId(channel.id);
             }, 5_000);
         } else {
             setTimeout(async () => {
-                try { await channel.delete('Ticket fermé'); } catch {}
+                try { await channel.delete('Ticket fermé'); } catch (err) { console.warn('[TicketInteractionListener] Impossible de supprimer le salon ticket:', err.message); }
                 await this.ticketService.deleteByChannelId(channel.id);
             }, 5_000);
         }

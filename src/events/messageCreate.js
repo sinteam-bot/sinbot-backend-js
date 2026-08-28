@@ -9,7 +9,9 @@ module.exports = {
         // Mettre en cache le message et son auteur en BDD
         try {
             DiscordCacheService.cacheDiscordMessage(message);
-        } catch (e) {}
+        } catch (e) {
+            console.warn('[messageCreate] Erreur mise en cache message:', e.message);
+        }
 
         // Ignorer les messages du bot lui-même
         if (message.author.bot) return;

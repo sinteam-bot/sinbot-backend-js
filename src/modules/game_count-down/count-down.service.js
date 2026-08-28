@@ -94,7 +94,9 @@ class CountDownService {
                     const obsyDemonEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYDEMON_ID) || EMOJI_OBSYDEMON_ID;
                     await message.react(obsyDemonEmoji);
                 } catch {
-                    await message.react('❌').catch(() => {});
+                    await message.react('❌').catch(err => {
+                        console.warn('[COUNTDOWN] Impossible de réagir au message:', err.message);
+                    });
                 }
 
                 const doublePostMsg = this.formatMessage(
@@ -125,7 +127,9 @@ class CountDownService {
                         const obsybonEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYBON_ID) || EMOJI_OBSYBON_ID;
                         await message.react(obsybonEmoji);
                     } catch {
-                        await message.react('✅').catch(() => {});
+                        await message.react('✅').catch(err => {
+                            console.warn('[COUNTDOWN] Impossible de réagir au message:', err.message);
+                        });
                     }
 
                     const dodgeMsg = this.formatMessage(
@@ -150,7 +154,9 @@ class CountDownService {
                         const obsydemoEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYDEMON_ID) || EMOJI_OBSYDEMON_ID;
                         await message.react(obsydemoEmoji);
                     } catch {
-                        await message.react('❌').catch(() => {});
+                        await message.react('❌').catch(err => {
+                            console.warn('[COUNTDOWN] Impossible de réagir au message:', err.message);
+                        });
                     }
 
                     const maxErrors = Math.max(1, parseInt(cdConfig.max_errors || 1, 10));
@@ -192,7 +198,9 @@ class CountDownService {
                     const obsybonEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYBON_ID) || EMOJI_OBSYBON_ID;
                     await message.react(obsybonEmoji);
                 } catch {
-                    await message.react('✅').catch(() => {});
+                    await message.react('✅').catch(err => {
+                        console.warn('[COUNTDOWN] Impossible de réagir au message:', err.message);
+                    });
                 }
 
                 await this.repo.addScore(COUNTDOWN_CHANNEL_ID, message.author.id, message.author.username);
@@ -257,7 +265,9 @@ class CountDownService {
                     const obsydemoEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYDEMON_ID) || EMOJI_OBSYDEMON_ID;
                     await message.react(obsydemoEmoji);
                 } catch {
-                    await message.react('❌').catch(() => {});
+                    await message.react('❌').catch(err => {
+                        console.warn('[COUNTDOWN] Impossible de réagir au message:', err.message);
+                    });
                 }
 
                 const maxErrors = Math.max(1, parseInt(cdConfig.max_errors || 1, 10));

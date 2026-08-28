@@ -679,7 +679,9 @@ async function logMemberEvent(userId, username, action, guildId, metadata = {}) 
                 if (existing && existing.username) {
                     safeUsername = existing.username;
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.warn('[Database] Impossible de récupérer le username pour logMemberEvent:', e.message);
+            }
         }
 
         safeUsername = safeUsername || 'Inconnu';
@@ -733,7 +735,9 @@ async function markMemberLeft(userId, username, guildId) {
                 if (existing && existing.username) {
                     safeUsername = existing.username;
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.warn('[Database] Impossible de récupérer le username pour markMemberLeft:', e.message);
+            }
         }
 
         safeUsername = safeUsername || 'Inconnu';

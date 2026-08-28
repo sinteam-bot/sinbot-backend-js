@@ -148,7 +148,9 @@ class LogsService extends EventEmitter {
 
         try {
             this.emit('log.published', entry);
-        } catch {}
+        } catch (err) {
+            console.warn('[LogsService] Erreur émission événement log.published:', err.message);
+        }
 
         if (guild && this._config?.format === 'embed') {
             try {
@@ -157,7 +159,9 @@ class LogsService extends EventEmitter {
                     const channel = await guild.channels.fetch(channelId).catch(() => null);
                     if (channel && channel.isTextBased()) {
                         const embed = this._buildEmbed(eventType, data);
-                        await channel.send({ embeds: [embed] }).catch(() => {});
+                        await channel.send({ embeds: [embed] }).catch(err => {
+                            console.warn('[LogsService] Impossible d\'envoyer l\'embed de log sur Discord:', err.message);
+                        });
                     }
                 }
             } catch (err) {

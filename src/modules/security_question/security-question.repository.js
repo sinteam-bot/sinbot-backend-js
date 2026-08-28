@@ -175,7 +175,9 @@ class SecurityQuestionRepository {
 
                     events = evtRows;
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.warn('[SecurityQuestionRepo] Erreur select discordEventsArchive:', e.message);
+            }
         }
 
         // Récupérer le captcha lié pour avoir le contexte (question/réponse)
@@ -216,10 +218,14 @@ class SecurityQuestionRepository {
                 let attachments = null;
                 try {
                     if (m.embedsJson) embeds = JSON.parse(m.embedsJson);
-                } catch (_) {}
+                } catch (err) {
+                    console.warn(`[SecurityQuestionRepo] Erreur parse embedsJson pour msg ${m.messageId}:`, err.message);
+                }
                 try {
                     if (m.attachmentsJson) attachments = JSON.parse(m.attachmentsJson);
-                } catch (_) {}
+                } catch (err) {
+                    console.warn(`[SecurityQuestionRepo] Erreur parse attachmentsJson pour msg ${m.messageId}:`, err.message);
+                }
 
                 return {
                     id: m.messageId,

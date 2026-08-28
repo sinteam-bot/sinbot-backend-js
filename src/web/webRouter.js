@@ -164,7 +164,9 @@ function createWebRouter(client) {
                         animated: r.animated === 1,
                         url: r.url
                     }));
-                } catch (e) {}
+                } catch (e) {
+                    logger.warn(`Échec fallback BDD pour les emojis: ${e.message}`, 'API');
+                }
             }
 
             res.json({ success: true, data: emojis });
@@ -496,9 +498,9 @@ function createWebRouter(client) {
                         let embeds = [];
                         let attachments = [];
                         let reactions = [];
-                        try { embeds = JSON.parse(row.embeds_json || '[]'); } catch (e) { }
-                        try { attachments = JSON.parse(row.attachments_json || '[]'); } catch (e) { }
-                        try { reactions = JSON.parse(row.reactions_json || '[]'); } catch (e) { }
+                        try { embeds = JSON.parse(row.embeds_json || '[]'); } catch (e) { logger.debug(`Erreur parse embeds_json pour msg ${row.message_id}: ${e.message}`, 'API'); }
+                        try { attachments = JSON.parse(row.attachments_json || '[]'); } catch (e) { logger.debug(`Erreur parse attachments_json pour msg ${row.message_id}: ${e.message}`, 'API'); }
+                        try { reactions = JSON.parse(row.reactions_json || '[]'); } catch (e) { logger.debug(`Erreur parse reactions_json pour msg ${row.message_id}: ${e.message}`, 'API'); }
 
                         return {
                             id: row.message_id,
@@ -583,7 +585,9 @@ function createWebRouter(client) {
             }
 
             if (channel.isThread && channel.isThread() && channel.archived) {
-                await channel.setArchived(false).catch(() => {});
+                await channel.setArchived(false).catch(err => {
+                    logger.warn(`Impossible de désarchiver le fil ${channel.id}: ${err.message}`, 'API');
+                });
             }
 
             const sentMessage = await channel.send(content.trim());
@@ -665,9 +669,14 @@ function createWebRouter(client) {
             const posts = await Promise.all(allThreads.map(async (th) => {
                 let starterContent = '';
                 try {
-                    const starter = await th.fetchStarterMessage().catch(() => null);
+                    const starter = await th.fetchStarterMessage().catch(err => {
+                        logger.debug(`Starter message non accessible pour fil ${th.id}: ${err.message}`, 'API');
+                        return null;
+                    });
                     if (starter) starterContent = starter.content || '';
-                } catch (e) { }
+                } catch (e) {
+                    logger.debug(`Erreur fetchStarterMessage fil ${th.id}: ${e.message}`, 'API');
+                }
 
                 let owner = { id: th.ownerId, username: 'Membre', avatar: 'https://cdn.discordapp.com/embed/avatars/0.png' };
                 if (th.ownerId && th.guild) {
@@ -814,7 +823,9 @@ function createWebRouter(client) {
                     'UPDATE discord_messages SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE message_id = ?',
                     [editedContent, messageId]
                 );
-            } catch (e) { }
+            } catch (e) {
+                logger.warn(`Échec mise à jour BDD message ${messageId}: ${e.message}`, 'WEB');
+            }
 
             res.json({
                 success: true,
@@ -859,7 +870,9 @@ function createWebRouter(client) {
                     'DELETE FROM discord_messages WHERE message_id = ?',
                     [messageId]
                 );
-            } catch (e) { }
+            } catch (e) {
+                logger.warn(`Échec suppression BDD message ${messageId}: ${e.message}`, 'WEB');
+            }
 
             res.json({
                 success: true,
@@ -948,7 +961,9 @@ function createWebRouter(client) {
             if (guild) {
                 try {
                     await guild.members.fetch();
-                } catch (e) { }
+                } catch (e) {
+                    logger.warn(`Échec fetch guild.members: ${e.message}`, 'API');
+                }
 
                 const members = guild.members.cache;
                 members.forEach(member => {
@@ -1009,7 +1024,7 @@ function createWebRouter(client) {
 
                 membersList = dbRes.rows.map(row => {
                     let roles = [];
-                    try { roles = JSON.parse(row.roles || '[]'); } catch (e) { }
+                    try { roles = JSON.parse(row.roles || '[]'); } catch (e) { logger.debug(`Erreur parse roles pour membre ${row.user_id}: ${e.message}`, 'API'); }
                     const avatar = row.avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png';
                     const highestRole = row.highest_role_id ? {
                         id: row.highest_role_id,
@@ -1061,7 +1076,9 @@ function createWebRouter(client) {
                         m.voiceMinutes = m.voiceMinutes || 0;
                     }
                 });
-            } catch (e) { }
+            } catch (e) {
+                logger.warn(`Impossible de récupérer user_xp pour les utilisateurs: ${e.message}`, 'API');
+            }
 
             // Filtrage par texte de recherche
             if (search) {
@@ -1185,7 +1202,9 @@ function createWebRouter(client) {
                         hoist: r.hoist === 1,
                         memberCount: r.member_count || 0
                     }));
-                } catch (e) {}
+                } catch (e) {
+                    logger.warn(`Échec fallback BDD pour les rôles: ${e.message}`, 'API');
+                }
             }
 
             res.json({ success: true, data: rolesList });
@@ -1290,7 +1309,9 @@ function createWebRouter(client) {
             let pending = null;
             try {
                 pending = await dailyService.getPendingDraft();
-            } catch (e) { }
+            } catch (e) {
+                logger.warn(`Impossible de récupérer le brouillon daily message: ${e.message}`, 'API');
+            }
 
             // 2. Récupérer l'historique complet depuis openaimessages
             const query = `

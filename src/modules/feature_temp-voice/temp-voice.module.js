@@ -35,7 +35,9 @@ class TempVoiceModule {
                 if (this.listener) this.listener.setClient(client);
                 if (this.cleanup) this.cleanup.setClient(client);
             }
-        } catch {}
+        } catch (err) {
+            console.warn('[TempVoiceModule] Erreur initialisation Client:', err.message);
+        }
         this._initialized = true;
     }
 }

@@ -30,7 +30,9 @@ class ReportsModule {
             const { container } = require('../../core/index.js');
             const client = container.has('Client') ? container.resolve('Client') : null;
             if (client && this.listener) this.listener.setClient(client);
-        } catch {}
+        } catch (err) {
+            console.warn('[ReportsModule] Erreur initialisation Client:', err.message);
+        }
         this._initialized = true;
     }
 }

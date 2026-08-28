@@ -27,8 +27,10 @@ class InfoModule {
         try {
             const { container } = require('../../core/index.js');
             const client = container.has('Client') ? container.resolve('Client') : null;
-            if (client) this.info.setClient(client);
-        } catch {}
+            if (client && this.info) this.info.setClient(client);
+        } catch (err) {
+            console.warn('[InfoModule] Erreur initialisation Client:', err.message);
+        }
         this._initialized = true;
     }
 }

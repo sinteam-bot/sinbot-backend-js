@@ -29,8 +29,10 @@ class StickyRolesModule {
         try {
             const { container } = require('../../core/index.js');
             const client = container.has('Client') ? container.resolve('Client') : null;
-            if (client) this.service.setClient(client);
-        } catch {}
+            if (client && this.service) this.service.setClient(client);
+        } catch (err) {
+            console.warn('[StickyRolesModule] Erreur initialisation Client:', err.message);
+        }
         this._initialized = true;
     }
 }

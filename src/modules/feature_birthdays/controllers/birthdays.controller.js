@@ -23,7 +23,9 @@ function getEffectiveGuildId(req) {
         if (!defaultGuildId && client?.guilds?.cache?.size > 0) {
             defaultGuildId = client.guilds.cache.first().id;
         }
-    } catch {}
+    } catch (err) {
+        console.warn('[BirthdaysController] Impossible de déduire la guilde par défaut:', err.message);
+    }
     return req.query?.guild_id || req.body?.guildId || req.body?.guild_id || defaultGuildId;
 }
 

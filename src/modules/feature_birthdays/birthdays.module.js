@@ -31,7 +31,9 @@ class BirthdaysModule {
             const { container } = require('../../core/index.js');
             const client = container.has('Client') ? container.resolve('Client') : null;
             if (client && this.announcer) this.announcer.setClient(client);
-        } catch {}
+        } catch (err) {
+            console.warn('[BirthdaysModule] Erreur initialisation Client:', err.message);
+        }
         this._initialized = true;
     }
 }

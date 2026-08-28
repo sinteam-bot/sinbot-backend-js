@@ -58,7 +58,9 @@ class ReportsListener {
         );
         try {
             await message.editReply?.(); // no-op for non-interaction
-        } catch {}
+        } catch (err) {
+            console.debug('[ReportsListener] editReply no-op:', err.message);
+        }
         // Note: Discord n'autorise pas d'éditer un message d'un bot
         // pour ajouter un bouton. À la place, on stocke un cache
         // messageId->[userId] et on édite le message si le bot l'a écrit.

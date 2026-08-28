@@ -43,7 +43,9 @@ class EngagementModule {
         try {
             const { container } = require('../../core/index.js');
             if (container.has(Class)) return container.resolve(Class);
-        } catch {}
+        } catch (err) {
+            console.warn(`[EngagementModule] Erreur résolution ${Class?.name || 'classe'}:`, err.message);
+        }
         return null;
     }
 }

@@ -37,7 +37,7 @@ function attachLogsWs(httpServer, logsService, authConfig = {}) {
         const payload = JSON.stringify({ type: 'log', entry });
         for (const ws of clients) {
             if (ws.readyState === 1) {
-                try { ws.send(payload); } catch {}
+                try { ws.send(payload); } catch (err) { console.debug('[WSLogs] Erreur envoi payload WS:', err.message); }
             }
         }
     };

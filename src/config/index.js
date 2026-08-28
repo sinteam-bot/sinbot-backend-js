@@ -361,7 +361,7 @@ function saveConfig(newConfig) {
         console.log(`💾 [Config] Configuration sauvegardée avec succès dans ${targetFile}`);
     } catch (err) {
         if (fs.existsSync(tmpFile)) {
-            try { fs.unlinkSync(tmpFile); } catch (e) {}
+            try { fs.unlinkSync(tmpFile); } catch (e) { console.warn('[Config] Impossible de supprimer le fichier temporaire:', e.message); }
         }
         throw err;
     }

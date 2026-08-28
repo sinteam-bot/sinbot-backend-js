@@ -155,7 +155,11 @@ Cron('0 0 * * *', { timezone: 'Europe/Paris' })(BirthdayAnnouncer.prototype, 'cl
 BirthdayAnnouncer.prototype.cleanupAllTempRoles = async function() {
     if (!this._client) return;
     for (const guild of this._client.guilds.cache.values()) {
-        try { await this.cleanupTempRoles(guild.id); } catch {}
+        try {
+            await this.cleanupTempRoles(guild.id);
+        } catch (err) {
+            console.warn(`[BirthdayAnnouncer] Erreur nettoyage rôles temporaires pour la guilde ${guild.id}:`, err.message);
+        }
     }
 };
 

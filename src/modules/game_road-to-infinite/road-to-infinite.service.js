@@ -74,7 +74,9 @@ class RoadToInfiniteService {
                     const obsyDemonEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYDEMON_ID) || EMOJI_OBSYDEMON_ID;
                     await message.react(obsyDemonEmoji);
                 } catch {
-                    await message.react('❌').catch(() => {});
+                    await message.react('❌').catch(err => {
+                        console.warn('[COUNTER] Impossible de réagir au message:', err.message);
+                    });
                 }
 
                 const doublePostMsg = this.formatMessage(
@@ -107,7 +109,9 @@ class RoadToInfiniteService {
                     const obsybonEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYBON_ID) || EMOJI_OBSYBON_ID;
                     await message.react(obsybonEmoji);
                 } catch {
-                    await message.react('✅').catch(() => {});
+                    await message.react('✅').catch(err => {
+                        console.warn('[COUNTER] Impossible de réagir au message:', err.message);
+                    });
                 }
 
                 console.log(`🔢 [COUNTER] ${message.author.tag} a validé le nombre ${expectedNumber}`);
@@ -118,7 +122,9 @@ class RoadToInfiniteService {
                     const obsyDemonEmoji = message.guild?.emojis.cache.get(EMOJI_OBSYDEMON_ID) || EMOJI_OBSYDEMON_ID;
                     await message.react(obsyDemonEmoji);
                 } catch {
-                    await message.react('❌').catch(() => {});
+                    await message.react('❌').catch(err => {
+                        console.warn('[COUNTER] Impossible de réagir au message:', err.message);
+                    });
                 }
 
                 const maxErrors = Math.max(1, parseInt(counterConfig.max_errors || 1, 10));

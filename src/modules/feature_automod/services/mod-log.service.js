@@ -60,7 +60,9 @@ class ModLog {
                     if (metadata.duration_ms) {
                         embed.addFields({ name: 'Durée', value: this._formatDuration(metadata.duration_ms), inline: true });
                     }
-                    await channel.send({ embeds: [embed] }).catch(() => {});
+                    await channel.send({ embeds: [embed] }).catch(err => {
+                        console.warn('[ModLog] Impossible d\'envoyer l\'embed de mod-log:', err.message);
+                    });
                 }
             } catch (err) {
                 console.error(`[ModLog] Embed send failed: ${err.message}`);

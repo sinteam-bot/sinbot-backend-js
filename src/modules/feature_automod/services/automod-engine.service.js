@@ -98,7 +98,9 @@ class AutomodEngine {
         const config = { rule, reason };
         try {
             if (action === 'delete' || action === 'delete_warn') {
-                await message.delete().catch(() => {});
+                await message.delete().catch(err => {
+                    console.warn('[AutoModEngine] Impossible de supprimer le message enfreignant:', err.message);
+                });
             }
             if (action === 'warn' || action === 'delete_warn') {
                 await this.sanctions.warn(message.guild, message.author, message.client.user, reason, 'automod', rule);

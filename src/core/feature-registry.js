@@ -200,7 +200,9 @@ class FeatureRegistry {
 
         try {
             eventBus.emit('feature.updated', { guildId, name, enabled: newEnabled });
-        } catch {}
+        } catch (err) {
+            console.warn(`[FeatureRegistry] Erreur émission event 'feature.updated':`, err.message);
+        }
 
         return {
             enabled: newEnabled,

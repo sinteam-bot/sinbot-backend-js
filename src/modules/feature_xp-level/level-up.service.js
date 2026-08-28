@@ -113,7 +113,9 @@ class LevelUpService {
         if (cfg.dm_user) {
             try {
                 await user.send({ embeds: [embed] });
-            } catch {}
+            } catch (err) {
+                console.debug(`[LevelUpService] Impossible d'envoyer un DM de level-up à ${user.id} (DMs fermés):`, err.message);
+            }
         }
     }
 

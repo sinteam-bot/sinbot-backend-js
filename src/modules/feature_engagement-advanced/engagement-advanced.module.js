@@ -38,7 +38,9 @@ class EngagementAdvancedModule {
                 this.reminder.setClient(client);
                 this.cron.setClient(client);
             }
-        } catch {}
+        } catch (err) {
+            console.warn('[EngagementAdvancedModule] Erreur initialisation Client:', err.message);
+        }
         this._initialized = true;
     }
 }

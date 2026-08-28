@@ -90,7 +90,9 @@ class TicketManagerService {
         if (config?.settings?.ping_staff_on_open && config?.settings?.staff_role_to_ping) {
             try {
                 await channel.send({ content: `<@&${config.settings.staff_role_to_ping}>`, allowedMentions: { roles: [config.settings.staff_role_to_ping] } });
-            } catch {}
+            } catch (err) {
+                console.warn('[TicketManager] Impossible de ping le rôle staff:', err.message);
+            }
         }
 
         return { ticket, channel };

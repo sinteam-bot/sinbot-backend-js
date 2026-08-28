@@ -29,8 +29,8 @@ class MessageCreateListener {
     async _ensureCache(guildId) {
         if (this._cacheReady) return;
         await Promise.all([
-            this.triggers.loadCache(guildId).catch(() => {}),
-            this.customs.loadCache(guildId).catch(() => {})
+            this.triggers.loadCache(guildId).catch(err => console.warn('[MessageCreateListener] Erreur cache triggers:', err.message)),
+            this.customs.loadCache(guildId).catch(err => console.warn('[MessageCreateListener] Erreur cache custom commands:', err.message))
         ]);
         this._cacheReady = true;
     }

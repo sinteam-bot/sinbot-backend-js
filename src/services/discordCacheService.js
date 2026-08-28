@@ -214,9 +214,13 @@ class DiscordCacheService {
         try {
             try {
                 if (typeof guild.members.fetch === 'function') {
-                    await guild.members.fetch().catch(() => {});
+                    await guild.members.fetch().catch(err => {
+                        logger.warn(`Échec fetch des membres pour la guilde ${guild.id}: ${err.message}`, 'CACHE');
+                    });
                 }
-            } catch (e) {}
+            } catch (e) {
+                logger.warn(`Erreur lors de la tentative de fetch des membres: ${e.message}`, 'CACHE');
+            }
 
             const members = Array.from(guild.members.cache.values());
             if (members.length === 0) return 0;

@@ -70,7 +70,9 @@ class TempVoiceListener {
                 if (ch && ch.members && ch.members.size === 0) {
                     await this.service.markEmpty(oldChannel.id);
                 }
-            } catch {}
+            } catch (err) {
+                console.warn('[TempVoiceListener] Erreur vérification salon vocal vide:', err.message);
+            }
             return;
         }
     }
@@ -142,7 +144,9 @@ class TempVoiceListener {
             try {
                 const creator = await guild.members.fetch(state.creatorId);
                 displayName = creator?.user?.globalName || creator?.user?.username || state.creatorId;
-            } catch {}
+            } catch (err) {
+                console.debug('[TempVoiceListener] Impossible de fetch créateur vocal:', err.message);
+            }
             const newName = this.service.computeSuffixName(
                 this.service.computeChannelName(
                     { globalName: displayName, username: displayName },
@@ -151,10 +155,12 @@ class TempVoiceListener {
                 count
             );
             if (newName && newName !== channel.name) {
-                await channel.setName(newName).catch(() => {});
+                await channel.setName(newName).catch(err => {
+                    console.warn('[TempVoiceListener] Impossible de renommer le salon vocal:', err.message);
+                });
             }
         } catch (err) {
-            // rename silencieux
+            console.warn('[TempVoiceListener] Erreur _maybeRename:', err.message);
         }
     }
 }

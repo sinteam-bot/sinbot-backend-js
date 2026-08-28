@@ -26,52 +26,53 @@ class DiscordEventBus extends EventEmitter {
         // Attacher les écouteurs de mise en cache BDD en temps réel avec Soft Delete
         try {
             const DiscordCacheService = require('../services/discordCacheService.js');
+            const onErr = (action) => (err) => console.warn(`[EventBus] Erreur cache Discord (${action}):`, err.message);
 
             discordClient.on('guildMemberAdd', member => {
-                DiscordCacheService.cacheSingleMember(member).catch(() => {});
+                DiscordCacheService.cacheSingleMember(member).catch(onErr('guildMemberAdd'));
             });
             discordClient.on('guildMemberUpdate', (oldM, newM) => {
-                DiscordCacheService.cacheSingleMember(newM).catch(() => {});
+                DiscordCacheService.cacheSingleMember(newM).catch(onErr('guildMemberUpdate'));
             });
             discordClient.on('guildMemberRemove', member => {
-                DiscordCacheService.softDeleteMember(member.id).catch(() => {});
+                DiscordCacheService.softDeleteMember(member.id).catch(onErr('guildMemberRemove'));
             });
             discordClient.on('roleCreate', role => {
-                if (role.guild) DiscordCacheService.cacheGuildRoles(role.guild).catch(() => {});
+                if (role.guild) DiscordCacheService.cacheGuildRoles(role.guild).catch(onErr('roleCreate'));
             });
             discordClient.on('roleUpdate', (oldR, newR) => {
-                if (newR.guild) DiscordCacheService.cacheGuildRoles(newR.guild).catch(() => {});
+                if (newR.guild) DiscordCacheService.cacheGuildRoles(newR.guild).catch(onErr('roleUpdate'));
             });
             discordClient.on('roleDelete', role => {
-                DiscordCacheService.softDeleteRole(role.id).catch(() => {});
+                DiscordCacheService.softDeleteRole(role.id).catch(onErr('roleDelete'));
             });
             discordClient.on('emojiCreate', emoji => {
-                if (emoji.guild) DiscordCacheService.cacheGuildEmojis(emoji.guild).catch(() => {});
+                if (emoji.guild) DiscordCacheService.cacheGuildEmojis(emoji.guild).catch(onErr('emojiCreate'));
             });
             discordClient.on('emojiUpdate', (oldE, newE) => {
-                if (newE.guild) DiscordCacheService.cacheGuildEmojis(newE.guild).catch(() => {});
+                if (newE.guild) DiscordCacheService.cacheGuildEmojis(newE.guild).catch(onErr('emojiUpdate'));
             });
             discordClient.on('emojiDelete', emoji => {
-                DiscordCacheService.softDeleteEmoji(emoji.id).catch(() => {});
+                DiscordCacheService.softDeleteEmoji(emoji.id).catch(onErr('emojiDelete'));
             });
             discordClient.on('channelCreate', ch => {
-                if (ch.guild) DiscordCacheService.cacheGuildChannels(ch.guild).catch(() => {});
+                if (ch.guild) DiscordCacheService.cacheGuildChannels(ch.guild).catch(onErr('channelCreate'));
             });
             discordClient.on('channelUpdate', (oldC, newC) => {
-                if (newC.guild) DiscordCacheService.cacheGuildChannels(newC.guild).catch(() => {});
+                if (newC.guild) DiscordCacheService.cacheGuildChannels(newC.guild).catch(onErr('channelUpdate'));
             });
             discordClient.on('channelDelete', ch => {
-                DiscordCacheService.softDeleteChannel(ch.id).catch(() => {});
+                DiscordCacheService.softDeleteChannel(ch.id).catch(onErr('channelDelete'));
             });
             discordClient.on('threadDelete', thread => {
-                DiscordCacheService.softDeleteChannel(thread.id).catch(() => {});
+                DiscordCacheService.softDeleteChannel(thread.id).catch(onErr('threadDelete'));
             });
             discordClient.on('messageDelete', message => {
-                DiscordCacheService.softDeleteMessage(message.id).catch(() => {});
+                DiscordCacheService.softDeleteMessage(message.id).catch(onErr('messageDelete'));
             });
             discordClient.on('messageDeleteBulk', messages => {
                 const ids = Array.from(messages.keys ? messages.keys() : messages.map(m => m.id));
-                DiscordCacheService.softDeleteMessages(ids).catch(() => {});
+                DiscordCacheService.softDeleteMessages(ids).catch(onErr('messageDeleteBulk'));
             });
         } catch (err) {
             console.error('⚠️ [EventBus] Impossible d\'attacher les écouteurs de cache BDD:', err.message);
