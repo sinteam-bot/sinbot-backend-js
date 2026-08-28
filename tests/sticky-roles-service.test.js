@@ -1,5 +1,4 @@
 /**
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the StickyRolesService (Phase 8)
  */
 

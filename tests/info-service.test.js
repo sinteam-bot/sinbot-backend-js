@@ -1,5 +1,5 @@
 /**
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
+const { test, describe, beforeEach, afterEach } = require('node:test');
  * Tests for the InfoService (Phase 8.3)
  */
 

@@ -1,5 +1,4 @@
 const assert = require('node:assert');
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const { container } = require('../src/core/container.js');
 const { SecurityQuestionRepository } = require('../src/modules/security_question/security-question.repository.js');
 const { SecurityQuestionService } = require('../src/modules/security_question/security-question.service.js');

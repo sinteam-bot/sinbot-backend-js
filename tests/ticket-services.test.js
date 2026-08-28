@@ -1,5 +1,4 @@
 /**
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests pour les services Tickets (Phase 3)
  */
 

@@ -1,5 +1,4 @@
 const assert = require('node:assert');
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const templateEngine = require('../src/utils/templateEngine.js');
 const { DiscordTemplateEngine } = require('../src/utils/templateEngine.js');
 

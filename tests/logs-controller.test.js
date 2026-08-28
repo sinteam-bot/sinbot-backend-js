@@ -1,5 +1,4 @@
 /**
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * HTTP integration tests for LogsController
  *
  * On mock les services via stub pour tester le routage et la

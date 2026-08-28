@@ -1,5 +1,4 @@
 /**
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the BirthdayService (Phase 7)
  *
  * Couvre :

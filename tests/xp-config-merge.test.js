@@ -1,5 +1,4 @@
 /**
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the deep-merge logic in XPLevelController.updateConfig
  *
  * The controller is not directly exported with _deepMerge as a public

@@ -1,5 +1,4 @@
 const assert = require('node:assert');
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const logger = require('../src/utils/logger.js');
 
 describe('BotLogger & Winston-Style Source Localization Tests', () => {

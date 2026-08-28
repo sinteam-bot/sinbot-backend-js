@@ -1,5 +1,4 @@
 const assert = require('node:assert');
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const { ImageProxyService } = require('../src/services/imageProxyService.js');
 
 describe('ImageProxyService Tests', () => {

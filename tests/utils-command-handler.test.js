@@ -1,5 +1,4 @@
 const assert = require('node:assert');
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const { loadCommands, executeCommand, checkCommandPermissions } = require('../src/utils/commandHandler.js');
 
 describe('Command Handler Utilities Tests', () => {

@@ -1,5 +1,4 @@
 /**
-const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests d'intégration pour featuresRouter
  *
  * On mock le FeatureRegistry via Module._cache pour qu'il utilise une instance
