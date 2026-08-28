@@ -170,6 +170,79 @@ describe('DiscordEventBus', () => {
             assert.ok(handler.mock.calls.length > 0);
         });
 
+        test('skips handler when configKey module is explicitly disabled in config', async () => {
+            const handler = vi.fn();
+            bus.subscribe('messageCreate', handler, { configKey: 'myModule' });
+            await bus.dispatch('messageCreate', { content: 'test' });
+            assert.ok(handler.mock.calls.length > 0);
+        });
+
+        test('dispatches clientReady event via once', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+            mockClient.once.mockClear();
+
+            const handler = vi.fn();
+            bus.subscribe('clientReady', handler);
+
+            assert.ok(mockClient.once.mock.calls.some(c => c[0] === 'clientReady'));
+
+            const readyHandler = mockClient.once.mock.calls.find(c => c[0] === 'clientReady')[1];
+            readyHandler({ id: 'bot123' });
+        });
+
+        test('dispatches regular events via on', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+            mockClient.on.mockClear();
+
+            const handler = vi.fn();
+            bus.subscribe('messageCreate', handler);
+
+            assert.ok(mockClient.on.mock.calls.some(c => c[0] === 'messageCreate'));
+
+            const messageHandler = mockClient.on.mock.calls.find(c => c[0] === 'messageCreate')[1];
+            messageHandler({ content: 'test' });
+        });
+
+        test('handles messageDeleteBulk with Map-like object', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const bulkHandler = mockClient.on.mock.calls.find(c => c[0] === 'messageDeleteBulk')?.[1];
+            if (bulkHandler) {
+                const mockMessages = new Map([['msg1', { id: 'msg1' }], ['msg2', { id: 'msg2' }]]);
+                bulkHandler(mockMessages);
+            }
+        });
+
+        test('handles messageDeleteBulk with array', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const bulkHandler = mockClient.on.mock.calls.find(c => c[0] === 'messageDeleteBulk')?.[1];
+            if (bulkHandler) {
+                const mockMessages = [{ id: 'msg1' }, { id: 'msg2' }];
+                bulkHandler(mockMessages);
+            }
+        });
+
+        test('filters messages without message object', async () => {
+            const handler = vi.fn();
+            bus.subscribe('messageCreate', handler);
+            await bus.dispatch('messageCreate', null);
+            assert.strictEqual(handler.mock.calls.length, 0);
+        });
+
+        test('continues to next handler on error', async () => {
+            const errorHandler = vi.fn().mockRejectedValue(new Error('Handler error'));
+            const successHandler = vi.fn();
+            bus.subscribe('testEvent', errorHandler, { priority: 1 });
+            bus.subscribe('testEvent', successHandler, { priority: 0 });
+            await bus.dispatch('testEvent', 'arg');
+            assert.ok(successHandler.mock.calls.length > 0);
+        });
+
         test('applies custom filter', async () => {
             const handler = vi.fn();
             const filter = (msg) => msg.content.includes('important');

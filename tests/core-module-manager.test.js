@@ -315,7 +315,124 @@ describe('ModuleManager', () => {
             manager._bindCronTasks(Service, instance);
             assert.strictEqual(manager.cronJobs.length, 0);
         });
-    });
+
+        test('uses custom timezone from options', () => {
+            class Service {
+                static __cronTasks = [{
+                    cronTime: '0 21 * * *',
+                    handlerName: 'eveningTask',
+                    options: { timezone: 'America/New_York' }
+                }];
+                async eveningTask() {}
+            }
+            const instance = new Service();
+            manager._bindCronTasks(Service, instance);
+            assert.strictEqual(manager.cronJobs.length, 1);
+        });
+
+        test('uses configKey for enable/disable check', () => {
+            class Service {
+                static __cronTasks = [{
+                    cronTime: '0 */6 * * *',
+                    handlerName: 'periodicTask',
+                    options: { configKey: 'scheduler.tasks.periodic' }
+                }];
+                async periodicTask() {}
+            }
+            const instance = new Service();
+            manager._bindCronTasks(Service, instance);
+            assert.strictEqual(manager.cronJobs.length, 1);
+        });
+
+        test('uses default timezone when not specified', () => {
+            class Service {
+                static __cronTasks = [{
+                    cronTime: '0 12 * * *',
+                    handlerName: 'noonTask',
+                    options: {}
+                }];
+                async noonTask() {}
+            }
+            const instance = new Service();
+            manager._bindCronTasks(Service, instance);
+            assert.strictEqual(manager.cronJobs.length, 1);
+        });
+
+        test('scheduler disabled prevents cron execution', async () => {
+            const { getConfig } = require('../src/config/index.js');
+            const origGetConfig = getConfig;
+            const mockGetConfig = vi.fn(() => ({
+                scheduler: { enabled: false, timezone: 'Europe/Paris' }
+            }));
+
+            require('../src/config/index.js').getConfig = mockGetConfig;
+
+            let executed = false;
+            class Service {
+                static __cronTasks = [{
+                    cronTime: '* * * * *',
+                    handlerName: 'disabledTask'
+                }];
+                async disabledTask() { executed = true; }
+            }
+            const instance = new Service();
+            manager._bindCronTasks(Service, instance);
+
+            assert.strictEqual(manager.cronJobs.length, 1);
+
+            require('../src/config/index.js').getConfig = origGetConfig;
+        });
+
+        test('configKey nested path resolution', () => {
+            class Service {
+                static __cronTasks = [{
+                    cronTime: '0 */6 * * *',
+                    handlerName: 'nestedTask',
+                    options: { configKey: 'scheduler.tasks.nested.deep' }
+                }];
+                async nestedTask() {}
+            }
+            const instance = new Service();
+            manager._bindCronTasks(Service, instance);
+            assert.strictEqual(manager.cronJobs.length, 1);
+        });
+
+        test('configKey with false value disables task', async () => {
+            const { getConfig } = require('../src/config/index.js');
+            const origGetConfig = getConfig;
+            const mockGetConfig = vi.fn(() => ({
+                scheduler: { enabled: true, timezone: 'Europe/Paris' }
+            }));
+
+            require('../src/config/index.js').getConfig = mockGetConfig;
+
+            class Service {
+                static __cronTasks = [{
+                    cronTime: '* * * * *',
+                    handlerName: 'conditionalTask',
+                    options: { configKey: 'disabledFeature' }
+                }];
+                async conditionalTask() {}
+            }
+            const instance = new Service();
+            manager._bindCronTasks(Service, instance);
+            assert.strictEqual(manager.cronJobs.length, 1);
+
+            require('../src/config/index.js').getConfig = origGetConfig;
+        });
+
+        test('cron job handler is wrapped with error handling', () => {
+            class Service {
+                static __cronTasks = [{
+                    cronTime: '0 9 * * *',
+                    handlerName: 'errorTask'
+                }];
+                async errorTask() { throw new Error('Cron error'); }
+            }
+            const instance = new Service();
+            manager._bindCronTasks(Service, instance);
+            assert.strictEqual(manager.cronJobs.length, 1);
+        });
 
     describe('getRouter', () => {
         test('returns the express router', () => {

@@ -152,4 +152,171 @@ describe('FeatureRegistry', () => {
             assert.deepStrictEqual(names, ['a', 'b']);
         });
     });
+
+    describe('canUse (role checks)', () => {
+        let origResolve;
+        let origHas;
+
+        beforeEach(() => {
+            const { container } = require('../src/core/container.js');
+            origResolve = container.resolve;
+            origHas = container.has;
+        });
+
+        afterEach(() => {
+            const { container } = require('../src/core/container.js');
+            container.resolve = origResolve;
+            container.has = origHas;
+        });
+
+        test('returns not_member when member not found', async () => {
+            registry.define('test_feature', {
+                defaults: { enabled: true, allowed_roles: ['role1'] }
+            });
+
+            const mockGuild = {
+                members: {
+                    fetch: vi.fn().mockResolvedValue(null)
+                }
+            };
+            const mockClient = {
+                guilds: {
+                    fetch: vi.fn().mockResolvedValue(mockGuild)
+                }
+            };
+
+            const { container } = require('../src/core/container.js');
+            container.has = (token) => token === 'Client';
+            container.resolve = (token) => {
+                if (token === 'Client') return mockClient;
+                return origResolve(token);
+            };
+
+            const result = await registry.canUse('guild1', 'user1', 'test_feature');
+            assert.strictEqual(result.allowed, false);
+            assert.strictEqual(result.reason, 'not_member');
+        });
+
+        test('returns missing_role when user lacks required role', async () => {
+            registry.define('role_feature', {
+                defaults: { enabled: true, allowed_roles: ['role1', 'role2'] }
+            });
+
+            const mockMember = {
+                roles: {
+                    cache: new Map([['other_role', {}]])
+                }
+            };
+            const mockGuild = {
+                members: {
+                    fetch: vi.fn().mockResolvedValue(mockMember)
+                }
+            };
+            const mockClient = {
+                guilds: {
+                    fetch: vi.fn().mockResolvedValue(mockGuild)
+                }
+            };
+
+            const { container } = require('../src/core/container.js');
+            container.has = (token) => token === 'Client';
+            container.resolve = (token) => {
+                if (token === 'Client') return mockClient;
+                return origResolve(token);
+            };
+
+            const result = await registry.canUse('guild1', 'user1', 'role_feature');
+            assert.strictEqual(result.allowed, false);
+            assert.strictEqual(result.reason, 'missing_role');
+        });
+
+        test('returns role_match when user has required role', async () => {
+            registry.define('role_feature', {
+                defaults: { enabled: true, allowed_roles: ['role1', 'role2'] }
+            });
+
+            const mockMember = {
+                roles: {
+                    cache: new Map([['role1', {}], ['other', {}]])
+                }
+            };
+            const mockGuild = {
+                members: {
+                    fetch: vi.fn().mockResolvedValue(mockMember)
+                }
+            };
+            const mockClient = {
+                guilds: {
+                    fetch: vi.fn().mockResolvedValue(mockGuild)
+                }
+            };
+
+            const { container } = require('../src/core/container.js');
+            container.has = (token) => token === 'Client';
+            container.resolve = (token) => {
+                if (token === 'Client') return mockClient;
+                return origResolve(token);
+            };
+
+            const result = await registry.canUse('guild1', 'user1', 'role_feature');
+            assert.strictEqual(result.allowed, true);
+            assert.strictEqual(result.reason, 'role_match');
+        });
+
+        test('returns guild_not_found when guild does not exist', async () => {
+            registry.define('guild_feature', {
+                defaults: { enabled: true, allowed_roles: ['role1'] }
+            });
+
+            const mockClient = {
+                guilds: {
+                    fetch: vi.fn().mockResolvedValue(null)
+                }
+            };
+
+            const { container } = require('../src/core/container.js');
+            container.has = (token) => token === 'Client';
+            container.resolve = (token) => {
+                if (token === 'Client') return mockClient;
+                return origResolve(token);
+            };
+
+            const result = await registry.canUse('guild1', 'user1', 'guild_feature');
+            assert.strictEqual(result.allowed, true);
+            assert.strictEqual(result.reason, 'guild_not_found');
+        });
+
+        test('returns check_error on exception', async () => {
+            registry.define('error_feature', {
+                defaults: { enabled: true, allowed_roles: ['role1'] }
+            });
+
+            const mockClient = {
+                guilds: {
+                    fetch: vi.fn().mockRejectedValue(new Error('Discord API error'))
+                }
+            };
+
+            const { container } = require('../src/core/container.js');
+            container.has = (token) => token === 'Client';
+            container.resolve = (token) => {
+                if (token === 'Client') return mockClient;
+                return origResolve(token);
+            };
+
+            const result = await registry.canUse('guild1', 'user1', 'error_feature');
+            assert.strictEqual(result.allowed, true);
+            assert.strictEqual(result.reason, 'check_error');
+        });
+    });
+
+    describe('_reset', () => {
+        test('clears all features and resets db availability', () => {
+            registry.define('test', { defaults: {} });
+            registry._dbAvailable = false;
+            registry._reset();
+            assert.strictEqual(registry.list().length, 0);
+            assert.strictEqual(registry._dbAvailable, true);
+        });
+    });
 });
