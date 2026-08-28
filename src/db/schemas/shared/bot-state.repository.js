@@ -18,11 +18,14 @@ class BotStateRepository {
     constructor() {
         this.db = db;
         this.schema = schema;
+        this.getBotState = this.getBotState.bind(this);
+        this.setBotState = this.setBotState.bind(this);
     }
 
     async getBotState(key) {
         try {
-            const [state] = await this.db.select()
+            const database = this?.db || db;
+            const [state] = await database.select()
                 .from(botVersionState)
                 .where(eq(botVersionState.key, key))
                 .limit(1);
@@ -35,7 +38,8 @@ class BotStateRepository {
 
     async setBotState(key, value) {
         try {
-            await this.db.insert(botVersionState)
+            const database = this?.db || db;
+            await database.insert(botVersionState)
                 .values({
                     key,
                     value: String(value),
@@ -58,4 +62,13 @@ class BotStateRepository {
 
 Repository()(BotStateRepository);
 
-module.exports = { BotStateRepository };
+const botStateRepository = new BotStateRepository();
+const getBotState = (key) => botStateRepository.getBotState(key);
+const setBotState = (key, value) => botStateRepository.setBotState(key, value);
+
+module.exports = {
+    BotStateRepository,
+    botStateRepository,
+    getBotState,
+    setBotState
+};

@@ -17,15 +17,22 @@ class AuditRepository {
     constructor() {
         this.db = db;
         this.schema = schema;
+        this.logUserEvent = this.logUserEvent.bind(this);
+        this.getUserEvents = this.getUserEvents.bind(this);
+        this.saveFormResponse = this.saveFormResponse.bind(this);
+        this.getGlobalStats = this.getGlobalStats.bind(this);
+        this.archiveDiscordEvent = this.archiveDiscordEvent.bind(this);
+        this.getDiscordEventsArchive = this.getDiscordEventsArchive.bind(this);
     }
 
     async logUserEvent(userId, username, eventType, eventData = null) {
         try {
+            const database = this?.db || db;
             const payload = typeof eventData === 'object' && eventData !== null
                 ? JSON.stringify(eventData)
                 : (eventData ? String(eventData) : null);
 
-            const [inserted] = await this.db.insert(userEvents)
+            const [inserted] = await database.insert(userEvents)
                 .values({
                     userId,
                     username,
@@ -43,7 +50,8 @@ class AuditRepository {
 
     async getUserEvents(userId, limit = 50) {
         try {
-            const rows = await this.db.select()
+            const database = this?.db || db;
+            const rows = await database.select()
                 .from(userEvents)
                 .where(eq(userEvents.userId, userId))
                 .orderBy(desc(userEvents.createdAt))
@@ -74,11 +82,12 @@ class AuditRepository {
 
     async saveFormResponse(userId, username, formName, responses) {
         try {
+            const database = this?.db || db;
             const payload = typeof responses === 'object' && responses !== null
                 ? JSON.stringify(responses)
                 : String(responses);
 
-            const [inserted] = await this.db.insert(formResponses)
+            const [inserted] = await database.insert(formResponses)
                 .values({
                     userId,
                     username,
@@ -96,7 +105,8 @@ class AuditRepository {
 
     async getGlobalStats() {
         try {
-            const result = await this.db.select({
+            const database = this?.db || db;
+            const result = await database.select({
                 eventType: userEvents.eventType,
                 event_type: userEvents.eventType,
                 count: count(),
@@ -116,7 +126,8 @@ class AuditRepository {
 
     async archiveDiscordEvent(eventName, payload = {}) {
         try {
-            const [archived] = await this.db.insert(discordEventsArchive)
+            const database = this?.db || db;
+            const [archived] = await database.insert(discordEventsArchive)
                 .values({
                     eventName,
                     guildId: payload.guildId || payload.guild_id || null,
@@ -136,66 +147,54 @@ class AuditRepository {
 
     async getDiscordEventsArchive(options = {}) {
         try {
+            const database = this?.db || db;
             const limit = parseInt(options.limit, 10) || 50;
             const page = parseInt(options.page, 10) || 1;
-            const offset = options.offset !== undefined ? parseInt(options.offset, 10) : (page - 1) * limit;
+            const offset = (page - 1) * limit;
 
             const conditions = [];
 
+            if (options.guildId) {
+                conditions.push(eq(discordEventsArchive.guildId, options.guildId));
+            }
             if (options.eventName) {
-                if (options.eventName.endsWith('%')) {
-                    const prefix = options.eventName.replace('%', '');
-                    conditions.push(sql`${discordEventsArchive.eventName} LIKE ${prefix + '%'}`);
-                } else {
-                    conditions.push(eq(discordEventsArchive.eventName, options.eventName));
-                }
+                conditions.push(eq(discordEventsArchive.eventName, options.eventName));
             }
-
-            if (options.category) {
-                const catMap = {
-                    channel: ['channelCreate', 'channelDelete', 'channelUpdate', 'channelPinsUpdate'],
-                    role: ['roleCreate', 'roleDelete', 'roleUpdate'],
-                    message: ['messageDelete', 'messageDeleteBulk', 'messageUpdate', 'messageReactionAdd', 'messageReactionRemove'],
-                    guildMember: ['guildMemberAdd', 'guildMemberRemove', 'guildMemberUpdate', 'guildBanAdd', 'guildBanRemove'],
-                    mod: ['guildBanAdd', 'guildBanRemove', 'guildMemberRemove', 'guildAuditLogEntryCreate'],
-                    emoji: ['emojiCreate', 'emojiDelete', 'emojiUpdate', 'stickerCreate', 'stickerDelete', 'stickerUpdate'],
-                    thread: ['threadCreate', 'threadDelete', 'threadUpdate', 'threadListSync', 'threadMembersUpdate']
-                };
-                const events = catMap[options.category];
-                if (events && events.length > 0) {
-                    conditions.push(inArray(discordEventsArchive.eventName, events));
-                }
+            if (options.userId) {
+                conditions.push(or(
+                    eq(discordEventsArchive.userId, options.userId),
+                    eq(discordEventsArchive.targetId, options.userId)
+                ));
             }
-
             if (options.search) {
                 const searchPattern = `%${options.search}%`;
-                conditions.push(
-                    or(
-                        sql`LOWER(${discordEventsArchive.summary}) LIKE LOWER(${searchPattern})`,
-                        sql`LOWER(${discordEventsArchive.username}) LIKE LOWER(${searchPattern})`,
-                        sql`LOWER(${discordEventsArchive.eventName}) LIKE LOWER(${searchPattern})`
-                    )
-                );
+                conditions.push(or(
+                    sql`${discordEventsArchive.summary} ILIKE ${searchPattern}`,
+                    sql`${discordEventsArchive.username} ILIKE ${searchPattern}`,
+                    sql`${discordEventsArchive.eventName} ILIKE ${searchPattern}`
+                ));
+            }
+            if (options.startDate) {
+                conditions.push(sql`${discordEventsArchive.createdAt} >= ${options.startDate}`);
+            }
+            if (options.endDate) {
+                conditions.push(sql`${discordEventsArchive.createdAt} <= ${options.endDate}`);
             }
 
             const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-            let query = this.db.select().from(discordEventsArchive);
-            if (whereClause) {
-                query = query.where(whereClause);
-            }
+            const [countResult] = await database.select({ count: count() })
+                .from(discordEventsArchive)
+                .where(whereClause);
 
-            const rows = await query
+            const total = countResult ? Number(countResult.count) : 0;
+
+            const rows = await database.select()
+                .from(discordEventsArchive)
+                .where(whereClause)
                 .orderBy(desc(discordEventsArchive.createdAt))
                 .limit(limit)
                 .offset(offset);
-
-            let countQuery = this.db.select({ total: count() }).from(discordEventsArchive);
-            if (whereClause) {
-                countQuery = countQuery.where(whereClause);
-            }
-            const [totalCountResult] = await countQuery;
-            const total = Number(totalCountResult?.total) || 0;
 
             return {
                 events: rows.map(r => {
@@ -234,4 +233,21 @@ class AuditRepository {
 
 Repository()(AuditRepository);
 
-module.exports = { AuditRepository };
+const auditRepository = new AuditRepository();
+const logUserEvent = (userId, username, eventType, eventData) => auditRepository.logUserEvent(userId, username, eventType, eventData);
+const getUserEvents = (userId, limit) => auditRepository.getUserEvents(userId, limit);
+const saveFormResponse = (userId, username, formName, responses) => auditRepository.saveFormResponse(userId, username, formName, responses);
+const getGlobalStats = () => auditRepository.getGlobalStats();
+const archiveDiscordEvent = (eventName, payload) => auditRepository.archiveDiscordEvent(eventName, payload);
+const getDiscordEventsArchive = (options) => auditRepository.getDiscordEventsArchive(options);
+
+module.exports = {
+    AuditRepository,
+    auditRepository,
+    logUserEvent,
+    getUserEvents,
+    saveFormResponse,
+    getGlobalStats,
+    archiveDiscordEvent,
+    getDiscordEventsArchive
+};

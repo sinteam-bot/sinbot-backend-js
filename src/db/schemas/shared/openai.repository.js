@@ -16,11 +16,14 @@ class OpenAIRepository {
     constructor() {
         this.db = db;
         this.schema = schema;
+        this.saveOpenAIMessage = this.saveOpenAIMessage.bind(this);
+        this.getLastOpenAIMessageId = this.getLastOpenAIMessageId.bind(this);
     }
 
     async saveOpenAIMessage(data) {
         try {
-            const [saved] = await this.db.insert(openaimessages)
+            const database = this?.db || db;
+            const [saved] = await database.insert(openaimessages)
                 .values({
                     msgid: data.msgid,
                     prompt: data.prompt,
@@ -58,7 +61,8 @@ class OpenAIRepository {
 
     async getLastOpenAIMessageId() {
         try {
-            const [latest] = await this.db.select({ msgid: openaimessages.msgid })
+            const database = this?.db || db;
+            const [latest] = await database.select({ msgid: openaimessages.msgid })
                 .from(openaimessages)
                 .orderBy(desc(openaimessages.id))
                 .limit(1);
@@ -73,4 +77,13 @@ class OpenAIRepository {
 
 Repository()(OpenAIRepository);
 
-module.exports = { OpenAIRepository };
+const openAIRepository = new OpenAIRepository();
+const saveOpenAIMessage = (data) => openAIRepository.saveOpenAIMessage(data);
+const getLastOpenAIMessageId = () => openAIRepository.getLastOpenAIMessageId();
+
+module.exports = {
+    OpenAIRepository,
+    openAIRepository,
+    saveOpenAIMessage,
+    getLastOpenAIMessageId
+};

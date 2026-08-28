@@ -4,9 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { config } = require('./config/index.js');
 
-const { AuditRepository } = require("./db/schemas/shared/audit.repository.js");
-const auditRepo = new AuditRepository();
-const { logUserEvent, getUserEvents, getGlobalStats } = auditRepo;
+const { logUserEvent, getUserEvents, getGlobalStats } = require("./db/schemas/shared/audit.repository.js");
 const { loadCommands } = require("./utils/commandHandler.js");
 const logger = require("./utils/logger.js");
 const createWebRouter = require("./web/webRouter.js");
@@ -266,7 +264,7 @@ app.get('/health', (req, res) => {
 // ============================================
 const { OpenApiGenerator } = require('./core/index.js');
 const openApiGenerator = new OpenApiGenerator({
-    title: 'ChienneBot Discord API',
+    title: 'Bot Discord API',
     version: '1.0.0',
     description: 'Documentation interactive de l\'API REST & Webhooks du bot Discord.'
 });
@@ -284,7 +282,7 @@ app.get('/api/docs/openapi.json', (req, res) => {
 app.get('/api/docs', (req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.send(openApiGenerator.getScalarHtml({
-        title: 'ChienneBot API Reference',
+        title: 'Bot API Reference',
         specUrl: '/api/docs/openapi.json'
     }));
 });
