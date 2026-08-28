@@ -1,7 +1,7 @@
 /**
- * EconomyController — REST endpoints pour la feature Économie & Inventaire
+ * economy.controller.js — REST endpoints pour la feature Économie & Inventaire
  *
- * Économie:
+ * EconomyController:
  *   GET   /api/economy/balance/:userId
  *   POST  /api/economy/daily
  *   POST  /api/economy/pay
@@ -10,13 +10,13 @@
  *   POST  /api/economy/admin/add
  *   POST  /api/economy/admin/remove
  *
- * Shop:
+ * ShopController:
  *   GET    /api/shop
  *   POST   /api/shop
  *   PATCH  /api/shop/:id
  *   DELETE /api/shop/:id
  *
- * Inventaire:
+ * InventoryController:
  *   GET   /api/inventory/:userId
  *   POST  /api/inventory/give
  *   POST  /api/inventory/sell
@@ -28,21 +28,19 @@
  *   GET   /api/inventory/transfers
  */
 
-const { Controller, Get, Post, Put, Patch, Delete } = require('../../../core/index.js');
+const { Controller, Get, Post, Patch, Delete } = require('../../../core/index.js');
 const { EconomyService } = require('../services/economy.service.js');
 const { ShopService } = require('../services/shop.service.js');
 const { InventoryService } = require('../services/inventory.service.js');
 
+// ============== ECONOMY CONTROLLER ==============
+
 class EconomyController {
-    static inject = [EconomyService, ShopService, InventoryService];
+    static inject = [EconomyService];
 
-    constructor(economy, shop, inventory) {
+    constructor(economy) {
         this.economy = economy;
-        this.shop = shop;
-        this.inventory = inventory;
     }
-
-    // ============== ECONOMY ==============
 
     async getBalance(req) {
         try {
@@ -76,9 +74,9 @@ class EconomyController {
     async leaderboard(req) {
         try {
             const guildId = req.query.guild_id || process.env.GUILD_ID;
-            const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+            const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
             const data = await this.economy.leaderboard(guildId, limit);
-            return { success: true, data };
+            return { success: true, data: data || [] };
         } catch (err) { return { success: false, error: err.message }; }
     }
 
@@ -86,31 +84,53 @@ class EconomyController {
         try {
             const guildId = req.query.guild_id || process.env.GUILD_ID;
             const data = await this.economy.listTransactions(guildId, req.params.userId, 50);
-            return { success: true, data };
+            return { success: true, data: data || [] };
         } catch (err) { return { success: false, error: err.message }; }
     }
 
     async adminAdd(req) {
         try {
-            const r = await this.economy.add(req.body.guildId, req.body.userId, req.body.amount, { type: 'admin' });
+            const r = await this.economy.add(req.body.guildId || process.env.GUILD_ID, req.body.userId, req.body.amount, { type: 'admin' });
             return { success: r.ok, data: r, error: r.error || null };
         } catch (err) { return { success: false, error: err.message }; }
     }
 
     async adminRemove(req) {
         try {
-            const r = await this.economy.remove(req.body.guildId, req.body.userId, req.body.amount, { type: 'admin' });
+            const r = await this.economy.remove(req.body.guildId || process.env.GUILD_ID, req.body.userId, req.body.amount, { type: 'admin' });
             return { success: r.ok, data: r, error: r.error || null };
         } catch (err) { return { success: false, error: err.message }; }
     }
 
-    // ============== SHOP ==============
+    _config() {
+        const { getConfig } = require('../../../config/index.js');
+        return getConfig().features?.economy || {};
+    }
+}
+
+Controller('/api/economy')(EconomyController);
+Get('/balance/:userId')(EconomyController.prototype, 'getBalance');
+Post('/daily')(EconomyController.prototype, 'claimDaily');
+Post('/pay')(EconomyController.prototype, 'pay');
+Get('/leaderboard')(EconomyController.prototype, 'leaderboard');
+Get('/transactions/:userId')(EconomyController.prototype, 'transactions');
+Post('/admin/add')(EconomyController.prototype, 'adminAdd');
+Post('/admin/remove')(EconomyController.prototype, 'adminRemove');
+
+// ============== SHOP CONTROLLER ==============
+
+class ShopController {
+    static inject = [ShopService];
+
+    constructor(shop) {
+        this.shop = shop;
+    }
 
     async listShop(req) {
         try {
             const guildId = req.query.guild_id || process.env.GUILD_ID;
             const data = await this.shop.list(guildId, 100, 0);
-            return { success: true, data };
+            return { success: true, data: data || [] };
         } catch (err) { return { success: false, error: err.message }; }
     }
 
@@ -145,21 +165,35 @@ class EconomyController {
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }
+}
 
-    // ============== INVENTORY ==============
+Controller('/api/shop')(ShopController);
+Get('/')(ShopController.prototype, 'listShop');
+Post('/')(ShopController.prototype, 'createShopItem');
+Patch('/:id')(ShopController.prototype, 'updateShopItem');
+Delete('/:id')(ShopController.prototype, 'deleteShopItem');
+
+// ============== INVENTORY CONTROLLER ==============
+
+class InventoryController {
+    static inject = [InventoryService];
+
+    constructor(inventory) {
+        this.inventory = inventory;
+    }
 
     async getInventory(req) {
         try {
             const guildId = req.query.guild_id || process.env.GUILD_ID;
             const data = await this.inventory.listInventory(guildId, req.params.userId);
-            return { success: true, data };
+            return { success: true, data: data || [] };
         } catch (err) { return { success: false, error: err.message }; }
     }
 
     async giveItem(req) {
         try {
             const r = await this.inventory.give({
-                guildId: req.body.guildId,
+                guildId: req.body.guildId || process.env.GUILD_ID,
                 fromUserId: req.body.fromUserId,
                 toUserId: req.body.toUserId,
                 itemId: req.body.itemId,
@@ -173,7 +207,7 @@ class EconomyController {
     async sellItem(req) {
         try {
             const r = await this.inventory.sell({
-                guildId: req.body.guildId,
+                guildId: req.body.guildId || process.env.GUILD_ID,
                 sellerId: req.body.sellerId,
                 buyerId: req.body.buyerId,
                 itemId: req.body.itemId,
@@ -190,9 +224,8 @@ class EconomyController {
 
     async resetInventory(req) {
         try {
-            await this.inventory.listInventory; // touch
             const { db } = require('../../../db/index.js');
-            await db.pool.query(`DELETE FROM user_inventory WHERE guild_id = $1 AND user_id = $2`, [req.body.guildId, req.body.userId]);
+            await db.pool.query(`DELETE FROM user_inventory WHERE guild_id = $1 AND user_id = $2`, [req.body.guildId || process.env.GUILD_ID, req.body.userId]);
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }
@@ -200,7 +233,7 @@ class EconomyController {
     async startDrop(req) {
         try {
             const drop = await this.inventory.startDrop({
-                guildId: req.body.guildId,
+                guildId: req.body.guildId || process.env.GUILD_ID,
                 channelId: req.body.channelId,
                 itemId: req.body.itemId,
                 quantity: req.body.quantity || 1,
@@ -221,7 +254,7 @@ class EconomyController {
         try {
             const guildId = req.query.guild_id || process.env.GUILD_ID;
             const data = await this.inventory.listHolders(guildId, req.params.itemId);
-            return { success: true, data };
+            return { success: true, data: data || [] };
         } catch (err) { return { success: false, error: err.message }; }
     }
 
@@ -230,40 +263,24 @@ class EconomyController {
             const guildId = req.query.guild_id || process.env.GUILD_ID;
             const userId = req.query.user_id;
             const data = await this.inventory.listTransfers(guildId, userId);
-            return { success: true, data };
+            return { success: true, data: data || [] };
         } catch (err) { return { success: false, error: err.message }; }
-    }
-
-    _config() {
-        const { getConfig } = require('../../../config/index.js');
-        return getConfig().features?.economy || {};
     }
 }
 
-Controller('/api/economy')(EconomyController);
-Get('/balance/:userId')(EconomyController.prototype, 'getBalance');
-Post('/daily')(EconomyController.prototype, 'claimDaily');
-Post('/pay')(EconomyController.prototype, 'pay');
-Get('/leaderboard')(EconomyController.prototype, 'leaderboard');
-Get('/transactions/:userId')(EconomyController.prototype, 'transactions');
-Post('/admin/add')(EconomyController.prototype, 'adminAdd');
-Post('/admin/remove')(EconomyController.prototype, 'adminRemove');
+Controller('/api/inventory')(InventoryController);
+Get('/:userId')(InventoryController.prototype, 'getInventory');
+Post('/give')(InventoryController.prototype, 'giveItem');
+Post('/sell')(InventoryController.prototype, 'sellItem');
+Post('/transfer')(InventoryController.prototype, 'transferItem');
+Post('/reset')(InventoryController.prototype, 'resetInventory');
+Post('/drop')(InventoryController.prototype, 'startDrop');
+Post('/drop/:id/claim')(InventoryController.prototype, 'claimDrop');
+Get('/holders/:itemId')(InventoryController.prototype, 'getHolders');
+Get('/transfers')(InventoryController.prototype, 'getTransfers');
 
-Controller('/api/shop')(EconomyController);
-Get('/')(EconomyController.prototype, 'listShop');
-Post('/')(EconomyController.prototype, 'createShopItem');
-Patch('/:id')(EconomyController.prototype, 'updateShopItem');
-Delete('/:id')(EconomyController.prototype, 'deleteShopItem');
-
-Controller('/api/inventory')(EconomyController);
-Get('/:userId')(EconomyController.prototype, 'getInventory');
-Post('/give')(EconomyController.prototype, 'giveItem');
-Post('/sell')(EconomyController.prototype, 'sellItem');
-Post('/transfer')(EconomyController.prototype, 'transferItem');
-Post('/reset')(EconomyController.prototype, 'resetInventory');
-Post('/drop')(EconomyController.prototype, 'startDrop');
-Post('/drop/:id/claim')(EconomyController.prototype, 'claimDrop');
-Get('/holders/:itemId')(EconomyController.prototype, 'getHolders');
-Get('/transfers')(EconomyController.prototype, 'getTransfers');
-
-module.exports = { EconomyController };
+module.exports = {
+    EconomyController,
+    ShopController,
+    InventoryController
+};

@@ -12,7 +12,7 @@ const { ShopService } = require('./services/shop.service.js');
 const { InventoryService } = require('./services/inventory.service.js');
 const { DropReactionListener } = require('./events/drop-reaction-listener.js');
 const { DropCron } = require('./events/drop-cron.js');
-const { EconomyController } = require('./controllers/economy.controller.js');
+const { EconomyController, ShopController, InventoryController } = require('./controllers/economy.controller.js');
 const {
     EconomyCommands, ShopCommands, InventoryCommands, DropButtonHandler,
     AdminEconomyCommands, AdminShopCommands, AdminInventaireCommands
@@ -55,7 +55,11 @@ Module({
         InventoryService,
         EconomyModule
     ],
-    controllers: [EconomyController],
+    controllers: [
+        EconomyController,
+        ShopController,
+        InventoryController
+    ],
     events: [DropReactionListener, DropCron],
     commands: [
         EconomyCommands, ShopCommands, InventoryCommands, DropButtonHandler,
