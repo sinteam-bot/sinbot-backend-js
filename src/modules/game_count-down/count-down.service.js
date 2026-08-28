@@ -43,7 +43,7 @@ class CountDownService {
                 if (channel) {
                     await this.repo.updateState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, null);
                     const text = this.formatMessage(
-                        messages.start_message || "**Allez la chienne commence :** {number}",
+                        messages.start_message || "**Allez, je commence :** {number}",
                         { number: COUNTDOWN_START_AT }
                     );
                     await channel.send(text);
@@ -81,7 +81,7 @@ class CountDownService {
             if (!state) {
                 state = await this.repo.updateState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, null);
                 const text = this.formatMessage(
-                    messages.start_message || "**Allez la chienne commence :** {number}",
+                    messages.start_message || "**Allez, je commence :** {number}",
                     { number: COUNTDOWN_START_AT }
                 );
                 await message.channel.send(text);
@@ -231,7 +231,7 @@ class CountDownService {
                     await this.repo.updateState(COUNTDOWN_CHANNEL_ID, COUNTDOWN_START_AT, 0, null, null, 0);
 
                     const restartMsg = this.formatMessage(
-                        messages.start_message || "**Allez la chienne commence :** {number}",
+                        messages.start_message || "**Allez, je commence :** {number}",
                         { number: COUNTDOWN_START_AT }
                     );
                     await message.channel.send(restartMsg);
@@ -316,7 +316,7 @@ class CountDownService {
         await this.repo.updateState(channelId, startNumber, 0, null, null, 0);
 
         const restartMsg = this.formatMessage(
-            messages.start_message || "**Allez la chienne commence :** {number}",
+            messages.start_message || "**Allez, je commence :** {number}",
             { number: startNumber }
         );
         await message.channel.send(restartMsg);

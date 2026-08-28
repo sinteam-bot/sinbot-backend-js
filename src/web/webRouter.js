@@ -121,8 +121,8 @@ function createWebRouter(client) {
                 emojis: guildEmojis,
                 bot: {
                     id: botUser?.id || null,
-                    username: botUser?.username || 'Chienne Bot',
-                    tag: botUser?.tag || 'Chienne Bot#0001',
+                    username: botUser?.username || 'Bot',
+                    tag: botUser?.tag || 'Bot#0001',
                     avatar: botUser ? getUserAvatar(botUser) : 'https://cdn.discordapp.com/embed/avatars/0.png',
                     avatarUrl: botUser ? getUserAvatar(botUser) : 'https://cdn.discordapp.com/embed/avatars/0.png',
                     status: client?.isReady() ? 'online' : 'offline',
@@ -2041,7 +2041,7 @@ function createWebRouter(client) {
                         color: '#9B59B6',
                         fields: [
                             { name: 'Thème', value: '{{ theme }}', inline: true },
-                            { name: 'Généré par', value: 'Chienne Bot IA', inline: true }
+                            { name: 'Généré par', value: 'Bot IA', inline: true }
                         ],
                         footer: {
                             text: 'Passez une excellente journée sur {{ guild.name }} !'

@@ -153,7 +153,7 @@ function buildCaptchaLogEmbed(action, message, color = '#5865F2', options = {}, 
     }
 
     embed.setFooter({
-        text: 'Sécurité & Captcha • Chienne Bot',
+        text: 'Sécurité & Captcha',
         iconURL: guild?.iconURL?.() || undefined
     });
 

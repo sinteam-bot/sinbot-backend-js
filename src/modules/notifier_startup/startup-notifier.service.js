@@ -154,7 +154,7 @@ class StartupNotifierService {
 
             if (isUpdate) {
                 embed.setColor('#f2c7ce')
-                    .setTitle('🚀 Mise à jour déployée - Chienne Bot')
+                    .setTitle('🚀 Mise à jour déployée - Bot')
                     .setDescription(
                         `Le bot a redémarré avec de nouveaux changements !\n\n` +
                         `🔗 **Dépôt :** [${repo}](${repoUrl})\n` +
@@ -191,7 +191,7 @@ class StartupNotifierService {
                 }
             } else {
                 embed.setColor('#f2c7ce')
-                    .setTitle('🤖 Démarrage du bot - Chienne Bot')
+                    .setTitle('🤖 Démarrage du bot')
                     .setDescription(
                         `Le bot est en ligne et opérationnel.\n\n` +
                         `🔗 **Dépôt :** [${repo}](${repoUrl})\n` +
