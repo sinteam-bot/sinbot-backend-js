@@ -318,11 +318,7 @@ app.use((req, res, next) => {
 // Démarrer le serveur Express
 const PORT = process.env.PORT || 3000;
 const httpServer = app.listen(PORT, () => {
-    console.log('');
-    console.log('╔══════════════════════════════════════╗');
-    console.log('║   🌐 SERVEUR WEBHOOK DÉMARRÉ !      ║');
-    console.log('╚══════════════════════════════════════╝');
-    console.log('');
+    console.log('🌐 SERVEUR WEBHOOK DÉMARRÉ !');
     console.log(`✅ Serveur sur le port: ${PORT}`);
     console.log(`🖥️  Interface Web: http://localhost:${PORT}/`);
     console.log(`📚 Documentation API: http://localhost:${PORT}/api/docs`);

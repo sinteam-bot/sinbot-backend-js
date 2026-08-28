@@ -62,7 +62,7 @@ function _createPGliteAdapter() {
     client.connect = async function () {
         return {
             query: client.query.bind(client),
-            release: () => {}
+            release: () => { }
         };
     };
 
