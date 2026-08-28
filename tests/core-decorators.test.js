@@ -193,6 +193,13 @@ describe('decorators', () => {
             assert.strictEqual(MyCommand.__commands[0].name, 'ping');
         });
 
+        test('handles static class reference in Command', () => {
+            class MyCommand {}
+            decorators.Command({ name: 'static-cmd' })(MyCommand, 'execute');
+            assert.ok(MyCommand.__commands);
+            assert.strictEqual(MyCommand.__commands[0].name, 'static-cmd');
+        });
+
         test('adds multiple commands', () => {
             class MyCommand {}
             decorators.Command({ name: 'ping' })(MyCommand.prototype, 'ping');

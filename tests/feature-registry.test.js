@@ -291,9 +291,16 @@ describe('FeatureRegistry', () => {
                 defaults: { enabled: true, allowed_roles: ['role1'] }
             });
 
+            const mockGuild = {
+                members: {
+                    fetch: vi.fn().mockImplementation(() => {
+                        throw new Error('Unexpected error');
+                    })
+                }
+            };
             const mockClient = {
                 guilds: {
-                    fetch: vi.fn().mockRejectedValue(new Error('Discord API error'))
+                    fetch: vi.fn().mockResolvedValue(mockGuild)
                 }
             };
 

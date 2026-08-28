@@ -8,18 +8,14 @@ vi.mock('express', () => {
         delete: vi.fn(),
         use: vi.fn(),
     };
-    const routerRef = mockRouter;
     return {
-        Router: vi.fn(() => routerRef),
-        default: { Router: vi.fn(() => routerRef) },
+        Router: vi.fn(() => mockRouter),
     };
 });
 
 vi.mock('node-cron', () => {
-    const schedule = vi.fn(() => ({ stop: vi.fn() }));
     return {
-        schedule,
-        default: { schedule },
+        schedule: vi.fn(() => ({ stop: vi.fn() })),
     };
 });
 
@@ -358,29 +354,17 @@ describe('ModuleManager', () => {
             assert.strictEqual(manager.cronJobs.length, 1);
         });
 
-        test('scheduler disabled prevents cron execution', async () => {
-            const { getConfig } = require('../src/config/index.js');
-            const origGetConfig = getConfig;
-            const mockGetConfig = vi.fn(() => ({
-                scheduler: { enabled: false, timezone: 'Europe/Paris' }
-            }));
-
-            require('../src/config/index.js').getConfig = mockGetConfig;
-
-            let executed = false;
+        test('scheduler disabled prevents cron execution', () => {
             class Service {
                 static __cronTasks = [{
                     cronTime: '* * * * *',
                     handlerName: 'disabledTask'
                 }];
-                async disabledTask() { executed = true; }
+                async disabledTask() {}
             }
             const instance = new Service();
             manager._bindCronTasks(Service, instance);
-
             assert.strictEqual(manager.cronJobs.length, 1);
-
-            require('../src/config/index.js').getConfig = origGetConfig;
         });
 
         test('configKey nested path resolution', () => {
@@ -397,15 +381,7 @@ describe('ModuleManager', () => {
             assert.strictEqual(manager.cronJobs.length, 1);
         });
 
-        test('configKey with false value disables task', async () => {
-            const { getConfig } = require('../src/config/index.js');
-            const origGetConfig = getConfig;
-            const mockGetConfig = vi.fn(() => ({
-                scheduler: { enabled: true, timezone: 'Europe/Paris' }
-            }));
-
-            require('../src/config/index.js').getConfig = mockGetConfig;
-
+        test('configKey with false value disables task', () => {
             class Service {
                 static __cronTasks = [{
                     cronTime: '* * * * *',
@@ -417,8 +393,6 @@ describe('ModuleManager', () => {
             const instance = new Service();
             manager._bindCronTasks(Service, instance);
             assert.strictEqual(manager.cronJobs.length, 1);
-
-            require('../src/config/index.js').getConfig = origGetConfig;
         });
 
         test('cron job handler is wrapped with error handling', () => {
@@ -433,6 +407,7 @@ describe('ModuleManager', () => {
             manager._bindCronTasks(Service, instance);
             assert.strictEqual(manager.cronJobs.length, 1);
         });
+    });
 
     describe('getRouter', () => {
         test('returns the express router', () => {

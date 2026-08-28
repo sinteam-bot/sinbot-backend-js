@@ -227,6 +227,26 @@ describe('DiscordEventBus', () => {
             }
         });
 
+        test('triggers threadDelete handler', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const threadDeleteHandler = mockClient.on.mock.calls.find(c => c[0] === 'threadDelete')?.[1];
+            if (threadDeleteHandler) {
+                threadDeleteHandler({ id: 'thread1' });
+            }
+        });
+
+        test('triggers messageDelete handler', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const messageDeleteHandler = mockClient.on.mock.calls.find(c => c[0] === 'messageDelete')?.[1];
+            if (messageDeleteHandler) {
+                messageDeleteHandler({ id: 'msg1' });
+            }
+        });
+
         test('filters messages without message object', async () => {
             const handler = vi.fn();
             bus.subscribe('messageCreate', handler);
