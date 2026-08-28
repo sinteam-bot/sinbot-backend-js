@@ -9,7 +9,9 @@
     "build:ui": "cd frontend && npm install && npm run generate",
     "dev:ui": "cd frontend && npm run dev",
     "migrate:sqlite-to-pg": "node scripts/migrate-sqlite-to-postgres.js",
-    "test": "node --test --test-concurrency=4 tests/**/*.test.js"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage"
   },
   "keywords": [],
   "author": "",
@@ -31,5 +33,8 @@
   },
   "allowScripts": {
     "better-sqlite3@13.0.3": true
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
   }
 }
