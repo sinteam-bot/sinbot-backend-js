@@ -655,6 +655,103 @@ const reactionRoles = pgTable('reaction_roles', {
     index('idx_pg_reaction_roles_guild').on(table.guildId)
 ]);
 
+// 47. user_economy (Phase 9)
+const userEconomy = pgTable('user_economy', {
+    userId: text('user_id').notNull(),
+    guildId: text('guild_id').notNull(),
+    balance: integer('balance').notNull().default(0),
+    bankBalance: integer('bank_balance').notNull().default(0),
+    lastDailyClaimAt: integer('last_daily_claim_at'),
+    totalEarned: integer('total_earned').notNull().default(0),
+    totalSpent: integer('total_spent').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull()
+}, (table) => [
+    primaryKey({ columns: [table.userId, table.guildId] }),
+    index('idx_pg_user_economy_balance').on(table.guildId, table.balance)
+]);
+
+// 48. economy_transactions (Phase 9)
+const economyTransactions = pgTable('economy_transactions', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    userId: text('user_id').notNull(),
+    amount: integer('amount').notNull(),
+    type: text('type').notNull(),
+    counterpartyId: text('counterparty_id'),
+    reason: text('reason'),
+    metadata: text('metadata'),
+    createdAt: integer('created_at').notNull()
+}, (table) => [
+    index('idx_pg_economy_tx_user').on(table.guildId, table.userId, table.createdAt),
+    index('idx_pg_economy_tx_created').on(table.guildId, table.createdAt)
+]);
+
+// 49. shop_items (Phase 9)
+const shopItems = pgTable('shop_items', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    emoji: text('emoji'),
+    price: integer('price').notNull(),
+    roleRewardId: text('role_reward_id'),
+    xpReward: integer('xp_reward'),
+    isTradeable: integer('is_tradeable').notNull().default(1),
+    isDroppable: integer('is_droppable').notNull().default(1),
+    maxPerUser: integer('max_per_user'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull()
+}, (table) => [
+    index('idx_pg_shop_items_guild').on(table.guildId)
+]);
+
+// 50. user_inventory (Phase 9)
+const userInventory = pgTable('user_inventory', {
+    userId: text('user_id').notNull(),
+    guildId: text('guild_id').notNull(),
+    itemId: text('item_id').notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    acquiredAt: integer('acquired_at').notNull()
+}, (table) => [
+    primaryKey({ columns: [table.userId, table.guildId, table.itemId] }),
+    index('idx_pg_user_inventory_item').on(table.guildId, table.itemId),
+    index('idx_pg_user_inventory_user').on(table.guildId, table.userId)
+]);
+
+// 51. inventory_drops (Phase 9)
+const inventoryDrops = pgTable('inventory_drops', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    messageId: text('message_id'),
+    itemId: text('item_id').notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    startedAt: integer('started_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    claimedBy: text('claimed_by'),
+    claimedAt: integer('claimed_at'),
+    status: text('status').notNull().default('active')
+}, (table) => [
+    index('idx_pg_inventory_drops_status').on(table.guildId, table.status, table.expiresAt),
+    index('idx_pg_inventory_drops_message').on(table.messageId)
+]);
+
+// 52. inventory_transfers (Phase 9)
+const inventoryTransfers = pgTable('inventory_transfers', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    fromUserId: text('from_user_id').notNull(),
+    toUserId: text('to_user_id').notNull(),
+    itemId: text('item_id').notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    type: text('type').notNull(),
+    price: integer('price'),
+    createdAt: integer('created_at').notNull()
+}, (table) => [
+    index('idx_pg_inventory_transfers_to').on(table.guildId, table.toUserId, table.createdAt)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -701,5 +798,11 @@ module.exports = {
     birthdayVisibility,
     birthdayChangeLog,
     birthdayHistory,
-    reactionRoles
+    reactionRoles,
+    userEconomy,
+    economyTransactions,
+    shopItems,
+    userInventory,
+    inventoryDrops,
+    inventoryTransfers
 };

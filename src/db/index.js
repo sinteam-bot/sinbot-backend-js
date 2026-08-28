@@ -667,6 +667,92 @@ const PG_TABLES_DDL = `
     );
     CREATE INDEX IF NOT EXISTS idx_reaction_roles_message ON reaction_roles(guild_id, message_id);
     CREATE INDEX IF NOT EXISTS idx_reaction_roles_guild ON reaction_roles(guild_id);
+
+    -- Phase 9: Economy & Inventory
+    CREATE TABLE IF NOT EXISTS user_economy (
+        user_id TEXT NOT NULL,
+        guild_id TEXT NOT NULL,
+        balance INTEGER NOT NULL DEFAULT 0,
+        bank_balance INTEGER NOT NULL DEFAULT 0,
+        last_daily_claim_at INTEGER,
+        total_earned INTEGER NOT NULL DEFAULT 0,
+        total_spent INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, guild_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_economy_guild ON user_economy(guild_id, balance DESC);
+
+    CREATE TABLE IF NOT EXISTS economy_transactions (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        counterparty_id TEXT,
+        reason TEXT,
+        metadata TEXT,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_economy_tx_user ON economy_transactions(guild_id, user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_economy_tx_created ON economy_transactions(guild_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS shop_items (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        emoji TEXT,
+        price INTEGER NOT NULL,
+        role_reward_id TEXT,
+        xp_reward INTEGER,
+        is_tradeable INTEGER NOT NULL DEFAULT 1,
+        is_droppable INTEGER NOT NULL DEFAULT 1,
+        max_per_user INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_shop_items_guild ON shop_items(guild_id);
+
+    CREATE TABLE IF NOT EXISTS user_inventory (
+        user_id TEXT NOT NULL,
+        guild_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        acquired_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, guild_id, item_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_inventory_item ON user_inventory(guild_id, item_id);
+    CREATE INDEX IF NOT EXISTS idx_user_inventory_user ON user_inventory(guild_id, user_id);
+
+    CREATE TABLE IF NOT EXISTS inventory_drops (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        message_id TEXT,
+        item_id TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        started_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        claimed_by TEXT,
+        claimed_at INTEGER,
+        status TEXT NOT NULL DEFAULT 'active'
+    );
+    CREATE INDEX IF NOT EXISTS idx_inventory_drops_status ON inventory_drops(guild_id, status, expires_at);
+    CREATE INDEX IF NOT EXISTS idx_inventory_drops_message ON inventory_drops(message_id);
+
+    CREATE TABLE IF NOT EXISTS inventory_transfers (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        from_user_id TEXT NOT NULL,
+        to_user_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        type TEXT NOT NULL,
+        price INTEGER,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_inventory_transfers_user ON inventory_transfers(guild_id, to_user_id, created_at);
 `;
 
 /**
