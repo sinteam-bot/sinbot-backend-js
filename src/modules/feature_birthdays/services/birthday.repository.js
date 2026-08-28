@@ -144,23 +144,36 @@ class BirthdayRepository {
      * (globale) et on croise avec birthday_visibility.
      */
     async listTodaysBirthdays(guildId, todayMonth, todayDay) {
-        // En mode private, les anniversaires seraient dans une table par-guild.
-        // Pour cette V1, on reste sur user_birthdays (legacy global).
-        const res = await db.pool.query(
-            `SELECT ub.user_id, ub.username, ub.birthdate, COALESCE(bv.enabled, 1) AS visibility
-             FROM user_birthdays ub
-             LEFT JOIN birthday_visibility bv
-             ON bv.user_id = ub.user_id AND bv.guild_id = $1
-             WHERE EXTRACT(MONTH FROM CAST(ub.birthdate AS DATE)) = $2
-               AND EXTRACT(DAY FROM CAST(ub.birthdate AS DATE)) = $3`,
-            [guildId, todayMonth, todayDay]
-        );
-        return (res.rows || []).map(r => ({
-            userId: r.user_id,
-            username: r.username,
-            birthdate: r.birthdate,
-            visibility: r.visibility === 1 || r.visibility === true
-        }));
+        const { schema, db: drizzleDb } = require('../../../db/index.js');
+        const rows = await drizzleDb.select().from(schema.userBirthdays);
+        const out = [];
+        for (const row of rows) {
+            if (!row.birthdate) continue;
+            const parts = String(row.birthdate).trim().split(/[-/]/);
+            let m = null, d = null;
+            if (parts.length === 3) {
+                if (parts[0].length === 4) {
+                    m = parseInt(parts[1], 10);
+                    d = parseInt(parts[2], 10);
+                } else {
+                    d = parseInt(parts[0], 10);
+                    m = parseInt(parts[1], 10);
+                }
+            } else if (parts.length === 2) {
+                d = parseInt(parts[0], 10);
+                m = parseInt(parts[1], 10);
+            }
+            if (m === todayMonth && d === todayDay) {
+                const vis = await this.getVisibility(row.userId, guildId);
+                out.push({
+                    userId: row.userId,
+                    username: row.username,
+                    birthdate: row.birthdate,
+                    visibility: vis === null ? true : vis.enabled
+                });
+            }
+        }
+        return out;
     }
 
     _mapSettings(row) {

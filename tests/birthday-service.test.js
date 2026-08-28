@@ -257,17 +257,24 @@ describe('BirthdayService', () => {
 
     describe('settings', () => {
         test('getSettings retourne les défauts si pas en BDD', async () => {
-            const s = await svc.getSettings('g1');
+            const s = await svc.getSettings('fresh_guild_no_db');
             assert.strictEqual(s.mode, 'public');
             assert.strictEqual(s.enabled, true);
             assert.strictEqual(s.announceHour, 9);
         });
 
         test('updateSettings persiste en BDD', async () => {
-            await svc.updateSettings('g1', { mode: 'private', announceHour: 18 });
-            const s = await svc.getSettings('g1');
-            assert.strictEqual(s.mode, 'private');
-            assert.strictEqual(s.announceHour, 18);
+            const configIndex = require('../src/config/index.js');
+            const origSave = configIndex.saveModuleConfig;
+            configIndex.saveModuleConfig = () => {};
+            try {
+                await svc.updateSettings('g1', { mode: 'private', announceHour: 18 });
+                const s = await svc.getSettings('g1');
+                assert.strictEqual(s.mode, 'private');
+                assert.strictEqual(s.announceHour, 18);
+            } finally {
+                configIndex.saveModuleConfig = origSave;
+            }
         });
     });
 

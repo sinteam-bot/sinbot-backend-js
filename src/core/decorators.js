@@ -79,6 +79,7 @@ function createRouteDecorator(method) {
 const Get = createRouteDecorator('get');
 const Post = createRouteDecorator('post');
 const Put = createRouteDecorator('put');
+const Patch = createRouteDecorator('patch');
 const Delete = createRouteDecorator('delete');
 
 /**
@@ -149,6 +150,7 @@ module.exports = {
     Get,
     Post,
     Put,
+    Patch,
     Delete,
     OnEvent,
     Command,

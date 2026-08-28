@@ -36,24 +36,107 @@ class BirthdayService {
 
     async getSettings(guildId) {
         const s = await this.repo.getSettings(guildId);
-        if (s) return s;
+        const { getConfig } = require('../../../config/index.js');
+        const yaml = getConfig().birthdays || {};
+
+        const mode = s?.mode || yaml.mode || 'public';
+        const announceChannelId = s?.announceChannelId !== undefined && s?.announceChannelId !== null ? s.announceChannelId : (yaml.announce?.channel_id || null);
+        const announceHour = s?.announceHour ?? yaml.announce?.hour ?? 9;
+        const announceTimezone = s?.announceTimezone || yaml.announce?.timezone || 'Europe/Paris';
+        const pingRoleId = s?.pingRoleId !== undefined && s?.pingRoleId !== null ? s.pingRoleId : (yaml.announce?.ping_role_id || null);
+        const messageTemplate = s?.messageTemplate || yaml.announce?.message_template || '🎂 Joyeux anniversaire {user} ! Tu fêtes tes **{age} ans** aujourd\'hui ! 🎉';
+        const tempRoleId = s?.tempRoleId !== undefined && s?.tempRoleId !== null ? s.tempRoleId : (yaml.temp_role?.role_id || null);
+        const enabled = s ? !!s.enabled : (yaml.enabled !== undefined ? !!yaml.enabled : false);
+        const gifts = s?.gifts || yaml.gifts || { max_per_user: 2, xp_per_birthday: 500 };
+        const cooldown = s?.cooldown || yaml.cooldown || { first_change_days: 1, second_change_days: 2, third_change_days: 180, default_change_days: 365 };
+
         return {
             guildId,
-            mode: 'public',
-            announceChannelId: null,
-            announceHour: 9,
-            announceTimezone: 'Europe/Paris',
-            pingRoleId: null,
-            messageTemplate: '🎂 Joyeux anniversaire {user} ! Tu fêtes tes **{age} ans** aujourdhui ! 🎉',
-            tempRoleId: null,
-            enabled: true
+            mode,
+            announceChannelId,
+            announceHour,
+            announceTimezone,
+            pingRoleId,
+            messageTemplate,
+            tempRoleId,
+            enabled,
+            gifts,
+            cooldown,
+            announce: {
+                channel_id: announceChannelId,
+                hour: announceHour,
+                timezone: announceTimezone,
+                ping_role_id: pingRoleId,
+                message_template: messageTemplate
+            },
+            temp_role: {
+                enabled: !!tempRoleId,
+                role_id: tempRoleId
+            }
         };
     }
 
-    async updateSettings(guildId, patch) {
+    async updateSettings(guildId, patch = {}) {
         const current = await this.getSettings(guildId);
-        const merged = { ...current, ...patch, guildId };
-        return this.repo.upsertSettings(merged);
+        const announce = patch.announce || {};
+        const tempRole = patch.temp_role || {};
+
+        const announceChannelId = patch.announceChannelId !== undefined ? patch.announceChannelId : (announce.channel_id !== undefined ? announce.channel_id : current.announceChannelId);
+        const announceHour = patch.announceHour !== undefined ? Number(patch.announceHour) : (announce.hour !== undefined ? Number(announce.hour) : current.announceHour);
+        const announceTimezone = patch.announceTimezone || announce.timezone || current.announceTimezone || 'Europe/Paris';
+        const pingRoleId = patch.pingRoleId !== undefined ? patch.pingRoleId : (announce.ping_role_id !== undefined ? announce.ping_role_id : current.pingRoleId);
+        const messageTemplate = patch.messageTemplate || announce.message_template || current.messageTemplate;
+        const tempRoleId = patch.tempRoleId !== undefined ? patch.tempRoleId : (tempRole.role_id !== undefined ? tempRole.role_id : current.tempRoleId);
+        const mode = patch.mode || current.mode || 'public';
+        const enabled = patch.enabled !== undefined ? !!patch.enabled : current.enabled;
+        const gifts = { ...(current.gifts || {}), ...(patch.gifts || {}) };
+        const cooldown = { ...(current.cooldown || {}), ...(patch.cooldown || {}) };
+
+        const toSave = {
+            guildId,
+            mode,
+            announceChannelId,
+            announceHour,
+            announceTimezone,
+            pingRoleId,
+            messageTemplate,
+            tempRoleId,
+            enabled,
+            gifts,
+            cooldown
+        };
+
+        await this.repo.upsertSettings(toSave);
+
+        // Synchroniser également dans config.yml
+        try {
+            const { saveModuleConfig, getConfig } = require('../../../config/index.js');
+            const conf = getConfig().birthdays || {};
+            saveModuleConfig('birthdays', {
+                ...conf,
+                enabled,
+                mode,
+                announce: {
+                    ...(conf.announce || {}),
+                    channel_id: announceChannelId,
+                    hour: announceHour,
+                    timezone: announceTimezone,
+                    ping_role_id: pingRoleId,
+                    message_template: messageTemplate
+                },
+                temp_role: {
+                    ...(conf.temp_role || {}),
+                    enabled: !!tempRoleId,
+                    role_id: tempRoleId
+                },
+                gifts,
+                cooldown
+            });
+        } catch (e) {
+            console.warn(`[BirthdayService] Synchro config.yml: ${e.message}`);
+        }
+
+        return this.getSettings(guildId);
     }
 
     // ============== USER OPERATIONS ==============
@@ -190,35 +273,51 @@ class BirthdayService {
     /**
      * Liste les anniversaires des N prochains jours
      */
-    async listUpcoming(guildId, days = 7) {
-        // Pour V1, on s'appuie sur la table legacy user_birthdays
-        // et on calcule en JS pour être multi-dialecte.
+    async listUpcoming(guildId, days = 365) {
         const { schema } = require('../../../db/index.js');
         const { db } = require('../../../db/index.js');
-        const { eq, isNotNull } = require('drizzle-orm');
+        const { isNotNull } = require('drizzle-orm');
         const res = await db.select()
             .from(schema.userBirthdays)
             .where(isNotNull(schema.userBirthdays.birthdate));
 
         const today = new Date();
+        const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const currentYear = today.getFullYear();
         const out = [];
+
         for (const row of res) {
-            const bDate = new Date(row.birthdate);
-            if (isNaN(bDate.getTime())) continue;
-            let next = new Date(currentYear, bDate.getMonth(), bDate.getDate());
-            if (next < today) next = new Date(currentYear + 1, bDate.getMonth(), bDate.getDate());
-            const diffDays = Math.ceil((next - today) / 86400_000);
+            if (!row.birthdate) continue;
+            const parsed = this._parseBirthdateParts(row.birthdate);
+            if (!parsed) continue;
+
+            const bMonth = parsed.month - 1; // 0-indexed for Date
+            const bDay = parsed.day;
+            const bYear = parsed.year;
+
+            let next = new Date(currentYear, bMonth, bDay);
+            if (next < todayMidnight) {
+                next = new Date(currentYear + 1, bMonth, bDay);
+            }
+
+            const diffDays = Math.round((next.getTime() - todayMidnight.getTime()) / 86400_000);
             if (diffDays >= 0 && diffDays <= days) {
-                // Filtre visibilité si on a l'info
                 const visible = await this._isVisible(row.userId, guildId);
                 if (visible) {
+                    const nextYear = next.getFullYear();
+                    const age = bYear ? (nextYear - bYear) : null;
+                    const dateFormatted = `${String(bDay).padStart(2, '0')}/${String(bMonth + 1).padStart(2, '0')}${bYear ? '/' + bYear : ''}`;
+
                     out.push({
                         userId: row.userId,
+                        user_id: row.userId,
                         username: row.username,
                         birthdate: row.birthdate,
-                        age: currentYear - bDate.getFullYear(),
-                        days_until: diffDays
+                        age,
+                        days_until: diffDays,
+                        daysLeft: diffDays,
+                        dateFormatted,
+                        nextDate: next.toISOString()
                     });
                 }
             }
@@ -237,6 +336,29 @@ class BirthdayService {
     }
 
     // ============== UTILS ==============
+
+    /**
+     * Découpe et extrait jour, mois, année d'une chaîne birthdate
+     */
+    _parseBirthdateParts(input) {
+        if (!input) return null;
+        const s = String(input).trim();
+        const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (iso) {
+            return { year: parseInt(iso[1], 10), month: parseInt(iso[2], 10), day: parseInt(iso[3], 10) };
+        }
+        const parts = s.split(/[-/]/);
+        if (parts.length === 3) {
+            if (parts[0].length === 4) {
+                return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10), day: parseInt(parts[2], 10) };
+            } else {
+                return { day: parseInt(parts[0], 10), month: parseInt(parts[1], 10), year: parseInt(parts[2], 10) };
+            }
+        } else if (parts.length === 2) {
+            return { year: null, month: parseInt(parts[1], 10), day: parseInt(parts[0], 10) };
+        }
+        return null;
+    }
 
     /**
      * Valide et normalise une date d'anniversaire
@@ -272,10 +394,13 @@ class BirthdayService {
      */
     nextBirthday(birthdate, fromDate = new Date()) {
         if (!birthdate) return null;
-        const bDate = new Date(birthdate);
-        if (isNaN(bDate.getTime())) return null;
-        let next = new Date(fromDate.getFullYear(), bDate.getMonth(), bDate.getDate());
-        if (next < fromDate) next = new Date(fromDate.getFullYear() + 1, bDate.getMonth(), bDate.getDate());
+        const parsed = this._parseBirthdateParts(birthdate);
+        if (!parsed) return null;
+        const bMonth = parsed.month - 1;
+        const bDay = parsed.day;
+        const fromMidnight = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+        let next = new Date(fromDate.getFullYear(), bMonth, bDay);
+        if (next < fromMidnight) next = new Date(fromDate.getFullYear() + 1, bMonth, bDay);
         return next;
     }
 
@@ -284,11 +409,11 @@ class BirthdayService {
      */
     ageAt(birthdate, atDate = new Date()) {
         if (!birthdate) return null;
-        const bDate = new Date(birthdate);
-        if (isNaN(bDate.getTime())) return null;
-        let age = atDate.getFullYear() - bDate.getFullYear();
-        const m = atDate.getMonth() - bDate.getMonth();
-        if (m < 0 || (m === 0 && atDate.getDate() < bDate.getDate())) age--;
+        const parsed = this._parseBirthdateParts(birthdate);
+        if (!parsed || !parsed.year) return null;
+        let age = atDate.getFullYear() - parsed.year;
+        const m = (atDate.getMonth() + 1) - parsed.month;
+        if (m < 0 || (m === 0 && atDate.getDate() < parsed.day)) age--;
         return age;
     }
 

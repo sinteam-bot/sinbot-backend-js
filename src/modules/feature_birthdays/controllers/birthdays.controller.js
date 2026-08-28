@@ -12,8 +12,20 @@
  *   GET    /api/birthdays/history?guild_id=&user_id=
  */
 
-const { Controller, Get, Post, Put, Delete } = require('../../../core/index.js');
+const { Controller, Get, Post, Put, Patch, Delete } = require('../../../core/index.js');
 const { BirthdayService } = require('../services/birthday.service.js');
+
+function getEffectiveGuildId(req) {
+    let defaultGuildId = process.env.GUILD_ID || null;
+    try {
+        const { container } = require('../../../core/index.js');
+        const client = container.has('Client') ? container.resolve('Client') : null;
+        if (!defaultGuildId && client?.guilds?.cache?.size > 0) {
+            defaultGuildId = client.guilds.cache.first().id;
+        }
+    } catch {}
+    return req.query?.guild_id || req.body?.guildId || req.body?.guild_id || defaultGuildId;
+}
 
 class BirthdaysController {
     static inject = [BirthdayService];
@@ -24,7 +36,7 @@ class BirthdaysController {
 
     async getSettings(req) {
         try {
-            const guildId = req.query.guild_id || process.env.GUILD_ID;
+            const guildId = getEffectiveGuildId(req);
             if (!guildId) return { success: false, error: 'guild_id requis' };
             return { success: true, data: await this.birthday.getSettings(guildId) };
         } catch (err) {
@@ -34,7 +46,7 @@ class BirthdaysController {
 
     async updateSettings(req) {
         try {
-            const guildId = req.body.guildId || req.query.guild_id || process.env.GUILD_ID;
+            const guildId = getEffectiveGuildId(req);
             if (!guildId) return { success: false, error: 'guild_id requis' };
             const data = await this.birthday.updateSettings(guildId, req.body || {});
             return { success: true, data };
@@ -45,7 +57,7 @@ class BirthdaysController {
 
     async getToday(req) {
         try {
-            const guildId = req.query.guild_id || process.env.GUILD_ID;
+            const guildId = getEffectiveGuildId(req);
             if (!guildId) return { success: false, error: 'guild_id requis' };
             const data = await this.birthday.listToday(guildId);
             return { success: true, data };
@@ -56,9 +68,9 @@ class BirthdaysController {
 
     async getUpcoming(req) {
         try {
-            const guildId = req.query.guild_id || process.env.GUILD_ID;
+            const guildId = getEffectiveGuildId(req);
             if (!guildId) return { success: false, error: 'guild_id requis' };
-            const days = Math.min(parseInt(req.query.days) || 7, 90);
+            const days = Math.min(parseInt(req.query.days) || 365, 365);
             const data = await this.birthday.listUpcoming(guildId, days);
             return { success: true, data };
         } catch (err) {
@@ -69,7 +81,7 @@ class BirthdaysController {
     async getUser(req) {
         try {
             const userId = req.params.userId;
-            const guildId = req.query.guild_id || process.env.GUILD_ID;
+            const guildId = getEffectiveGuildId(req);
             const data = await this.birthday.getBirthday(userId, guildId);
             if (!data) return { success: false, error: 'Anniversaire non trouvé' };
             return { success: true, data };
@@ -81,7 +93,7 @@ class BirthdaysController {
     async setUser(req) {
         try {
             const userId = req.params.userId;
-            const guildId = req.body.guildId || req.query.guild_id || process.env.GUILD_ID;
+            const guildId = getEffectiveGuildId(req);
             const result = await this.birthday.setBirthday({
                 userId,
                 username: req.body.username,
@@ -97,7 +109,7 @@ class BirthdaysController {
     async deleteUser(req) {
         try {
             const userId = req.params.userId;
-            const guildId = req.body?.guildId || req.query.guild_id || process.env.GUILD_ID;
+            const guildId = getEffectiveGuildId(req);
             const result = await this.birthday.removeBirthday(userId, guildId);
             return { success: true, data: result };
         } catch (err) {
@@ -108,7 +120,7 @@ class BirthdaysController {
     async setVisibility(req) {
         try {
             const userId = req.params.userId;
-            const guildId = req.body.guildId || req.query.guild_id || process.env.GUILD_ID;
+            const guildId = getEffectiveGuildId(req);
             const enabled = req.body.enabled !== false;
             await this.birthday.setVisibility(userId, guildId, enabled);
             return { success: true, data: { userId, guildId, enabled } };
@@ -119,7 +131,7 @@ class BirthdaysController {
 
     async getHistory(req) {
         try {
-            const guildId = req.query.guild_id || process.env.GUILD_ID;
+            const guildId = getEffectiveGuildId(req);
             const userId = req.query.user_id || null;
             const limit = Math.min(parseInt(req.query.limit) || 50, 200);
             const data = await this.birthday.listHistory({ guildId, userId, limit });
@@ -137,6 +149,8 @@ Get('/upcoming')(BirthdaysController.prototype, 'getUpcoming');
 Get('/user/:userId')(BirthdaysController.prototype, 'getUser');
 Get('/history')(BirthdaysController.prototype, 'getHistory');
 Put('/settings')(BirthdaysController.prototype, 'updateSettings');
+Patch('/settings')(BirthdaysController.prototype, 'updateSettings');
+Post('/settings')(BirthdaysController.prototype, 'updateSettings');
 Put('/user/:userId')(BirthdaysController.prototype, 'setUser');
 Delete('/user/:userId')(BirthdaysController.prototype, 'deleteUser');
 Post('/user/:userId/visibility')(BirthdaysController.prototype, 'setVisibility');
