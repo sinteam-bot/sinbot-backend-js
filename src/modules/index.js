@@ -19,6 +19,7 @@ const { EconomyModule } = require('./feature_economy/economy.module.js');
 const { StickyRolesModule } = require('./feature_sticky-roles/sticky-roles.module.js');
 const { InfoModule } = require('./feature_info/info.module.js');
 const { EngagementAdvancedModule } = require('./feature_engagement-advanced/engagement-advanced.module.js');
+const { InvitesModule } = require('./feature_invites/invites.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -44,7 +45,8 @@ const appModules = [
     InfoModule,
     EngagementAdvancedModule,
     ReportsModule,
-    TempVoiceModule
+    TempVoiceModule,
+    InvitesModule
 ];
 
 module.exports = {
@@ -69,5 +71,6 @@ module.exports = {
     InfoModule,
     EngagementAdvancedModule,
     ReportsModule,
-    TempVoiceModule
+    TempVoiceModule,
+    InvitesModule
 };

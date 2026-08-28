@@ -35,6 +35,7 @@ const bumpReminder = require('../../modules/service_bump-reminder/db/schema.js')
 const countdown = require('../../modules/game_count-down/db/schema.js');
 const infinite = require('../../modules/game_road-to-infinite/db/schema.js');
 const info = require('../../modules/feature_info/db/schema.js');
+const invites = require('../../modules/feature_invites/db/schema.js');
 
 module.exports = {
     // Tables transverses (shared)
@@ -60,5 +61,6 @@ module.exports = {
     ...bumpReminder,
     ...countdown,
     ...infinite,
-    ...info
+    ...info,
+    ...invites
 };
