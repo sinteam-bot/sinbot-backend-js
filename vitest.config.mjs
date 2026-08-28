@@ -4,6 +4,12 @@ export default defineConfig({
     test: {
         include: ['tests/**/*.test.js'],
         environment: 'node',
+        pool: 'forks',
+        poolOptions: {
+            forks: {
+                singleFork: true,
+            },
+        },
         coverage: {
             provider: 'v8',
             reporter: ['text', 'html', 'lcov'],

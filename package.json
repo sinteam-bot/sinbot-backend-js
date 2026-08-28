@@ -35,6 +35,6 @@
     "better-sqlite3@13.0.3": true
   },
   "devDependencies": {
-    "vitest": "^4.1.11"
+    "vitest": "^3.2.7"
   }
 }
