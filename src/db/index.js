@@ -755,6 +755,25 @@ const PG_TABLES_DDL = `
         created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_inventory_transfers_user ON inventory_transfers(guild_id, to_user_id, created_at);
+
+    -- Phase 8: Sticky roles
+    CREATE TABLE IF NOT EXISTS sticky_roles (
+        user_id TEXT NOT NULL,
+        guild_id TEXT NOT NULL,
+        role_id TEXT NOT NULL,
+        saved_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, guild_id, role_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_sticky_roles_user ON sticky_roles(guild_id, user_id);
+
+    -- Phase 8: Guild stats cache (denormalized for fast dashboard reads)
+    CREATE TABLE IF NOT EXISTS guild_stats (
+        guild_id TEXT NOT NULL,
+        stat_key TEXT NOT NULL,
+        stat_value TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, stat_key)
+    );
 `;
 
 /**
@@ -814,7 +833,10 @@ async function initPgTables(client) {
         `ALTER TABLE birthday_history ALTER COLUMN announced_at TYPE BIGINT;`,
         `ALTER TABLE server_members ALTER COLUMN joined_at TYPE BIGINT;`,
         `ALTER TABLE server_members ALTER COLUMN created_at TYPE BIGINT;`,
-        `ALTER TABLE server_members ALTER COLUMN updated_at TYPE BIGINT;`
+        `ALTER TABLE server_members ALTER COLUMN updated_at TYPE BIGINT;`,
+        `ALTER TABLE sticky_roles ALTER COLUMN saved_at TYPE BIGINT;`,
+        `ALTER TABLE guild_stats ALTER COLUMN updated_at TYPE BIGINT;`,
+        `ALTER TABLE poll_votes ALTER COLUMN voted_at TYPE BIGINT;`
     ];
 
     for (const stmt of migrationStatements) {

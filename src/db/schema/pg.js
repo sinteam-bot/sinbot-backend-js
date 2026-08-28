@@ -752,6 +752,27 @@ const inventoryTransfers = pgTable('inventory_transfers', {
     index('idx_pg_inventory_transfers_to').on(table.guildId, table.toUserId, table.createdAt)
 ]);
 
+// 53. sticky_roles (Phase 8)
+const stickyRoles = pgTable('sticky_roles', {
+    userId: text('user_id').notNull(),
+    guildId: text('guild_id').notNull(),
+    roleId: text('role_id').notNull(),
+    savedAt: bigint('saved_at', { mode: 'bigint' }).notNull()
+}, (table) => [
+    primaryKey({ columns: [table.userId, table.guildId, table.roleId] }),
+    index('idx_pg_sticky_roles_user').on(table.guildId, table.userId)
+]);
+
+// 54. guild_stats (Phase 8 — denormalized cache for fast dashboard)
+const guildStats = pgTable('guild_stats', {
+    guildId: text('guild_id').notNull(),
+    statKey: text('stat_key').notNull(),
+    statValue: text('stat_value').notNull(),
+    updatedAt: bigint('updated_at', { mode: 'bigint' }).notNull()
+}, (table) => [
+    primaryKey({ columns: [table.guildId, table.statKey] })
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -804,5 +825,7 @@ module.exports = {
     shopItems,
     userInventory,
     inventoryDrops,
-    inventoryTransfers
+    inventoryTransfers,
+    stickyRoles,
+    guildStats
 };
