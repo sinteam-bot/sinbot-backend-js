@@ -4,6 +4,17 @@ const fs = require('fs');
 const path = require('path');
 const { config } = require('./config/index.js');
 
+// Initialise la DB (PGlite ou PG) + applique les migrations en arrière-plan.
+// L'import de db/index.js force l'exécution du bootstrap.
+const dbContext = require('./db/index.js');
+if (dbContext.ready) {
+    dbContext.ready.then(() => {
+        console.log('✅ Base de données initialisée (migrations appliquées).');
+    }).catch((err) => {
+        console.error('❌ Erreur migrations DB:', err);
+    });
+}
+
 const { logUserEvent, getUserEvents, getGlobalStats } = require("./db/schemas/shared/audit.repository.js");
 const { loadCommands } = require("./utils/commandHandler.js");
 const logger = require("./utils/logger.js");

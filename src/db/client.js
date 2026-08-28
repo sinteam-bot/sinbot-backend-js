@@ -154,7 +154,18 @@ function initDatabase(schema) {
             : creds;
         _rawClient = new Pool(poolConfig);
         _db = drizzlePg(_rawClient, { schema });
-        _ready = Promise.resolve();
+        // En production, on applique automatiquement les migrations au
+        // démarrage pour éviter l'oubli (idempotent via _journal).
+        const migrationsFolder = _resolveMigrationsFolder();
+        if (require('fs').existsSync(migrationsFolder) && process.env.SKIP_MIGRATIONS !== '1') {
+            console.log('[db] Application des migrations Drizzle...');
+            const { migrate: pgMigrate } = require('drizzle-orm/node-postgres/migrator');
+            _ready = pgMigrate(_db, { migrationsFolder }).catch((err) => {
+                console.error('[db] Erreur migrations PG (initDatabase):', err);
+            });
+        } else {
+            _ready = Promise.resolve();
+        }
     }
 
     if (_db) {
