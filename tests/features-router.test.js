@@ -28,6 +28,10 @@ describe('featuresRouter (HTTP integration)', () => {
 
         app = express();
         app.use(express.json());
+        app.use((req, res, next) => {
+            req.user = { userId: 'test_admin', role: 'admin' };
+            next();
+        });
         app.use('/api/features', createRouter());
 
         await new Promise((resolve) => {

@@ -74,14 +74,15 @@ class FakeRepo {
 
     async insertCustomCommand(c) {
         const id = c.id || 'c' + Math.random();
+        const parseArr = (v) => Array.isArray(v) ? v : (typeof v === 'string' ? JSON.parse(v) : []);
         const cmd = {
             id,
             guildId: c.guildId,
             name: c.name,
             responseText: c.responseText || null,
-            responseEmbed: c.responseEmbed || null,
-            restrictChannelIds: c.restrictChannelIds || [],
-            restrictRoleIds: c.restrictRoleIds || [],
+            responseEmbed: c.responseEmbed || (c.responseEmbedJson ? JSON.parse(c.responseEmbedJson) : null),
+            restrictChannelIds: parseArr(c.restrictChannelIds || c.restrictChannelIdsJson),
+            restrictRoleIds: parseArr(c.restrictRoleIds || c.restrictRoleIdsJson),
             cooldownSeconds: c.cooldownSeconds ?? 5,
             createdBy: c.createdBy || null,
             createdAt: c.createdAt || Date.now()
