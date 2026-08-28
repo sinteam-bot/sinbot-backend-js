@@ -253,10 +253,10 @@ const addSelectBuilder = new SlashCommandBuilder()
     .setDescription('Ajouter un select menu (max 25 options) à un message (admin)')
     .addChannelOption(o => o.setName('channel').setDescription('Salon du message').setRequired(true))
     .addStringOption(o => o.setName('message_id').setDescription('ID du message').setRequired(true))
+    .addStringOption(o => o.setName('options').setDescription('Options: "Label|value|roleId?" séparées par ;').setRequired(true).setMaxLength(1000))
     .addStringOption(o => o.setName('placeholder').setDescription('Texte affiché quand rien n\'est sélectionné').setRequired(false).setMaxLength(100))
     .addIntegerOption(o => o.setName('min_values').setDescription('Nb min d\'options (0 = optionnel, default 1)').setRequired(false).setMinValue(0).setMaxValue(25))
     .addIntegerOption(o => o.setName('max_values').setDescription('Nb max d\'options (1 = single, default 1)').setRequired(false).setMinValue(1).setMaxValue(25))
-    .addStringOption(o => o.setName('options').setDescription('Options: "Label|value|roleId?" séparées par ;').setRequired(true).setMaxLength(1000))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles);
 
 Command({ name: 'reactionrole-add-button', builder: addButtonBuilder })(ReactionRoleCommands.prototype, 'executeAddButton');
