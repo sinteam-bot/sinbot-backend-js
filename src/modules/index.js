@@ -13,6 +13,7 @@ const { CardsModule } = require('./feature_cards/cards.module.js');
 const { EngagementModule } = require('./feature_engagement/engagement.module.js');
 const { BirthdaysModule } = require('./feature_birthdays/birthdays.module.js');
 const { ReactionRolesModule } = require('./feature_reaction-roles/reaction-roles.module.js');
+const { ReportsModule } = require('./feature_reports/reports.module.js');
 const { EconomyModule } = require('./feature_economy/economy.module.js');
 const { StickyRolesModule } = require('./feature_sticky-roles/sticky-roles.module.js');
 const { InfoModule } = require('./feature_info/info.module.js');
@@ -40,7 +41,8 @@ const appModules = [
     EconomyModule,
     StickyRolesModule,
     InfoModule,
-    EngagementAdvancedModule
+    EngagementAdvancedModule,
+    ReportsModule
 ];
 
 module.exports = {
@@ -63,5 +65,6 @@ module.exports = {
     EconomyModule,
     StickyRolesModule,
     InfoModule,
-    EngagementAdvancedModule
+    EngagementAdvancedModule,
+    ReportsModule
 };
