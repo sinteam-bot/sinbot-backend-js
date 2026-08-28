@@ -1,8 +1,8 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the InfoService (Phase 8.3)
  */
 
-const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { InfoService } = require('../src/modules/feature_info/services/info.service.js');
 

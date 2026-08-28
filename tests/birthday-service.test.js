@@ -1,4 +1,5 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the BirthdayService (Phase 7)
  *
  * Couvre :
@@ -11,7 +12,6 @@
  *   - canChangeBirthday
  */
 
-const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { BirthdayService, DEFAULT_COOLDOWN_DAYS } = require('../src/modules/feature_birthdays/services/birthday.service.js');
 

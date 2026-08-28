@@ -1,8 +1,8 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the ReactionRolesService (Phase RR)
  */
 
-const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { ReactionRolesService } = require('../src/modules/feature_reaction-roles/services/reaction-roles.service.js');
 

@@ -1,8 +1,8 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests unitaires pour les services AutoMod
  */
 
-const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { SpamDetector } = require('../src/modules/feature_automod/services/spam-detector.service.js');
 const { BadWords } = require('../src/modules/feature_automod/services/bad-words.service.js');

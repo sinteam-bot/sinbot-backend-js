@@ -1,8 +1,8 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests pour les services Tickets (Phase 3)
  */
 
-const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { TicketService, STATUS } = require('../src/modules/feature_tickets/services/ticket.service.js');
 const { TicketPermissionsService } = require('../src/modules/feature_tickets/services/ticket-permissions.service.js');

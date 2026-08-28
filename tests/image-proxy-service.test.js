@@ -1,11 +1,11 @@
-const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const { ImageProxyService } = require('../src/services/imageProxyService.js');
 
 describe('ImageProxyService Tests', () => {
     let service;
 
-    before(() => {
+    beforeAll(() => {
         service = new ImageProxyService();
     });
 

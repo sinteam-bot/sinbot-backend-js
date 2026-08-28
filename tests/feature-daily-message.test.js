@@ -1,5 +1,5 @@
-const { test, describe } = require('node:test');
 const assert = require('node:assert');
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const { container } = require('../src/core/container.js');
 const { DailyMessageRepository } = require('../src/modules/feature_daily-message/daily-message.repository.js');
 const { DailyMessageService } = require('../src/modules/feature_daily-message/daily-message.service.js');

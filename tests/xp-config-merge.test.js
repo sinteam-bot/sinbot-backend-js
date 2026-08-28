@@ -1,4 +1,5 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the deep-merge logic in XPLevelController.updateConfig
  *
  * The controller is not directly exported with _deepMerge as a public
@@ -7,7 +8,6 @@
  * HTTP endpoint.
  */
 
-const { test, describe } = require('node:test');
 const assert = require('node:assert');
 
 function deepMerge(target, source) {

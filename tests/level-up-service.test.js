@@ -1,8 +1,8 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests pour le LevelUpService et le nouveau flow XP
  */
 
-const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { LevelUpService } = require('../src/modules/feature_xp-level/level-up.service.js');
 

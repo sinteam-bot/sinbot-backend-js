@@ -1,4 +1,5 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests pour le FeatureRegistry
  *
  * Couvre :
@@ -10,7 +11,6 @@
  *  - listForGuild
  */
 
-const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { FeatureRegistry, featureRegistry } = require('../src/core/feature-registry.js');
 

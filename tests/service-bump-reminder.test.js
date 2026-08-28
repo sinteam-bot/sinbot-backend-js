@@ -1,5 +1,5 @@
-const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert');
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const { container } = require('../src/core/container.js');
 const { BumpReminderRepository } = require('../src/modules/service_bump-reminder/bump-reminder.repository.js');
 const { BumpReminderService } = require('../src/modules/service_bump-reminder/bump-reminder.service.js');
@@ -10,12 +10,12 @@ describe('Service: Bump Reminder Module Tests', () => {
     const guildId = 'test_guild_bump';
     const channelId = 'test_channel_bump';
 
-    before(async () => {
+    beforeAll(async () => {
         const repo = container.resolve(BumpReminderRepository);
         await repo.deleteTestBumps();
     });
 
-    after(async () => {
+    afterAll(async () => {
         const repo = container.resolve(BumpReminderRepository);
         await repo.deleteTestBumps();
     });

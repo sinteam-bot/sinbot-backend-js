@@ -1,8 +1,8 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the StickyRolesService (Phase 8)
  */
 
-const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { StickyRolesService } = require('../src/modules/feature_sticky-roles/services/sticky-roles.service.js');
 

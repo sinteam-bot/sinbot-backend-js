@@ -1,8 +1,8 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the CardRendererService (Phase 6)
  */
 
-const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { CardRendererService } = require('../src/modules/feature_cards/services/card-renderer.service.js');
 

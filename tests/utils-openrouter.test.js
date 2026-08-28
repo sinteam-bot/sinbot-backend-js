@@ -1,5 +1,5 @@
-const { test, describe } = require('node:test');
 const assert = require('node:assert');
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const openrouter = require('../src/utils/openrouter.js');
 
 describe('OpenRouter Utilities Tests', () => {

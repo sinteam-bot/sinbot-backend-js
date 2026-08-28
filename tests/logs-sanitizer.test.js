@@ -1,8 +1,8 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the Logs feature services
  */
 
-const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { Sanitizer } = require('../src/modules/feature_logs/services/sanitizer.service.js');
 

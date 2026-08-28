@@ -1,5 +1,5 @@
-const { test, describe } = require('node:test');
 const assert = require('node:assert');
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const { container } = require('../src/core/container.js');
 const { CountDownRepository } = require('../src/modules/game_count-down/count-down.repository.js');
 const { CountDownService } = require('../src/modules/game_count-down/count-down.service.js');

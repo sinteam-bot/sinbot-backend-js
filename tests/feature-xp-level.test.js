@@ -1,5 +1,5 @@
-const { test, describe } = require('node:test');
 const assert = require('node:assert');
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const { container } = require('../src/core/container.js');
 const { XPLevelRepository } = require('../src/modules/feature_xp-level/xp-level.repository.js');
 const { XPLevelService } = require('../src/modules/feature_xp-level/xp-level.service.js');

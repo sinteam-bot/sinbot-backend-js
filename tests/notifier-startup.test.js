@@ -1,5 +1,5 @@
-const { test, describe } = require('node:test');
 const assert = require('node:assert');
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const { container } = require('../src/core/container.js');
 const { StartupNotifierService } = require('../src/modules/notifier_startup/startup-notifier.service.js');
 const { StartupNotifierController } = require('../src/modules/notifier_startup/startup-notifier.controller.js');

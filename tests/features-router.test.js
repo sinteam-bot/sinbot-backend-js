@@ -1,4 +1,5 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests d'intégration pour featuresRouter
  *
  * On mock le FeatureRegistry via Module._cache pour qu'il utilise une instance
@@ -6,14 +7,13 @@
  * ni du bot Discord.
  */
 
-const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert');
 const express = require('express');
 
 describe('featuresRouter (HTTP integration)', () => {
     let app, server, baseUrl, featureRegistry, registryModule;
 
-    before(async () => {
+    beforeAll(async () => {
         registryModule = require('../src/core/feature-registry.js');
         featureRegistry = new registryModule.FeatureRegistry();
         featureRegistry._dbAvailable = false;
@@ -42,7 +42,7 @@ describe('featuresRouter (HTTP integration)', () => {
         };
     });
 
-    after(async () => {
+    afterAll(async () => {
         if (server) await new Promise((r) => server.close(r));
     });
 

@@ -1,5 +1,5 @@
-const { test, describe } = require('node:test');
 const assert = require('node:assert');
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const { ResiliencePolicy } = require('../src/utils/resiliencePolicy.js');
 
 describe('ResiliencePolicy (Polly-like) Tests', () => {

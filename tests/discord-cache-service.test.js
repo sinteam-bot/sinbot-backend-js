@@ -1,12 +1,12 @@
-const { test, describe, before } = require('node:test');
 const assert = require('node:assert');
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
 const DiscordCacheService = require('../src/services/discordCacheService.js');
 const { pool } = require('../src/database.js');
 const { ensureTestDbReady } = require('./helpers/pglite');
 
 describe('Discord Cache Service Tests', () => {
 
-    before(async () => {
+    beforeAll(async () => {
         await ensureTestDbReady();
     });
 

@@ -1,8 +1,8 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the Economy, Shop and Inventory services (Phase 9)
  */
 
-const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { EconomyService } = require('../src/modules/feature_economy/services/economy.service.js');
 const { ShopService } = require('../src/modules/feature_economy/services/shop.service.js');

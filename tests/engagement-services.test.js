@@ -1,8 +1,8 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * Tests for the GiveawayService and PollService (Phase 5)
  */
 
-const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { GiveawayService, STATUS: GIVEAWAY_STATUS } = require('../src/modules/feature_engagement/services/giveaway.service.js');
 const { PollService, STATUS: POLL_STATUS } = require('../src/modules/feature_engagement/services/poll.service.js');

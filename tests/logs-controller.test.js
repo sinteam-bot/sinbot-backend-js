@@ -1,11 +1,11 @@
 /**
+const { test, describe, beforeAll, afterAll, beforeEach } = require("vitest");
  * HTTP integration tests for LogsController
  *
  * On mock les services via stub pour tester le routage et la
  * sérialisation des réponses, sans dépendre de la DB.
  */
 
-const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert');
 const express = require('express');
 
@@ -26,7 +26,7 @@ function createStubStats() {
 describe('LogsController (HTTP integration)', () => {
     let app, server, baseUrl, controller;
 
-    before(async () => {
+    beforeAll(async () => {
         const { LogsController } = require('../src/modules/feature_logs/controllers/logs.controller.js');
         controller = new LogsController(createStubLogs(), createStubStats());
         app = express();
@@ -46,7 +46,7 @@ describe('LogsController (HTTP integration)', () => {
         baseUrl = `http://127.0.0.1:${port}`;
     });
 
-    after(async () => {
+    afterAll(async () => {
         if (server) await new Promise((r) => server.close(r));
     });
 
