@@ -1,13 +1,40 @@
 /**
- * db/schema.js — Tables Drizzle propres au module.
- * Étape 2 : stub qui pointe vers le schema global (rétrocompat).
- * Étape 3 : remplacera par des définitions `pgTable` isolées.
+ * feature_tickets/db/schema.js
+ *
+ * Tables Drizzle du module Tickets.
  */
 
-const pgSchema = require('../../../db/schemas/index.js');
+const { pgTable, text, integer, bigint, index } = require('../../../db/schemas/_drizzle.js');
 
-module.exports = {
-    tickets: pgSchema.tickets,
-    ticketMessages: pgSchema.ticketMessages,
-    ticketAttachments: pgSchema.ticketAttachments,
-};
+const tickets = pgTable('tickets', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    userId: text('user_id').notNull(),
+    category: text('category').notNull().default('support'),
+    subject: text('subject'),
+    status: text('status').notNull().default('open'),
+    claimedBy: text('claimed_by'),
+    closedBy: text('closed_by'),
+    closedAt: bigint('closed_at', { mode: 'number' }),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull()
+}, (table) => [
+    index('idx_pg_tickets_guild_status').on(table.guildId, table.status),
+    index('idx_pg_tickets_user').on(table.userId),
+    index('idx_pg_tickets_channel').on(table.channelId)
+]);
+
+const ticketMessages = pgTable('ticket_messages', {
+    id: text('id').primaryKey(),
+    ticketId: text('ticket_id').notNull(),
+    authorId: text('author_id').notNull(),
+    content: text('content'),
+    attachments: text('attachments'),
+    isStaff: integer('is_staff').notNull().default(0),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
+}, (table) => [
+    index('idx_pg_ticket_messages_ticket').on(table.ticketId)
+]);
+
+module.exports = { tickets, ticketMessages };

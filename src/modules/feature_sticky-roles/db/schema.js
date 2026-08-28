@@ -1,11 +1,19 @@
 /**
- * db/schema.js — Tables Drizzle propres au module.
- * Étape 2 : stub qui pointe vers le schema global (rétrocompat).
- * Étape 3 : remplacera par des définitions `pgTable` isolées.
+ * feature_sticky-roles/db/schema.js
+ *
+ * Tables Drizzle du module Sticky Roles.
  */
 
-const pgSchema = require('../../../db/schemas/index.js');
+const { pgTable, text, bigint, primaryKey, index } = require('../../../db/schemas/_drizzle.js');
 
-module.exports = {
-    stickyRoles: pgSchema.stickyRoles,
-};
+const stickyRoles = pgTable('sticky_roles', {
+    userId: text('user_id').notNull(),
+    guildId: text('guild_id').notNull(),
+    roleId: text('role_id').notNull(),
+    savedAt: bigint('saved_at', { mode: 'number' }).notNull()
+}, (table) => [
+    primaryKey({ columns: [table.userId, table.guildId, table.roleId] }),
+    index('idx_pg_sticky_roles_user').on(table.guildId, table.userId)
+]);
+
+module.exports = { stickyRoles };

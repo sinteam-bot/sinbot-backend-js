@@ -1,11 +1,18 @@
 /**
- * db/schema.js — Tables Drizzle propres au module.
- * Étape 2 : stub qui pointe vers le schema global (rétrocompat).
- * Étape 3 : remplacera par des définitions `pgTable` isolées.
+ * game_road-to-infinite/db/schema.js
+ *
+ * Tables Drizzle du jeu Road to Infinite.
  */
 
-const pgSchema = require('../../../db/schemas/index.js');
+const { pgTable, text, integer } = require('../../../db/schemas/_drizzle.js');
+const { sql } = require('drizzle-orm');
 
-module.exports = {
-    counterState: pgSchema.counterState,
-};
+const counterState = pgTable('counter_state', {
+    channelId: text('channel_id').primaryKey(),
+    currentNumber: integer('current_number').default(0),
+    errorCount: integer('error_count').default(0),
+    lastUserId: text('last_user_id'),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
+});
+
+module.exports = { counterState };
