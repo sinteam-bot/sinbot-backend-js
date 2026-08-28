@@ -9,6 +9,11 @@ const { loadCommands } = require("./utils/commandHandler.js");
 const logger = require("./utils/logger.js");
 const createWebRouter = require("./web/webRouter.js");
 const { initDiscordEventTracker } = require("./utils/discordEventTracker.js");
+const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
+const createAuthRouter = require('./web/authRouter.js');
+const cron = require('node-cron');
+const { authService } = require('./services/auth.service.js');
 const {
     timingSafeEqual,
     isDiscordSnowflake,
@@ -16,7 +21,9 @@ const {
     validateMessageContent,
     validateEmbed,
     verifyChannelBelongsToGuild,
-    createRateLimiters
+    createRateLimiters,
+    authenticateMiddleware,
+    requireRole
 } = require('./utils/security.js');
 
 // Activer la capture des logs console pour le salon virtuel Logs
@@ -74,112 +81,47 @@ for (const file of eventFiles) {
 console.log('');
 
 // ============================================
-// SERVEUR EXPRESS POUR WEBHOOKS (n8n)
+// SERVEUR EXPRESS & SÉCURITÉ GLOBALE
 // ============================================
 
 const app = express();
+
+// Configuration Reverse Proxy (Nginx, Traefik, Cloudflare, Docker)
+app.set('trust proxy', 1);
+
+// Redirection HTTPS automatique en production
+app.use((req, res, next) => {
+    if (process.env.NODE_ENV === 'production') {
+        const proto = req.headers['x-forwarded-proto'] || req.protocol;
+        if (proto !== 'https') {
+            return res.redirect(301, `https://${req.headers.host}${req.url}`);
+        }
+    }
+    next();
+});
+
+// Headers de sécurité HTTP via Helmet (HSTS, NoSniff, FrameGuard)
+app.use(helmet({
+    contentSecurityPolicy: false, // Laissé souple pour Nuxt SSR/SSG & Canvas
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
+
+// Cookie Parser pour les cookies de session et refresh tokens HttpOnly
+app.use(cookieParser());
+
+// Body Parser avec limite de taille
 app.use(express.json({ limit: '1mb' }));
 
 // Rate limiters de sécurité (anti brute-force, anti spam)
 const rateLimiters = createRateLimiters();
 app.use(rateLimiters.global);
 
-// Middleware de protection et d'authentification Web / API
-const webAuthMiddleware = (req, res, next) => {
-    const authConfig = config.web?.auth || {};
+// Monter le routeur d'authentification OAuth2 Discord & JWT
+app.use('/api/auth', createAuthRouter(client));
 
-    // 1. Si la protection est désactivée, passer immédiatement
-    if (!authConfig.enabled) {
-        return next();
-    }
-
-    // 2. Endpoints toujours publics : health check, statut auth et proxy d'images Discord
-    if (req.path === '/health' || req.path === '/api/auth/status' || req.path === '/api/auth/verify' || req.path.startsWith('/api/proxy/')) {
-        return next();
-    }
-
-    // 3. Vérification de la liste blanche d'adresses IP si configurée
-    const clientIp = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
-    if (authConfig.allowed_ips && Array.isArray(authConfig.allowed_ips) && authConfig.allowed_ips.length > 0) {
-        if (authConfig.allowed_ips.includes(clientIp) || clientIp === '127.0.0.1' || clientIp === '::1') {
-            return next();
-        }
-    }
-
-    // 4. Extraction du token / clé d'API (headers uniquement — pas de query string pour éviter le logging)
-    let providedKey = req.headers['x-api-key'];
-
-    if (!providedKey && req.headers['authorization']) {
-        const authHeader = req.headers['authorization'];
-        if (authHeader.startsWith('Bearer ')) {
-            providedKey = authHeader.substring(7).trim();
-        } else if (authHeader.startsWith('Basic ')) {
-            try {
-                const decoded = Buffer.from(authHeader.substring(6), 'base64').toString('utf-8');
-                providedKey = decoded.includes(':') ? decoded.split(':')[1] : decoded;
-            } catch {
-                providedKey = authHeader;
-            }
-        } else {
-            providedKey = authHeader;
-        }
-    }
-
-    const expectedKey = authConfig.api_key;
-
-    // Comparaison en temps constant pour prévenir les attaques temporelles (timing attack)
-    if (providedKey && expectedKey && timingSafeEqual(providedKey, expectedKey)) {
-        return next();
-    }
-
-    // 5. Refus d'accès si non autorisé
-    if (req.path.startsWith('/api') || req.path.startsWith('/webhook')) {
-        return res.status(401).json({
-            success: false,
-            error: 'Accès non autorisé : Clé API manquante ou invalide.'
-        });
-    }
-
-    if (authConfig.protect_static) {
-        return res.status(401).send(`
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="utf-8"><title>401 - Accès Protégé</title></head>
-            <body style="font-family:sans-serif;text-align:center;padding:50px;background:#1e1f22;color:#fff;">
-                <h2>🔒 Accès Protégé</h2>
-                <p>Une clé d'authentification valide est requise pour accéder au tableau de bord.</p>
-            </body>
-            </html>
-        `);
-    }
-
-    next();
-};
-
-// Endpoints publics d'état d'authentification
-app.get('/api/auth/status', (req, res) => {
-    const authConfig = config.web?.auth || {};
-    res.json({
-        success: true,
-        authRequired: !!authConfig.enabled,
-        protectStatic: !!authConfig.protect_static
-    });
-});
-
-// Rate limiter strict sur l'endpoint de vérification (anti brute-force)
-app.post('/api/auth/verify', rateLimiters.auth, (req, res) => {
-    const authConfig = config.web?.auth || {};
-    const { apiKey } = req.body;
-    // Comparaison en temps constant pour prévenir les attaques temporelles
-    const isValid = !authConfig.enabled || (apiKey && authConfig.api_key && timingSafeEqual(apiKey, authConfig.api_key));
-    res.json({
-        success: true,
-        valid: isValid
-    });
-});
-
-// Appliquer le middleware d'authentification
-app.use(webAuthMiddleware);
+// Appliquer le middleware d'authentification globale avec RBAC
+app.use(authenticateMiddleware());
 
 // Servir l'interface web statique
 const publicPath = path.join(__dirname, '../public');

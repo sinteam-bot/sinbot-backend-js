@@ -858,7 +858,7 @@ const PG_TABLES_DDL = `
     CREATE TABLE IF NOT EXISTS temp_voice_config (
         guild_id TEXT PRIMARY KEY,
         category_id TEXT,
-        format TEXT NOT NULL DEFAULT "{user}'s game",
+        format TEXT NOT NULL DEFAULT '{user}''s game',
         delete_delay_seconds INTEGER NOT NULL DEFAULT 5,
         max_per_guild INTEGER NOT NULL DEFAULT 0,
         locked_role_id TEXT,
@@ -875,6 +875,49 @@ const PG_TABLES_DDL = `
         created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_temp_voice_state_guild ON temp_voice_state(guild_id);
+
+    -- Phase Auth & Sécurité Avancée
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        username TEXT NOT NULL,
+        avatar_url TEXT,
+        role TEXT NOT NULL DEFAULT 'viewer',
+        refresh_token_hash TEXT NOT NULL,
+        ip_address TEXT,
+        user_agent TEXT,
+        expires_at BIGINT NOT NULL,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
+        revoked_at BIGINT
+    );
+    CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_auth_sessions_token_hash ON auth_sessions(refresh_token_hash);
+
+    CREATE TABLE IF NOT EXISTS auth_audit_logs (
+        id SERIAL PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        user_id TEXT,
+        username TEXT,
+        ip_address TEXT NOT NULL,
+        user_agent TEXT,
+        reason TEXT,
+        metadata TEXT,
+        created_at BIGINT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_auth_audit_logs_ip ON auth_audit_logs(ip_address, created_at);
+    CREATE INDEX IF NOT EXISTS idx_auth_audit_logs_user ON auth_audit_logs(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_auth_audit_logs_type ON auth_audit_logs(event_type, created_at);
+
+    CREATE TABLE IF NOT EXISTS auth_failed_attempts (
+        identifier TEXT PRIMARY KEY,
+        attempt_count INTEGER NOT NULL DEFAULT 1,
+        first_attempt_at BIGINT NOT NULL,
+        last_attempt_at BIGINT NOT NULL,
+        blocked_until BIGINT
+    );
+    CREATE INDEX IF NOT EXISTS idx_auth_failed_blocked ON auth_failed_attempts(blocked_until);
 `;
 
 let pgTablesInitialized = false;

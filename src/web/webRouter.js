@@ -12,6 +12,7 @@ const {
     validateMessageContent,
     validateEmbed,
     createRateLimiters,
+    requireRole,
     DISCORD_MAX_MESSAGE_LENGTH,
     DISCORD_MAX_TITLE_LENGTH
 } = require('../utils/security.js');
@@ -173,7 +174,7 @@ function createWebRouter(client) {
     });
 
     // Endpoint pour forcer une resynchronisation complète du cache BDD
-    router.post('/cache/sync', async (req, res) => {
+    router.post('/cache/sync', rateLimiters.sensitive, requireRole('admin'), async (req, res) => {
         try {
             const guild = await getGuild();
             if (!guild) {
@@ -561,7 +562,7 @@ function createWebRouter(client) {
     // ============================================
     // 4. ENVOYER UN MESSAGE DEPUIS LE WEB (EN TANT QUE BOT)
     // ============================================
-    router.post('/channels/:channelId/messages', rateLimiters.write, async (req, res) => {
+    router.post('/channels/:channelId/messages', rateLimiters.write, requireRole(['admin', 'mod']), async (req, res) => {
         const { channelId } = req.params;
         const { content } = req.body;
 
@@ -716,7 +717,7 @@ function createWebRouter(client) {
         }
     });
 
-    router.post('/channels/:channelId/posts', rateLimiters.write, async (req, res) => {
+    router.post('/channels/:channelId/posts', rateLimiters.write, requireRole(['admin', 'mod']), async (req, res) => {
         const { channelId } = req.params;
         const { title, content, appliedTags } = req.body;
 
@@ -769,7 +770,7 @@ function createWebRouter(client) {
     // ============================================
     // 4b. MODIFIER UN MESSAGE DEPUIS LE WEB
     // ============================================
-    router.patch('/channels/:channelId/messages/:messageId', rateLimiters.write, async (req, res) => {
+    router.patch('/channels/:channelId/messages/:messageId', rateLimiters.write, requireRole(['admin', 'mod']), async (req, res) => {
         const { channelId, messageId } = req.params;
         const { content } = req.body;
 
@@ -833,7 +834,7 @@ function createWebRouter(client) {
     // ============================================
     // 4c. SUPPRIMER UN MESSAGE DEPUIS LE WEB
     // ============================================
-    router.delete('/channels/:channelId/messages/:messageId', rateLimiters.write, async (req, res) => {
+    router.delete('/channels/:channelId/messages/:messageId', rateLimiters.write, requireRole(['admin', 'mod']), async (req, res) => {
         const { channelId, messageId } = req.params;
 
         try {
@@ -1249,7 +1250,7 @@ function createWebRouter(client) {
         }
     });
 
-    router.post('/config', rateLimiters.sensitive, async (req, res) => {
+    router.post('/config', rateLimiters.sensitive, requireRole('admin'), async (req, res) => {
         const { module, config: moduleConfig } = req.body;
 
         if (!module || !moduleConfig) {
@@ -1836,7 +1837,7 @@ function createWebRouter(client) {
         }
     });
 
-    router.post('/commands/sync', rateLimiters.sensitive, async (req, res) => {
+    router.post('/commands/sync', rateLimiters.sensitive, requireRole('admin'), async (req, res) => {
         try {
             const { syncDiscordSlashCommands } = require('../utils/commandDeployer.js');
             const result = await syncDiscordSlashCommands(client, req.body || {});

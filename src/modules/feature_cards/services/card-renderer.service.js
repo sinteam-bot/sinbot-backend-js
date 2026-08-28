@@ -252,7 +252,7 @@ ${this._gradientBackground(p.color1 || '#5865f2', p.color2 || '#f2c7ce')}
 ${this._defs()}
 <rect width="100%" height="100%" fill="url(#bg)"/>
 ${p.avatarUrl ? this._avatarCircle({ url: p.avatarUrl, radius: 80 }) : ''}
-${this._text({ x: width / 2, y: p.avatarUrl ? 340 : 200, content: p.title || 'Chienne Bot', size: 48, color: '#ffffff', anchor: 'middle', weight: 'bold' })}
+${this._text({ x: width / 2, y: p.avatarUrl ? 340 : 200, content: p.title || 'Bot', size: 48, color: '#ffffff', anchor: 'middle', weight: 'bold' })}
 ${p.subtitle ? this._text({ x: width / 2, y: p.avatarUrl ? 400 : 260, content: p.subtitle, size: 22, color: 'rgba(255,255,255,0.85)', anchor: 'middle' }) : ''}
 `, { width, height, bg: false });
         });

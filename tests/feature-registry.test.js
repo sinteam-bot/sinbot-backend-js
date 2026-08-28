@@ -10,6 +10,7 @@
  *  - listForGuild
  */
 
+const { test, describe, beforeEach } = require('vitest');
 const assert = require('node:assert');
 const { FeatureRegistry, featureRegistry } = require('../src/core/feature-registry.js');
 

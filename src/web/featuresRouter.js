@@ -16,6 +16,7 @@
 
 const express = require('express');
 const { featureRegistry } = require('../core/feature-registry.js');
+const { requireRole } = require('../utils/security.js');
 const logger = require('../utils/logger.js');
 
 function resolveGuildId(req) {
@@ -55,7 +56,7 @@ function createFeaturesRouter() {
         }
     });
 
-    router.patch('/:name', async (req, res) => {
+    router.patch('/:name', requireRole('admin'), async (req, res) => {
         try {
             const guildId = resolveGuildId(req);
             if (!guildId) return res.status(400).json({ success: false, error: 'guildId manquant' });

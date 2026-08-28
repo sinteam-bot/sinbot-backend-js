@@ -342,6 +342,189 @@ function validateDiscordParamsMiddleware(req, res, next) {
     next();
 }
 
+// ============================================
+// 7. MIDDLEWARES RBAC & AUTHENTIFICATION
+// ============================================
+
+/**
+ * Récupère l'adresse IP réelle du client
+ * @param {import('express').Request} req
+ * @returns {string}
+ */
+function getClientIp(req) {
+    if (!req) return '127.0.0.1';
+    return req.ip ||
+           (req.headers && req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null) ||
+           req.socket?.remoteAddress ||
+           '127.0.0.1';
+}
+
+/**
+ * Middleware Express vérifiant si l'adresse IP du client est temporairement bloquée
+ */
+async function checkBruteForceBlocked(req, res, next) {
+    try {
+        const { authService } = require('../services/auth.service.js');
+        const ip = getClientIp(req);
+        const check = await authService.isBlocked(ip);
+
+        if (check.isBlocked) {
+            const seconds = Math.ceil(check.remainingMs / 1000);
+            res.setHeader('Retry-After', String(seconds));
+            return res.status(429).json({
+                success: false,
+                error: `Trop de tentatives d'authentification échouées. Votre adresse IP est temporairement bloquée pendant encore ${seconds} secondes.`,
+                retryAfter: seconds
+            });
+        }
+    } catch {
+        // En cas d'erreur BDD, on laisse passer pour ne pas bloquer tout le service
+    }
+    next();
+}
+
+/**
+ * Middleware d'authentification globale (JWT Bearer ou Clé API système)
+ */
+function authenticateMiddleware(options = {}) {
+    return (req, res, next) => {
+        const { getConfig, config } = require('../config/index.js');
+        const curConfig = getConfig ? getConfig() : config;
+        const authConfig = curConfig.web?.auth || {};
+
+        // 1. Si l'authentification est désactivée globalement
+        if (!authConfig.enabled) {
+            req.user = { userId: 'anonymous', username: 'Anonyme', role: 'admin', isAnonymous: true };
+            return next();
+        }
+
+        // 2. Endpoints toujours publics
+        const publicPaths = [
+            '/health',
+            '/api/auth/status',
+            '/api/auth/discord/login',
+            '/api/auth/discord/callback',
+            '/api/auth/refresh',
+            '/api/auth/verify',
+            '/api/auth/unblock-ip'
+        ];
+
+        if (publicPaths.includes(req.path) || req.path.startsWith('/api/proxy/')) {
+            return next();
+        }
+
+        // 3. Vérification de la liste blanche d'adresses IP si configurée
+        const clientIp = getClientIp(req);
+        if (authConfig.allowed_ips && Array.isArray(authConfig.allowed_ips) && authConfig.allowed_ips.length > 0) {
+            if (authConfig.allowed_ips.includes(clientIp) || clientIp === '127.0.0.1' || clientIp === '::1') {
+                req.user = { userId: 'whitelisted_ip', role: 'admin' };
+                return next();
+            }
+        }
+
+        // 4. Extraction du token JWT Bearer
+        const authHeader = req.headers['authorization'];
+        let token = null;
+
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.substring(7).trim();
+        }
+
+        if (token) {
+            const { authService } = require('../services/auth.service.js');
+            const decoded = authService.verifyAccessToken(token);
+            if (decoded) {
+                req.user = {
+                    userId: decoded.sub,
+                    username: decoded.username,
+                    avatarUrl: decoded.avatar,
+                    role: decoded.role || 'viewer',
+                    sessionId: decoded.sessionId
+                };
+                return next();
+            }
+        }
+
+        // 5. Fallback : Clé API système (x-api-key)
+        const apiKey = req.headers['x-api-key'];
+        if (apiKey && authConfig.api_key && timingSafeEqual(apiKey, authConfig.api_key)) {
+            req.user = {
+                userId: 'system_api_key',
+                username: 'System API Key',
+                role: 'admin',
+                isApiKey: true
+            };
+            return next();
+        }
+
+        // 6. Refus d'accès 401
+        if (req.path.startsWith('/api') || req.path.startsWith('/webhook')) {
+            return res.status(401).json({
+                success: false,
+                error: 'Accès non autorisé : Token JWT ou Clé API manquant ou invalide.'
+            });
+        }
+
+        if (authConfig.protect_static) {
+            return res.status(401).send(`
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"><title>401 - Accès Protégé</title></head>
+                <body style="font-family:sans-serif;text-align:center;padding:50px;background:#1e1f22;color:#fff;">
+                    <h2>🔒 Accès Protégé</h2>
+                    <p>Veuillez vous connecter avec Discord pour accéder au tableau de bord.</p>
+                    <a href="/api/auth/discord/login" style="display:inline-block;padding:10px 20px;background:#5865F2;color:#fff;text-decoration:none;border-radius:4px;margin-top:15px;">Se connecter avec Discord</a>
+                </body>
+                </html>
+            `);
+        }
+
+        next();
+    };
+}
+
+/**
+ * Middleware RBAC : restreint l'accès aux rôles spécifiés
+ * Hiérarchie : admin > mod > viewer
+ * @param {string|Array<string>} roles - Rôle(s) autorisé(s) ('admin', 'mod', 'viewer')
+ */
+function requireRole(roles) {
+    const allowed = Array.isArray(roles) ? roles : [roles];
+
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ success: false, error: 'Authentification requise.' });
+        }
+
+        const userRole = req.user.role || 'viewer';
+
+        // L'administrateur a tous les droits
+        if (userRole === 'admin') {
+            return next();
+        }
+
+        // Si le rôle requis est 'viewer', tous les utilisateurs authentifiés passent
+        if (allowed.includes('viewer')) {
+            return next();
+        }
+
+        // Si le rôle requis est 'mod', admin et mod passent
+        if (allowed.includes('mod') && (userRole === 'mod' || userRole === 'admin')) {
+            return next();
+        }
+
+        // Si le rôle correspond exactement
+        if (allowed.includes(userRole)) {
+            return next();
+        }
+
+        return res.status(403).json({
+            success: false,
+            error: `Accès refusé : Permissions insuffisantes. Rôle requis : [${allowed.join(', ')}], votre rôle : "${userRole}".`
+        });
+    };
+}
+
 module.exports = {
     timingSafeEqual,
     isDiscordSnowflake,
@@ -352,6 +535,11 @@ module.exports = {
     verifyChannelBelongsToGuild,
     createRateLimiters,
     validateDiscordParamsMiddleware,
+    getClientIp,
+    checkBruteForceBlocked,
+    authenticateMiddleware,
+    requireRole,
     DISCORD_MAX_MESSAGE_LENGTH,
     DISCORD_MAX_TITLE_LENGTH
 };
+
