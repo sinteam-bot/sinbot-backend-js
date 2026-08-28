@@ -8,6 +8,8 @@
  * headers custom en WS).
  */
 
+const { timingSafeEqual } = require('./security.js');
+
 function attachLogsWs(httpServer, logsService, authConfig = {}) {
     if (!httpServer || !logsService) return null;
     const { WebSocketServer } = require('ws');
@@ -19,7 +21,8 @@ function attachLogsWs(httpServer, logsService, authConfig = {}) {
         const token = new URL(req.url, 'http://x').searchParams.get('api_key')
             || (req.headers['sec-websocket-protocol'] || '').split(',')[0].trim();
 
-        if (authConfig.enabled && authConfig.api_key && token !== authConfig.api_key) {
+        // Comparaison en temps constant pour prévenir les attaques temporelles
+        if (authConfig.enabled && authConfig.api_key && !timingSafeEqual(token || '', authConfig.api_key)) {
             return ws.close(4401, 'Unauthorized');
         }
 
@@ -46,3 +49,4 @@ function attachLogsWs(httpServer, logsService, authConfig = {}) {
 }
 
 module.exports = { attachLogsWs };
+

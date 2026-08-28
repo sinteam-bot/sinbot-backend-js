@@ -25,6 +25,7 @@
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2",
     "js-yaml": "^5.4.1",
     "node-cron": "^4.6.0",
     "openai": "^7.8.0",

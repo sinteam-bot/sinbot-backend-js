@@ -9,6 +9,15 @@ const { loadCommands } = require("./utils/commandHandler.js");
 const logger = require("./utils/logger.js");
 const createWebRouter = require("./web/webRouter.js");
 const { initDiscordEventTracker } = require("./utils/discordEventTracker.js");
+const {
+    timingSafeEqual,
+    isDiscordSnowflake,
+    validateChannelId,
+    validateMessageContent,
+    validateEmbed,
+    verifyChannelBelongsToGuild,
+    createRateLimiters
+} = require('./utils/security.js');
 
 // Activer la capture des logs console pour le salon virtuel Logs
 logger.initConsoleInterceptor();
@@ -69,7 +78,11 @@ console.log('');
 // ============================================
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+
+// Rate limiters de sécurité (anti brute-force, anti spam)
+const rateLimiters = createRateLimiters();
+app.use(rateLimiters.global);
 
 // Middleware de protection et d'authentification Web / API
 const webAuthMiddleware = (req, res, next) => {
@@ -93,8 +106,8 @@ const webAuthMiddleware = (req, res, next) => {
         }
     }
 
-    // 4. Extraction du token / clé d'API
-    let providedKey = req.headers['x-api-key'] || req.query.api_key || req.query.token;
+    // 4. Extraction du token / clé d'API (headers uniquement — pas de query string pour éviter le logging)
+    let providedKey = req.headers['x-api-key'];
 
     if (!providedKey && req.headers['authorization']) {
         const authHeader = req.headers['authorization'];
@@ -114,7 +127,8 @@ const webAuthMiddleware = (req, res, next) => {
 
     const expectedKey = authConfig.api_key;
 
-    if (providedKey && expectedKey && providedKey === expectedKey) {
+    // Comparaison en temps constant pour prévenir les attaques temporelles (timing attack)
+    if (providedKey && expectedKey && timingSafeEqual(providedKey, expectedKey)) {
         return next();
     }
 
@@ -152,10 +166,12 @@ app.get('/api/auth/status', (req, res) => {
     });
 });
 
-app.post('/api/auth/verify', (req, res) => {
+// Rate limiter strict sur l'endpoint de vérification (anti brute-force)
+app.post('/api/auth/verify', rateLimiters.auth, (req, res) => {
     const authConfig = config.web?.auth || {};
     const { apiKey } = req.body;
-    const isValid = !authConfig.enabled || (apiKey && apiKey === authConfig.api_key);
+    // Comparaison en temps constant pour prévenir les attaques temporelles
+    const isValid = !authConfig.enabled || (apiKey && authConfig.api_key && timingSafeEqual(apiKey, authConfig.api_key));
     res.json({
         success: true,
         valid: isValid
@@ -186,12 +202,40 @@ moduleManager.registerModules(appModules);
 const createFeaturesRouter = require('./web/featuresRouter.js');
 app.use('/api/features', createFeaturesRouter());
 
-// Endpoint pour envoyer un message depuis n8n
-app.post('/webhook/send-message', async (req, res) => {
+// Endpoint pour envoyer un message depuis n8n (rate limited + validé)
+app.post('/webhook/send-message', rateLimiters.webhook, async (req, res) => {
     const { channelId, message, embed } = req.body;
 
+    // Validation du channelId
+    const channelCheck = validateChannelId(channelId);
+    if (!channelCheck.valid) {
+        return res.status(400).json({ success: false, error: channelCheck.reason });
+    }
+
+    // Validation du contenu du message
+    if (!embed) {
+        const contentCheck = validateMessageContent(message);
+        if (!contentCheck.valid) {
+            return res.status(400).json({ success: false, error: contentCheck.reason });
+        }
+    }
+
+    // Validation de l'embed si fourni
+    if (embed) {
+        const embedCheck = validateEmbed(embed);
+        if (!embedCheck.valid) {
+            return res.status(400).json({ success: false, error: embedCheck.reason });
+        }
+    }
+
     try {
-        const channel = await client.channels.fetch(channelId);
+        // Vérifier que le salon appartient bien au serveur configuré
+        const access = await verifyChannelBelongsToGuild(client, channelId);
+        if (!access.allowed) {
+            return res.status(403).json({ success: false, error: access.reason });
+        }
+
+        const channel = access.channel || await client.channels.fetch(channelId);
 
         if (embed) {
             const { EmbedBuilder } = require('discord.js');
@@ -214,7 +258,7 @@ app.post('/webhook/send-message', async (req, res) => {
         console.error('Erreur webhook:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: 'Erreur lors de l\'envoi du message'
         });
     }
 });
@@ -239,6 +283,11 @@ app.get('/api/stats', async (req, res) => {
 
 // Endpoint pour récupérer les événements d'un utilisateur
 app.get('/api/user/:userId/events', async (req, res) => {
+    // Validation du userId
+    if (!isDiscordSnowflake(req.params.userId)) {
+        return res.status(400).json({ success: false, error: 'userId invalide' });
+    }
+
     try {
         const events = await getUserEvents(req.params.userId, 20);
         res.json({
@@ -249,7 +298,7 @@ app.get('/api/user/:userId/events', async (req, res) => {
     } catch (error) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: 'Erreur lors de la récupération des événements'
         });
     }
 });

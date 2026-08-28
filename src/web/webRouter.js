@@ -7,9 +7,40 @@ const db = require("../database.js");
 const { toISOStringSafe } = require("../utils/dateUtils.js");
 const { config, getConfig, saveModuleConfig } = require("../config/index.js");
 const { imageProxyService } = require("../services/imageProxyService.js");
+const {
+    validateDiscordParamsMiddleware,
+    validateMessageContent,
+    validateEmbed,
+    createRateLimiters,
+    DISCORD_MAX_MESSAGE_LENGTH,
+    DISCORD_MAX_TITLE_LENGTH
+} = require('../utils/security.js');
 
 function createWebRouter(client) {
     const router = express.Router();
+    const rateLimiters = createRateLimiters();
+
+    // Middleware de validation des paramètres Discord (:channelId, :messageId, :userId)
+    router.param('channelId', (req, res, next, value) => {
+        // Accepter les salons virtuels du dashboard (cat-*, virtual-*)
+        if (value.startsWith('cat-') || value.startsWith('virtual-')) return next();
+        if (!/^\d{17,20}$/.test(value)) {
+            return res.status(400).json({ success: false, error: `channelId invalide : "${value}"` });
+        }
+        next();
+    });
+    router.param('messageId', (req, res, next, value) => {
+        if (!/^\d{17,20}$/.test(value)) {
+            return res.status(400).json({ success: false, error: `messageId invalide : "${value}"` });
+        }
+        next();
+    });
+    router.param('userId', (req, res, next, value) => {
+        if (!/^\d{17,20}$/.test(value)) {
+            return res.status(400).json({ success: false, error: `userId invalide : "${value}"` });
+        }
+        next();
+    });
 
     // ============================================
     // 0. PROXY & CACHE D'IMAGES / ASSETS DISCORD
@@ -530,12 +561,14 @@ function createWebRouter(client) {
     // ============================================
     // 4. ENVOYER UN MESSAGE DEPUIS LE WEB (EN TANT QUE BOT)
     // ============================================
-    router.post('/channels/:channelId/messages', async (req, res) => {
+    router.post('/channels/:channelId/messages', rateLimiters.write, async (req, res) => {
         const { channelId } = req.params;
         const { content } = req.body;
 
-        if (!content || !content.trim()) {
-            return res.status(400).json({ success: false, error: 'Contenu du message vide' });
+        // Validation du contenu du message
+        const contentCheck = validateMessageContent(content);
+        if (!contentCheck.valid) {
+            return res.status(400).json({ success: false, error: contentCheck.reason });
         }
 
         try {
@@ -683,12 +716,22 @@ function createWebRouter(client) {
         }
     });
 
-    router.post('/channels/:channelId/posts', async (req, res) => {
+    router.post('/channels/:channelId/posts', rateLimiters.write, async (req, res) => {
         const { channelId } = req.params;
         const { title, content, appliedTags } = req.body;
 
-        if (!title || !title.trim() || !content || !content.trim()) {
-            return res.status(400).json({ success: false, error: 'Titre et message initial requis' });
+        // Validation du titre
+        if (!title || typeof title !== 'string' || !title.trim()) {
+            return res.status(400).json({ success: false, error: 'Titre requis' });
+        }
+        if (title.trim().length > DISCORD_MAX_TITLE_LENGTH) {
+            return res.status(400).json({ success: false, error: `Le titre dépasse ${DISCORD_MAX_TITLE_LENGTH} caractères` });
+        }
+
+        // Validation du contenu
+        const contentCheck = validateMessageContent(content);
+        if (!contentCheck.valid) {
+            return res.status(400).json({ success: false, error: contentCheck.reason });
         }
 
         try {
@@ -726,12 +769,14 @@ function createWebRouter(client) {
     // ============================================
     // 4b. MODIFIER UN MESSAGE DEPUIS LE WEB
     // ============================================
-    router.patch('/channels/:channelId/messages/:messageId', async (req, res) => {
+    router.patch('/channels/:channelId/messages/:messageId', rateLimiters.write, async (req, res) => {
         const { channelId, messageId } = req.params;
         const { content } = req.body;
 
-        if (!content || !content.trim()) {
-            return res.status(400).json({ success: false, error: 'Le contenu du message ne peut pas être vide' });
+        // Validation du contenu du message
+        const contentCheck = validateMessageContent(content);
+        if (!contentCheck.valid) {
+            return res.status(400).json({ success: false, error: contentCheck.reason });
         }
 
         try {
@@ -788,7 +833,7 @@ function createWebRouter(client) {
     // ============================================
     // 4c. SUPPRIMER UN MESSAGE DEPUIS LE WEB
     // ============================================
-    router.delete('/channels/:channelId/messages/:messageId', async (req, res) => {
+    router.delete('/channels/:channelId/messages/:messageId', rateLimiters.write, async (req, res) => {
         const { channelId, messageId } = req.params;
 
         try {
@@ -1204,7 +1249,7 @@ function createWebRouter(client) {
         }
     });
 
-    router.post('/config', async (req, res) => {
+    router.post('/config', rateLimiters.sensitive, async (req, res) => {
         const { module, config: moduleConfig } = req.body;
 
         if (!module || !moduleConfig) {
@@ -1369,9 +1414,9 @@ function createWebRouter(client) {
         }
     };
 
-    router.post('/daily-messages/generate-test', handleGenerateDraft);
-    router.post('/daily-messages/generate-preview', handleGenerateDraft);
-    router.post('/daily-messages/generate', handleGenerateDraft);
+    router.post('/daily-messages/generate-test', rateLimiters.aiGeneration, handleGenerateDraft);
+    router.post('/daily-messages/generate-preview', rateLimiters.aiGeneration, handleGenerateDraft);
+    router.post('/daily-messages/generate', rateLimiters.aiGeneration, handleGenerateDraft);
 
     // Accepter / valider le brouillon pour diffusion à 09:00
     router.post('/daily-messages/accept', async (req, res) => {
@@ -1791,7 +1836,7 @@ function createWebRouter(client) {
         }
     });
 
-    router.post('/commands/sync', async (req, res) => {
+    router.post('/commands/sync', rateLimiters.sensitive, async (req, res) => {
         try {
             const { syncDiscordSlashCommands } = require('../utils/commandDeployer.js');
             const result = await syncDiscordSlashCommands(client, req.body || {});
