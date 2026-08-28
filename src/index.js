@@ -90,22 +90,25 @@ const app = express();
 // Configuration Reverse Proxy (Nginx, Traefik, Cloudflare, Docker)
 app.set('trust proxy', 1);
 
-// Redirection HTTPS automatique en production
+// Redirection HTTPS automatique en production (exclut localhost et réseaux privés)
 app.use((req, res, next) => {
-    if (process.env.NODE_ENV === 'production') {
+    const host = req.headers.host || '';
+    const isLocal = host.startsWith('localhost') || host.startsWith('127.0.0.1') || host.startsWith('::1') || host.startsWith('192.168.') || host.startsWith('10.') || host.includes('.local');
+    if (process.env.NODE_ENV === 'production' && !isLocal) {
         const proto = req.headers['x-forwarded-proto'] || req.protocol;
         if (proto !== 'https') {
-            return res.redirect(301, `https://${req.headers.host}${req.url}`);
+            return res.redirect(301, `https://${host}${req.url}`);
         }
     }
     next();
 });
 
-// Headers de sécurité HTTP via Helmet (HSTS, NoSniff, FrameGuard)
+// Headers de sécurité HTTP via Helmet
 app.use(helmet({
     contentSecurityPolicy: false, // Laissé souple pour Nuxt SSR/SSG & Canvas
     crossOriginEmbedderPolicy: false,
-    crossOriginResourcePolicy: { policy: 'cross-origin' }
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    hsts: false // HSTS désactivé ici (délégué au reverse proxy Nginx/Cloudflare) pour éviter de bloquer localhost
 }));
 
 // Cookie Parser pour les cookies de session et refresh tokens HttpOnly
