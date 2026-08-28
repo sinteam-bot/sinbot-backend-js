@@ -14,6 +14,7 @@ const { EngagementModule } = require('./feature_engagement/engagement.module.js'
 const { BirthdaysModule } = require('./feature_birthdays/birthdays.module.js');
 const { ReactionRolesModule } = require('./feature_reaction-roles/reaction-roles.module.js');
 const { ReportsModule } = require('./feature_reports/reports.module.js');
+const { TempVoiceModule } = require('./feature_temp-voice/temp-voice.module.js');
 const { EconomyModule } = require('./feature_economy/economy.module.js');
 const { StickyRolesModule } = require('./feature_sticky-roles/sticky-roles.module.js');
 const { InfoModule } = require('./feature_info/info.module.js');
@@ -42,7 +43,8 @@ const appModules = [
     StickyRolesModule,
     InfoModule,
     EngagementAdvancedModule,
-    ReportsModule
+    ReportsModule,
+    TempVoiceModule
 ];
 
 module.exports = {
@@ -66,5 +68,6 @@ module.exports = {
     StickyRolesModule,
     InfoModule,
     EngagementAdvancedModule,
-    ReportsModule
+    ReportsModule,
+    TempVoiceModule
 };
