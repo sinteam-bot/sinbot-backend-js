@@ -773,6 +773,22 @@ const guildStats = pgTable('guild_stats', {
     primaryKey({ columns: [table.guildId, table.statKey] })
 ]);
 
+// 55. reminders (Phase 11.1)
+const reminders = pgTable('reminders', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id'),
+    channelId: text('channel_id'),
+    userId: text('user_id').notNull(),
+    reminderText: text('reminder_text').notNull(),
+    fireAt: integer('fire_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+    status: text('status').notNull().default('pending'),
+    sourceMessageId: text('source_message_id')
+}, (table) => [
+    index('idx_pg_reminders_status').on(table.status, table.fireAt),
+    index('idx_pg_reminders_user').on(table.userId, table.status, table.fireAt)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -827,5 +843,6 @@ module.exports = {
     inventoryDrops,
     inventoryTransfers,
     stickyRoles,
-    guildStats
+    guildStats,
+    reminders
 };

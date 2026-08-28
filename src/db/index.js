@@ -774,6 +774,21 @@ const PG_TABLES_DDL = `
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (guild_id, stat_key)
     );
+
+    -- Phase 11.1: Reminders
+    CREATE TABLE IF NOT EXISTS reminders (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT,
+        channel_id TEXT,
+        user_id TEXT NOT NULL,
+        reminder_text TEXT NOT NULL,
+        fire_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        source_message_id TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_reminders_status ON reminders(status, fire_at);
+    CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, status, fire_at);
 `;
 
 /**
