@@ -20,8 +20,7 @@
   "dependencies": {
     "@discordjs/rest": "^2.6.3",
     "@electric-sql/pglite": "^0.5.8",
-    "better-sqlite3": "^13.0.3",
-    "discord-api-types": "^0.38.53",
+    "discord-api-types": "^0.38.54",
     "discord.js": "^14.27.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
@@ -31,11 +30,11 @@
     "openai": "^7.8.0",
     "pg": "^8.23.0"
   },
-  "allowScripts": {
-    "better-sqlite3@13.0.3": true
-  },
   "devDependencies": {
     "@vitest/coverage-v8": "^3.2.7",
     "vitest": "^3.2.7"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }
