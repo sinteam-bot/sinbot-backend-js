@@ -1,17 +1,25 @@
+/**
+ * feature_daily-message/daily-message.repository.js
+ *
+ * Repository du module Daily Message. Réexporte les fonctions bot-state
+ * (getBotState / setBotState) depuis le bridge. Les opérations
+ * openaimessages sont gérées nativement par Drizzle dans ce repository
+ * (cf. implémentation existante).
+ */
+
 const { eq, and, desc, sql } = require('drizzle-orm');
 const { db, schema } = require('../../db/index.js');
 const { Repository } = require('../../core/index.js');
-const { getBotState, setBotState } = require('../../db/legacy-bridge.js').botState;
+const { botState } = require('../../db/legacy-bridge.js');
 
 class DailyMessageRepository {
     constructor() {
         this.db = db;
         this.schema = schema;
+        this._state = botState;
     }
 
-    /**
-     * Enregistre un message IA (prompt ou réponse finale)
-     */
+    // --- Drizzle natif : openaimessages ---
     async saveAiMessage(data) {
         const [saved] = await this.db.insert(this.schema.openaimessages)
             .values({
@@ -40,13 +48,9 @@ class DailyMessageRepository {
                 }
             })
             .returning();
-
         return saved;
     }
 
-    /**
-     * Récupère les derniers messages IA
-     */
     async getAiMessages(type = null, limit = 20) {
         return await this.db.select()
             .from(this.schema.openaimessages)
@@ -54,31 +58,24 @@ class DailyMessageRepository {
             .limit(limit);
     }
 
-    /**
-     * Récupère la date de la dernière publication
-     */
+    // --- Bridge : bot state (last published date, etc.) ---
     async getLastPublishedDate() {
-        return await getBotState('last_published_daily_date');
+        return this._state.getBotState('last_published_daily_date');
     }
 
-    /**
-     * Enregistre la date de publication
-     */
     async setLastPublishedDate(dateStr) {
-        await setBotState('last_published_daily_date', dateStr);
+        return this._state.setBotState('last_published_daily_date', dateStr);
     }
 
     async getBotState(key) {
-        return await getBotState(key);
+        return this._state.getBotState(key);
     }
 
     async setBotState(key, value) {
-        return await setBotState(key, value);
+        return this._state.setBotState(key, value);
     }
 }
 
 Repository()(DailyMessageRepository);
 
-module.exports = {
-    DailyMessageRepository
-};
+module.exports = { DailyMessageRepository };

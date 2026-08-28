@@ -1,32 +1,32 @@
 /**
- * welcome.repository.js — Repository du module feature_welcome.
+ * feature_welcome/welcome.repository.js
  *
- * Étape 2 (strangler-fig) : réexporte les fonctions du bridge de
- * compatibilité `db/legacy-bridge.js`. Aucune logique n'est dupliquée.
- * Étape 4 : les fonctions seront portées nativement en Drizzle ici.
+ * Repository du module Welcome. Réexporte les fonctions legacy de
+ * `db/legacy-bridge.js.welcome` tant qu'elles ne sont pas portées
+ * en Drizzle natif (cf. critère 7 du plan db-repository-split).
  *
- * Utilisation dans un service du module :
- *   const { welcome } = require('./welcome.repository.js');
- *   await welcome.someMethod(...);
+ * Fonctions exposées (via bridge) :
+ *   - getWelcomeConfig(guildId)
+ *   - saveWelcomeConfig(guildId, channelId, message, autoRoles, isEnabled)
  */
 
 const { Repository } = require('../../core/index.js');
-const bridge = require('../../db/legacy-bridge.js');
+const { welcome: welcomeBridge } = require('../../db/legacy-bridge.js');
 
-class Welcome.repositoryRepository {
+class WelcomeRepository {
     constructor() {
-        this.bridge = bridge.welcome;
+        this._bridge = welcomeBridge;
     }
 
-    /**
-     * Indique que ce repository est un wrapper legacy.
-     * Sera supprimé en étape 4 une fois la migration Drizzle terminée.
-     */
-    isLegacyBridge() {
-        return true;
+    async getWelcomeConfig(guildId) {
+        return this._bridge.getWelcomeConfig(guildId);
+    }
+
+    async saveWelcomeConfig(guildId, welcomeChannelId, welcomeMessage, autoRoles = [], isEnabled = 1) {
+        return this._bridge.saveWelcomeConfig(guildId, welcomeChannelId, welcomeMessage, autoRoles, isEnabled);
     }
 }
 
-Repository()(this.Welcome.repositoryRepository = Welcome.repositoryRepository);
+Repository()(WelcomeRepository);
 
-module.exports = { Welcome.repositoryRepository };
+module.exports = { WelcomeRepository };

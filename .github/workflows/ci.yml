@@ -30,18 +30,19 @@ jobs:
           fi
           echo "✅ Aucun import legacy de database.js"
 
-      - name: Verify Drizzle migrations consistency (informational)
+      - name: Verify Drizzle migrations consistency
         run: |
           echo "=== Vérification : schema Drizzle vs migrations ==="
+          TMP_DIR=$(mktemp -d)
+          cp -r src/db/migrations "$TMP_DIR/orig"
           npx drizzle-kit generate --name=ci_check 2>&1 | tee /tmp/drizzle-out.log || true
           if grep -i "generated.*migration" /tmp/drizzle-out.log; then
-            echo "⚠️  INFO: Le schema Drizzle diffère de la base de migrations."
-            echo "    Ce n'est pas bloquant tant que la migration baseline 0000"
-            echo "    est cohérente avec le code legacy (legacy-bridge-impl.js)."
-            echo "    Voir docs/plan/db-repository-split.md pour la roadmap."
-          else
-            echo "✅ Migrations à jour"
+            echo "❌ Le schema Drizzle a changé sans regénération de migration !"
+            echo "→ Exécute 'npm run db:generate' en local et commit le fichier généré."
+            diff -r "$TMP_DIR/orig" src/db/migrations || true
+            exit 1
           fi
+          echo "✅ Migrations à jour (db:generate n'a rien produit)"
 
       - name: Run tests
         run: npm test

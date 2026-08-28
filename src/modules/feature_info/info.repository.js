@@ -1,32 +1,30 @@
 /**
- * info.repository.js — Repository du module feature_info.
+ * feature_info/info.repository.js
  *
- * Étape 2 (strangler-fig) : réexporte les fonctions du bridge de
- * compatibilité `db/legacy-bridge.js`. Aucune logique n'est dupliquée.
- * Étape 4 : les fonctions seront portées nativement en Drizzle ici.
+ * Repository du module Info. Réexporte les fonctions bot-state du bridge
+ * (getBotState / setBotState) tant qu'elles ne sont pas portées en Drizzle.
  *
- * Utilisation dans un service du module :
- *   const { botState } = require('./info.repository.js');
- *   await botState.someMethod(...);
+ * Note : le module `feature_info` n'a pas de tables propres ; il consomme
+ * le schéma transverse `db/schemas/shared/bot-info.js` (botVersionState).
  */
 
 const { Repository } = require('../../core/index.js');
-const bridge = require('../../db/legacy-bridge.js');
+const { botState } = require('../../db/legacy-bridge.js');
 
-class Info.repositoryRepository {
+class InfoRepository {
     constructor() {
-        this.bridge = /* TODO: bridge à identifier en étape 4 */;
+        this._bridge = botState;
     }
 
-    /**
-     * Indique que ce repository est un wrapper legacy.
-     * Sera supprimé en étape 4 une fois la migration Drizzle terminée.
-     */
-    isLegacyBridge() {
-        return true;
+    async getBotState(key) {
+        return this._bridge.getBotState(key);
+    }
+
+    async setBotState(key, value) {
+        return this._bridge.setBotState(key, value);
     }
 }
 
-Repository()(this.Info.repositoryRepository = Info.repositoryRepository);
+Repository()(InfoRepository);
 
-module.exports = { Info.repositoryRepository };
+module.exports = { InfoRepository };

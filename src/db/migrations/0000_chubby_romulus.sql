@@ -16,14 +16,209 @@ CREATE TABLE "form_responses" (
 	"created_at" text DEFAULT CURRENT_TIMESTAMP
 );
 --> statement-breakpoint
-CREATE TABLE "user_birthdays" (
+CREATE TABLE "discord_events_archive" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"event_name" text NOT NULL,
+	"guild_id" text,
+	"target_id" text,
+	"user_id" text,
+	"username" text,
+	"summary" text,
+	"data_json" text,
+	"created_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "server_members" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
 	"username" text NOT NULL,
-	"birthdate" text NOT NULL,
+	"discriminator" text,
+	"tag" text,
+	"display_name" text,
+	"avatar_url" text,
+	"display_color" text,
+	"highest_role_id" text,
+	"highest_role_name" text,
+	"highest_role_color" text,
+	"joined_at" text,
+	"account_created_at" text,
+	"is_bot" integer DEFAULT 0,
+	"rejoin_count" integer DEFAULT 0,
+	"left_at" text,
+	"roles" text,
+	"presence" text DEFAULT 'offline',
+	"deleted_at" text,
 	"created_at" text DEFAULT CURRENT_TIMESTAMP,
 	"updated_at" text DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT "user_birthdays_user_id_unique" UNIQUE("user_id")
+	CONSTRAINT "server_members_user_id_unique" UNIQUE("user_id")
+);
+--> statement-breakpoint
+CREATE TABLE "member_history" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"username" text NOT NULL,
+	"action" text NOT NULL,
+	"guild_id" text NOT NULL,
+	"metadata" text,
+	"created_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "discord_channels" (
+	"channel_id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"name" text NOT NULL,
+	"type" text NOT NULL,
+	"parent_id" text,
+	"position" integer DEFAULT 0,
+	"topic" text,
+	"is_nsfw" integer DEFAULT 0,
+	"created_at" text,
+	"deleted_at" text,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "discord_threads" (
+	"thread_id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"parent_id" text NOT NULL,
+	"name" text NOT NULL,
+	"owner_id" text,
+	"archived" integer DEFAULT 0,
+	"locked" integer DEFAULT 0,
+	"message_count" integer DEFAULT 0,
+	"member_count" integer DEFAULT 0,
+	"created_at" text,
+	"deleted_at" text,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "discord_users" (
+	"user_id" text PRIMARY KEY NOT NULL,
+	"username" text NOT NULL,
+	"global_name" text,
+	"discriminator" text,
+	"bot" integer DEFAULT 0,
+	"avatar_url" text,
+	"banner_url" text,
+	"created_at" text,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "discord_messages" (
+	"message_id" text PRIMARY KEY NOT NULL,
+	"channel_id" text NOT NULL,
+	"thread_id" text,
+	"guild_id" text NOT NULL,
+	"author_id" text NOT NULL,
+	"author_username" text NOT NULL,
+	"content" text,
+	"pinned" integer DEFAULT 0,
+	"embeds_json" text,
+	"attachments_json" text,
+	"reactions_json" text,
+	"created_at" text NOT NULL,
+	"deleted_at" text,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "discord_roles" (
+	"role_id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"name" text NOT NULL,
+	"color" integer DEFAULT 0,
+	"color_hex" text,
+	"icon_url" text,
+	"unicode_emoji" text,
+	"member_count" integer DEFAULT 0,
+	"hoist" integer DEFAULT 0,
+	"position" integer DEFAULT 0,
+	"permissions" text,
+	"managed" integer DEFAULT 0,
+	"mentionable" integer DEFAULT 0,
+	"created_at" text,
+	"deleted_at" text,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "discord_emojis" (
+	"emoji_id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"name" text NOT NULL,
+	"animated" integer DEFAULT 0,
+	"url" text,
+	"roles_json" text,
+	"created_at" text,
+	"deleted_at" text,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "guild_members" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"username" text NOT NULL,
+	"created_at" text DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT "guild_members_user_id_unique" UNIQUE("user_id")
+);
+--> statement-breakpoint
+CREATE TABLE "grognement" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"username" text NOT NULL,
+	"created_at" text DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT "grognement_user_id_unique" UNIQUE("user_id")
+);
+--> statement-breakpoint
+CREATE TABLE "guild_stats" (
+	"guild_id" text NOT NULL,
+	"stat_key" text NOT NULL,
+	"stat_value" text NOT NULL,
+	"updated_at" bigint NOT NULL,
+	CONSTRAINT "guild_stats_guild_id_stat_key_pk" PRIMARY KEY("guild_id","stat_key")
+);
+--> statement-breakpoint
+CREATE TABLE "guild_settings" (
+	"guild_id" text PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"locale" text DEFAULT 'fr',
+	"timezone" text DEFAULT 'Europe/Paris',
+	"owner_id" text,
+	"premium_tier" integer DEFAULT 0,
+	"joined_at" bigint NOT NULL,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "feature_flags" (
+	"guild_id" text NOT NULL,
+	"feature_name" text NOT NULL,
+	"enabled" integer DEFAULT 0 NOT NULL,
+	"config_json" text DEFAULT '{}' NOT NULL,
+	"allowed_roles" text DEFAULT '[]' NOT NULL,
+	"updated_by" text,
+	"updated_at" bigint NOT NULL,
+	CONSTRAINT "feature_flags_guild_id_feature_name_pk" PRIMARY KEY("guild_id","feature_name")
+);
+--> statement-breakpoint
+CREATE TABLE "bot_version_state" (
+	"key" text PRIMARY KEY NOT NULL,
+	"value" text,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "openaimessages" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"msgid" text NOT NULL,
+	"prompt" text,
+	"instruction" text,
+	"model" text,
+	"tokeninput" integer,
+	"tokenoutput" integer,
+	"content" text,
+	"previousmsgid" text,
+	"rawdata" text,
+	"created_at" text DEFAULT CURRENT_TIMESTAMP,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT "openaimessages_msgid_unique" UNIQUE("msgid")
 );
 --> statement-breakpoint
 CREATE TABLE "user_xp" (
@@ -85,280 +280,58 @@ CREATE TABLE "event_participants" (
 	"joined_at" text DEFAULT CURRENT_TIMESTAMP
 );
 --> statement-breakpoint
-CREATE TABLE "server_members" (
+CREATE TABLE "user_birthdays" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
 	"username" text NOT NULL,
-	"discriminator" text,
-	"tag" text,
-	"display_name" text,
-	"avatar_url" text,
-	"display_color" text,
-	"highest_role_id" text,
-	"highest_role_name" text,
-	"highest_role_color" text,
-	"joined_at" text,
-	"account_created_at" text,
-	"is_bot" integer DEFAULT 0,
-	"rejoin_count" integer DEFAULT 0,
-	"left_at" text,
-	"roles" text,
-	"presence" text DEFAULT 'offline',
-	"deleted_at" text,
+	"birthdate" text NOT NULL,
 	"created_at" text DEFAULT CURRENT_TIMESTAMP,
 	"updated_at" text DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT "server_members_user_id_unique" UNIQUE("user_id")
+	CONSTRAINT "user_birthdays_user_id_unique" UNIQUE("user_id")
 );
 --> statement-breakpoint
-CREATE TABLE "member_history" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" text NOT NULL,
-	"username" text NOT NULL,
-	"action" text NOT NULL,
-	"guild_id" text NOT NULL,
-	"metadata" text,
-	"created_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "welcome_config" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"welcome_channel_id" text,
-	"welcome_message" text,
-	"auto_roles" text,
-	"is_enabled" integer DEFAULT 1,
-	"created_at" text DEFAULT CURRENT_TIMESTAMP,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT "welcome_config_guild_id_unique" UNIQUE("guild_id")
-);
---> statement-breakpoint
-CREATE TABLE "openaimessages" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"msgid" text NOT NULL,
-	"prompt" text,
-	"instruction" text,
-	"model" text,
-	"tokeninput" integer,
-	"tokenoutput" integer,
-	"content" text,
-	"previousmsgid" text,
-	"rawdata" text,
-	"created_at" text DEFAULT CURRENT_TIMESTAMP,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT "openaimessages_msgid_unique" UNIQUE("msgid")
-);
---> statement-breakpoint
-CREATE TABLE "guild_members" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" text NOT NULL,
-	"username" text NOT NULL,
-	"created_at" text DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT "guild_members_user_id_unique" UNIQUE("user_id")
-);
---> statement-breakpoint
-CREATE TABLE "grognement" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" text NOT NULL,
-	"username" text NOT NULL,
-	"created_at" text DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT "grognement_user_id_unique" UNIQUE("user_id")
-);
---> statement-breakpoint
-CREATE TABLE "user_captchas" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" text NOT NULL,
-	"username" text NOT NULL,
-	"guild_id" text NOT NULL,
-	"question" text NOT NULL,
-	"answer" text NOT NULL,
-	"channel_id" text NOT NULL,
-	"attempts" integer DEFAULT 0,
-	"is_verified" integer DEFAULT 0,
-	"created_at" text DEFAULT CURRENT_TIMESTAMP,
-	"expires_at" text,
-	"verified_at" text,
-	"expired_at" text,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "captcha_config" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"channel_id" text,
-	"verified_role_id" text,
-	"timeout_minutes" integer DEFAULT 10,
-	"max_attempts" integer DEFAULT 3,
-	"is_enabled" integer DEFAULT 1,
-	"created_at" text DEFAULT CURRENT_TIMESTAMP,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT "captcha_config_guild_id_unique" UNIQUE("guild_id")
-);
---> statement-breakpoint
-CREATE TABLE "bump_logs" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"channel_id" text NOT NULL,
-	"user_id" text,
-	"username" text,
-	"bumped_at" text DEFAULT CURRENT_TIMESTAMP,
-	"reminder_sent" integer DEFAULT 0,
-	"reminder_sent_at" text
-);
---> statement-breakpoint
-CREATE TABLE "discord_channels" (
-	"channel_id" text PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"name" text NOT NULL,
-	"type" text NOT NULL,
-	"parent_id" text,
-	"position" integer DEFAULT 0,
-	"topic" text,
-	"is_nsfw" integer DEFAULT 0,
-	"created_at" text,
-	"deleted_at" text,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "discord_threads" (
-	"thread_id" text PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"parent_id" text NOT NULL,
-	"name" text NOT NULL,
-	"owner_id" text,
-	"archived" integer DEFAULT 0,
-	"locked" integer DEFAULT 0,
-	"message_count" integer DEFAULT 0,
-	"member_count" integer DEFAULT 0,
-	"created_at" text,
-	"deleted_at" text,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "discord_users" (
-	"user_id" text PRIMARY KEY NOT NULL,
-	"username" text NOT NULL,
-	"global_name" text,
-	"discriminator" text,
-	"bot" integer DEFAULT 0,
-	"avatar_url" text,
-	"banner_url" text,
-	"created_at" text,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "discord_messages" (
-	"message_id" text PRIMARY KEY NOT NULL,
-	"channel_id" text NOT NULL,
-	"thread_id" text,
-	"guild_id" text NOT NULL,
-	"author_id" text NOT NULL,
-	"author_username" text NOT NULL,
-	"content" text,
-	"pinned" integer DEFAULT 0,
-	"embeds_json" text,
-	"attachments_json" text,
-	"reactions_json" text,
-	"created_at" text NOT NULL,
-	"deleted_at" text,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "counter_state" (
-	"channel_id" text PRIMARY KEY NOT NULL,
-	"current_number" integer DEFAULT 0,
-	"error_count" integer DEFAULT 0,
-	"last_user_id" text,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "countdown_state" (
-	"channel_id" text PRIMARY KEY NOT NULL,
-	"current_number" integer DEFAULT 900,
-	"error_count" integer DEFAULT 0,
-	"is_trap_active" integer DEFAULT 0,
-	"trap_number" integer,
-	"last_user_id" text,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "countdown_scores" (
-	"channel_id" text NOT NULL,
-	"user_id" text NOT NULL,
-	"username" text NOT NULL,
-	"score" integer DEFAULT 0,
-	CONSTRAINT "countdown_scores_channel_id_user_id_pk" PRIMARY KEY("channel_id","user_id")
-);
---> statement-breakpoint
-CREATE TABLE "bot_version_state" (
-	"key" text PRIMARY KEY NOT NULL,
-	"value" text,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "discord_roles" (
-	"role_id" text PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"name" text NOT NULL,
-	"color" integer DEFAULT 0,
-	"color_hex" text,
-	"icon_url" text,
-	"unicode_emoji" text,
-	"member_count" integer DEFAULT 0,
-	"hoist" integer DEFAULT 0,
-	"position" integer DEFAULT 0,
-	"permissions" text,
-	"managed" integer DEFAULT 0,
-	"mentionable" integer DEFAULT 0,
-	"created_at" text,
-	"deleted_at" text,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "discord_events_archive" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"event_name" text NOT NULL,
-	"guild_id" text,
-	"target_id" text,
-	"user_id" text,
-	"username" text,
-	"summary" text,
-	"data_json" text,
-	"created_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "discord_emojis" (
-	"emoji_id" text PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"name" text NOT NULL,
-	"animated" integer DEFAULT 0,
-	"url" text,
-	"roles_json" text,
-	"created_at" text,
-	"deleted_at" text,
-	"updated_at" text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE "guild_settings" (
+CREATE TABLE "birthday_guild_settings" (
 	"guild_id" text PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
-	"locale" text DEFAULT 'fr',
-	"timezone" text DEFAULT 'Europe/Paris',
-	"owner_id" text,
-	"premium_tier" integer DEFAULT 0,
-	"joined_at" bigint NOT NULL,
+	"mode" text DEFAULT 'public' NOT NULL,
+	"announce_channel_id" text,
+	"announce_hour" integer DEFAULT 9 NOT NULL,
+	"announce_timezone" text DEFAULT 'Europe/Paris' NOT NULL,
+	"ping_role_id" text,
+	"message_template" text DEFAULT '🎂 Joyeux anniversaire {user} !' NOT NULL,
+	"temp_role_id" text,
+	"enabled" integer DEFAULT 1 NOT NULL,
 	"created_at" bigint NOT NULL,
 	"updated_at" bigint NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "feature_flags" (
+CREATE TABLE "birthday_visibility" (
+	"user_id" text NOT NULL,
 	"guild_id" text NOT NULL,
-	"feature_name" text NOT NULL,
-	"enabled" integer DEFAULT 0 NOT NULL,
-	"config_json" text DEFAULT '{}' NOT NULL,
-	"allowed_roles" text DEFAULT '[]' NOT NULL,
-	"updated_by" text,
+	"enabled" integer DEFAULT 1 NOT NULL,
 	"updated_at" bigint NOT NULL,
-	CONSTRAINT "feature_flags_guild_id_feature_name_pk" PRIMARY KEY("guild_id","feature_name")
+	CONSTRAINT "birthday_visibility_user_id_guild_id_pk" PRIMARY KEY("user_id","guild_id")
+);
+--> statement-breakpoint
+CREATE TABLE "birthday_change_log" (
+	"id" text PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"guild_id" text,
+	"change_number" integer NOT NULL,
+	"previous_birthdate" text,
+	"new_birthdate" text NOT NULL,
+	"cooldown_until" bigint NOT NULL,
+	"changed_at" bigint NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "birthday_history" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"username" text NOT NULL,
+	"age" integer,
+	"message_id" text,
+	"gifts_given" text,
+	"announced_at" bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "user_warnings" (
@@ -405,6 +378,18 @@ CREATE TABLE "mod_logs" (
 	"created_at" bigint NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "event_log" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"event_type" text NOT NULL,
+	"actor_id" text,
+	"target_id" text,
+	"channel_id" text,
+	"metadata" text,
+	"summary" text,
+	"created_at" bigint NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "tickets" (
 	"id" text PRIMARY KEY NOT NULL,
 	"guild_id" text NOT NULL,
@@ -430,16 +415,16 @@ CREATE TABLE "ticket_messages" (
 	"created_at" bigint NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "event_log" (
-	"id" text PRIMARY KEY NOT NULL,
+CREATE TABLE "welcome_config" (
+	"id" serial PRIMARY KEY NOT NULL,
 	"guild_id" text NOT NULL,
-	"event_type" text NOT NULL,
-	"actor_id" text,
-	"target_id" text,
-	"channel_id" text,
-	"metadata" text,
-	"summary" text,
-	"created_at" bigint NOT NULL
+	"welcome_channel_id" text,
+	"welcome_message" text,
+	"auto_roles" text,
+	"is_enabled" integer DEFAULT 1,
+	"created_at" text DEFAULT CURRENT_TIMESTAMP,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT "welcome_config_guild_id_unique" UNIQUE("guild_id")
 );
 --> statement-breakpoint
 CREATE TABLE "welcome_cards" (
@@ -451,6 +436,149 @@ CREATE TABLE "welcome_cards" (
 	"svg" text NOT NULL,
 	"created_at" bigint NOT NULL,
 	"expires_at" bigint
+);
+--> statement-breakpoint
+CREATE TABLE "user_economy" (
+	"user_id" text NOT NULL,
+	"guild_id" text NOT NULL,
+	"balance" bigint DEFAULT 0 NOT NULL,
+	"bank_balance" bigint DEFAULT 0 NOT NULL,
+	"last_daily_claim_at" bigint,
+	"total_earned" bigint DEFAULT 0 NOT NULL,
+	"total_spent" bigint DEFAULT 0 NOT NULL,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL,
+	CONSTRAINT "user_economy_user_id_guild_id_pk" PRIMARY KEY("user_id","guild_id")
+);
+--> statement-breakpoint
+CREATE TABLE "economy_transactions" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"amount" bigint NOT NULL,
+	"type" text NOT NULL,
+	"counterparty_id" text,
+	"reason" text,
+	"metadata" text,
+	"created_at" bigint NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "shop_items" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"name" text NOT NULL,
+	"description" text,
+	"emoji" text,
+	"price" bigint NOT NULL,
+	"role_reward_id" text,
+	"xp_reward" bigint,
+	"is_tradeable" integer DEFAULT 1 NOT NULL,
+	"is_droppable" integer DEFAULT 1 NOT NULL,
+	"max_per_user" integer,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "user_inventory" (
+	"user_id" text NOT NULL,
+	"guild_id" text NOT NULL,
+	"item_id" text NOT NULL,
+	"quantity" integer DEFAULT 1 NOT NULL,
+	"acquired_at" bigint NOT NULL,
+	CONSTRAINT "user_inventory_user_id_guild_id_item_id_pk" PRIMARY KEY("user_id","guild_id","item_id")
+);
+--> statement-breakpoint
+CREATE TABLE "inventory_drops" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"channel_id" text NOT NULL,
+	"message_id" text,
+	"item_id" text NOT NULL,
+	"quantity" integer DEFAULT 1 NOT NULL,
+	"started_at" bigint NOT NULL,
+	"expires_at" bigint NOT NULL,
+	"claimed_by" text,
+	"claimed_at" bigint,
+	"status" text DEFAULT 'active' NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "inventory_transfers" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"from_user_id" text NOT NULL,
+	"to_user_id" text NOT NULL,
+	"item_id" text NOT NULL,
+	"quantity" integer DEFAULT 1 NOT NULL,
+	"type" text NOT NULL,
+	"price" bigint,
+	"created_at" bigint NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "reports" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"reporter_id" text NOT NULL,
+	"reported_id" text NOT NULL,
+	"channel_id" text,
+	"message_id" text,
+	"reason" text NOT NULL,
+	"category" text DEFAULT 'other' NOT NULL,
+	"status" text DEFAULT 'open' NOT NULL,
+	"resolved_by" text,
+	"resolved_at" bigint,
+	"created_at" bigint NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "report_actions" (
+	"id" text PRIMARY KEY NOT NULL,
+	"report_id" text NOT NULL,
+	"staff_id" text NOT NULL,
+	"action" text NOT NULL,
+	"notes" text,
+	"created_at" bigint NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "reaction_roles" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"channel_id" text NOT NULL,
+	"message_id" text NOT NULL,
+	"emoji" text DEFAULT '' NOT NULL,
+	"role_id" text DEFAULT '' NOT NULL,
+	"description" text,
+	"mode" text DEFAULT 'toggle' NOT NULL,
+	"kind" text DEFAULT 'reaction' NOT NULL,
+	"metadata" text,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "temp_voice_config" (
+	"guild_id" text PRIMARY KEY NOT NULL,
+	"category_id" text,
+	"format" text DEFAULT '{user}''s game' NOT NULL,
+	"delete_delay_seconds" integer DEFAULT 5 NOT NULL,
+	"max_per_guild" integer DEFAULT 0 NOT NULL,
+	"locked_role_id" text,
+	"join_channels_json" text,
+	"enabled" integer DEFAULT 0 NOT NULL,
+	"updated_at" bigint NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "temp_voice_state" (
+	"channel_id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"creator_id" text,
+	"last_empty_at" bigint DEFAULT 0 NOT NULL,
+	"created_at" bigint NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "sticky_roles" (
+	"user_id" text NOT NULL,
+	"guild_id" text NOT NULL,
+	"role_id" text NOT NULL,
+	"saved_at" bigint NOT NULL,
+	CONSTRAINT "sticky_roles_user_id_guild_id_role_id_pk" PRIMARY KEY("user_id","guild_id","role_id")
 );
 --> statement-breakpoint
 CREATE TABLE "giveaways" (
@@ -502,165 +630,14 @@ CREATE TABLE "poll_votes" (
 	CONSTRAINT "poll_votes_poll_id_user_id_option_index_pk" PRIMARY KEY("poll_id","user_id","option_index")
 );
 --> statement-breakpoint
-CREATE TABLE "birthday_guild_settings" (
-	"guild_id" text PRIMARY KEY NOT NULL,
-	"mode" text DEFAULT 'public' NOT NULL,
-	"announce_channel_id" text,
-	"announce_hour" integer DEFAULT 9 NOT NULL,
-	"announce_timezone" text DEFAULT 'Europe/Paris' NOT NULL,
-	"ping_role_id" text,
-	"message_template" text DEFAULT '🎂 Joyeux anniversaire {user} !' NOT NULL,
-	"temp_role_id" text,
-	"enabled" integer DEFAULT 1 NOT NULL,
-	"created_at" bigint NOT NULL,
-	"updated_at" bigint NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "birthday_visibility" (
-	"user_id" text NOT NULL,
-	"guild_id" text NOT NULL,
-	"enabled" integer DEFAULT 1 NOT NULL,
-	"updated_at" bigint NOT NULL,
-	CONSTRAINT "birthday_visibility_user_id_guild_id_pk" PRIMARY KEY("user_id","guild_id")
-);
---> statement-breakpoint
-CREATE TABLE "birthday_change_log" (
-	"id" text PRIMARY KEY NOT NULL,
-	"user_id" text NOT NULL,
-	"guild_id" text,
-	"change_number" integer NOT NULL,
-	"previous_birthdate" text,
-	"new_birthdate" text NOT NULL,
-	"cooldown_until" bigint NOT NULL,
-	"changed_at" bigint NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "birthday_history" (
-	"id" text PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"user_id" text NOT NULL,
-	"username" text NOT NULL,
-	"age" integer,
-	"message_id" text,
-	"gifts_given" text,
-	"announced_at" integer NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "reaction_roles" (
-	"id" text PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"channel_id" text NOT NULL,
-	"message_id" text NOT NULL,
-	"emoji" text DEFAULT '' NOT NULL,
-	"role_id" text DEFAULT '' NOT NULL,
-	"description" text,
-	"mode" text DEFAULT 'toggle' NOT NULL,
-	"kind" text DEFAULT 'reaction' NOT NULL,
-	"metadata" text,
-	"created_at" integer NOT NULL,
-	"updated_at" integer NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "user_economy" (
-	"user_id" text NOT NULL,
-	"guild_id" text NOT NULL,
-	"balance" integer DEFAULT 0 NOT NULL,
-	"bank_balance" integer DEFAULT 0 NOT NULL,
-	"last_daily_claim_at" integer,
-	"total_earned" integer DEFAULT 0 NOT NULL,
-	"total_spent" integer DEFAULT 0 NOT NULL,
-	"created_at" integer NOT NULL,
-	"updated_at" integer NOT NULL,
-	CONSTRAINT "user_economy_user_id_guild_id_pk" PRIMARY KEY("user_id","guild_id")
-);
---> statement-breakpoint
-CREATE TABLE "economy_transactions" (
-	"id" text PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"user_id" text NOT NULL,
-	"amount" integer NOT NULL,
-	"type" text NOT NULL,
-	"counterparty_id" text,
-	"reason" text,
-	"metadata" text,
-	"created_at" integer NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "shop_items" (
-	"id" text PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"name" text NOT NULL,
-	"description" text,
-	"emoji" text,
-	"price" integer NOT NULL,
-	"role_reward_id" text,
-	"xp_reward" integer,
-	"is_tradeable" integer DEFAULT 1 NOT NULL,
-	"is_droppable" integer DEFAULT 1 NOT NULL,
-	"max_per_user" integer,
-	"created_at" integer NOT NULL,
-	"updated_at" integer NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "user_inventory" (
-	"user_id" text NOT NULL,
-	"guild_id" text NOT NULL,
-	"item_id" text NOT NULL,
-	"quantity" integer DEFAULT 1 NOT NULL,
-	"acquired_at" integer NOT NULL,
-	CONSTRAINT "user_inventory_user_id_guild_id_item_id_pk" PRIMARY KEY("user_id","guild_id","item_id")
-);
---> statement-breakpoint
-CREATE TABLE "inventory_drops" (
-	"id" text PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"channel_id" text NOT NULL,
-	"message_id" text,
-	"item_id" text NOT NULL,
-	"quantity" integer DEFAULT 1 NOT NULL,
-	"started_at" integer NOT NULL,
-	"expires_at" integer NOT NULL,
-	"claimed_by" text,
-	"claimed_at" integer,
-	"status" text DEFAULT 'active' NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "inventory_transfers" (
-	"id" text PRIMARY KEY NOT NULL,
-	"guild_id" text NOT NULL,
-	"from_user_id" text NOT NULL,
-	"to_user_id" text NOT NULL,
-	"item_id" text NOT NULL,
-	"quantity" integer DEFAULT 1 NOT NULL,
-	"type" text NOT NULL,
-	"price" integer,
-	"created_at" integer NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "sticky_roles" (
-	"user_id" text NOT NULL,
-	"guild_id" text NOT NULL,
-	"role_id" text NOT NULL,
-	"saved_at" bigint NOT NULL,
-	CONSTRAINT "sticky_roles_user_id_guild_id_role_id_pk" PRIMARY KEY("user_id","guild_id","role_id")
-);
---> statement-breakpoint
-CREATE TABLE "guild_stats" (
-	"guild_id" text NOT NULL,
-	"stat_key" text NOT NULL,
-	"stat_value" text NOT NULL,
-	"updated_at" bigint NOT NULL,
-	CONSTRAINT "guild_stats_guild_id_stat_key_pk" PRIMARY KEY("guild_id","stat_key")
-);
---> statement-breakpoint
 CREATE TABLE "reminders" (
 	"id" text PRIMARY KEY NOT NULL,
 	"guild_id" text,
 	"channel_id" text,
 	"user_id" text NOT NULL,
 	"reminder_text" text NOT NULL,
-	"fire_at" integer NOT NULL,
-	"created_at" integer NOT NULL,
+	"fire_at" bigint NOT NULL,
+	"created_at" bigint NOT NULL,
 	"status" text DEFAULT 'pending' NOT NULL,
 	"source_message_id" text
 );
@@ -676,8 +653,8 @@ CREATE TABLE "word_triggers" (
 	"exclude_role_ids_json" text,
 	"cooldown_seconds" integer DEFAULT 10 NOT NULL,
 	"created_by" text,
-	"created_at" integer NOT NULL,
-	"updated_at" integer NOT NULL
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "custom_commands" (
@@ -690,53 +667,76 @@ CREATE TABLE "custom_commands" (
 	"restrict_role_ids_json" text,
 	"cooldown_seconds" integer DEFAULT 5 NOT NULL,
 	"created_by" text,
-	"created_at" integer NOT NULL,
-	"updated_at" integer NOT NULL,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL,
 	CONSTRAINT "idx_pg_custom_commands_unique" UNIQUE("guild_id","name")
 );
 --> statement-breakpoint
-CREATE TABLE "reports" (
-	"id" text PRIMARY KEY NOT NULL,
+CREATE TABLE "user_captchas" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"username" text NOT NULL,
 	"guild_id" text NOT NULL,
-	"reporter_id" text NOT NULL,
-	"reported_id" text NOT NULL,
+	"question" text NOT NULL,
+	"answer" text NOT NULL,
+	"channel_id" text NOT NULL,
+	"attempts" integer DEFAULT 0,
+	"is_verified" integer DEFAULT 0,
+	"created_at" text DEFAULT CURRENT_TIMESTAMP,
+	"expires_at" text,
+	"verified_at" text,
+	"expired_at" text,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "captcha_config" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
 	"channel_id" text,
-	"message_id" text,
-	"reason" text NOT NULL,
-	"category" text DEFAULT 'other' NOT NULL,
-	"status" text DEFAULT 'open' NOT NULL,
-	"resolved_by" text,
-	"resolved_at" integer,
-	"created_at" integer NOT NULL
+	"verified_role_id" text,
+	"timeout_minutes" integer DEFAULT 10,
+	"max_attempts" integer DEFAULT 3,
+	"is_enabled" integer DEFAULT 1,
+	"created_at" text DEFAULT CURRENT_TIMESTAMP,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT "captcha_config_guild_id_unique" UNIQUE("guild_id")
 );
 --> statement-breakpoint
-CREATE TABLE "report_actions" (
-	"id" text PRIMARY KEY NOT NULL,
-	"report_id" text NOT NULL,
-	"staff_id" text NOT NULL,
-	"action" text NOT NULL,
-	"notes" text,
-	"created_at" integer NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "temp_voice_config" (
-	"guild_id" text PRIMARY KEY NOT NULL,
-	"category_id" text,
-	"format" text DEFAULT '{user}''s game' NOT NULL,
-	"delete_delay_seconds" integer DEFAULT 5 NOT NULL,
-	"max_per_guild" integer DEFAULT 0 NOT NULL,
-	"locked_role_id" text,
-	"join_channels_json" text,
-	"enabled" integer DEFAULT 0 NOT NULL,
-	"updated_at" integer NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "temp_voice_state" (
-	"channel_id" text PRIMARY KEY NOT NULL,
+CREATE TABLE "bump_logs" (
+	"id" serial PRIMARY KEY NOT NULL,
 	"guild_id" text NOT NULL,
-	"creator_id" text,
-	"last_empty_at" integer DEFAULT 0 NOT NULL,
-	"created_at" integer NOT NULL
+	"channel_id" text NOT NULL,
+	"user_id" text,
+	"username" text,
+	"bumped_at" text DEFAULT CURRENT_TIMESTAMP,
+	"reminder_sent" integer DEFAULT 0,
+	"reminder_sent_at" text
+);
+--> statement-breakpoint
+CREATE TABLE "countdown_state" (
+	"channel_id" text PRIMARY KEY NOT NULL,
+	"current_number" integer DEFAULT 900,
+	"error_count" integer DEFAULT 0,
+	"is_trap_active" integer DEFAULT 0,
+	"trap_number" integer,
+	"last_user_id" text,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE "countdown_scores" (
+	"channel_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"username" text NOT NULL,
+	"score" integer DEFAULT 0,
+	CONSTRAINT "countdown_scores_channel_id_user_id_pk" PRIMARY KEY("channel_id","user_id")
+);
+--> statement-breakpoint
+CREATE TABLE "counter_state" (
+	"channel_id" text PRIMARY KEY NOT NULL,
+	"current_number" integer DEFAULT 0,
+	"error_count" integer DEFAULT 0,
+	"last_user_id" text,
+	"updated_at" text DEFAULT CURRENT_TIMESTAMP
 );
 --> statement-breakpoint
 CREATE TABLE "auth_sessions" (
@@ -774,41 +774,30 @@ CREATE TABLE "auth_failed_attempts" (
 	"blocked_until" bigint
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX "idx_pg_event_user" ON "event_participants" USING btree ("event_id","user_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_pg_user_guild_captcha" ON "user_captchas" USING btree ("user_id","guild_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_events_name" ON "discord_events_archive" USING btree ("event_name");--> statement-breakpoint
 CREATE INDEX "idx_pg_events_created" ON "discord_events_archive" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_feature_flags_enabled" ON "feature_flags" USING btree ("enabled");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_pg_event_user" ON "event_participants" USING btree ("event_id","user_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_birthday_visibility_user" ON "birthday_visibility" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_birthday_change_user" ON "birthday_change_log" USING btree ("user_id","guild_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_birthday_change_until" ON "birthday_change_log" USING btree ("cooldown_until");--> statement-breakpoint
+CREATE INDEX "idx_pg_birthday_history_user" ON "birthday_history" USING btree ("user_id","guild_id","announced_at");--> statement-breakpoint
+CREATE INDEX "idx_pg_birthday_history_guild" ON "birthday_history" USING btree ("guild_id","announced_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_user_warnings_guild_user" ON "user_warnings" USING btree ("guild_id","user_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_user_warnings_active" ON "user_warnings" USING btree ("active");--> statement-breakpoint
 CREATE INDEX "idx_pg_user_sanctions_guild_user" ON "user_sanctions" USING btree ("guild_id","user_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_user_sanctions_active" ON "user_sanctions" USING btree ("active");--> statement-breakpoint
 CREATE INDEX "idx_pg_mod_logs_guild_created" ON "mod_logs" USING btree ("guild_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_mod_logs_guild_user" ON "mod_logs" USING btree ("guild_id","user_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_tickets_guild_status" ON "tickets" USING btree ("guild_id","status");--> statement-breakpoint
-CREATE INDEX "idx_pg_tickets_user" ON "tickets" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_tickets_channel" ON "tickets" USING btree ("channel_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_ticket_messages_ticket" ON "ticket_messages" USING btree ("ticket_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_event_log_guild_type" ON "event_log" USING btree ("guild_id","event_type");--> statement-breakpoint
 CREATE INDEX "idx_pg_event_log_guild_created" ON "event_log" USING btree ("guild_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_event_log_actor" ON "event_log" USING btree ("actor_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_event_log_target" ON "event_log" USING btree ("target_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_tickets_guild_status" ON "tickets" USING btree ("guild_id","status");--> statement-breakpoint
+CREATE INDEX "idx_pg_tickets_user" ON "tickets" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_tickets_channel" ON "tickets" USING btree ("channel_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_ticket_messages_ticket" ON "ticket_messages" USING btree ("ticket_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_welcome_cards_user" ON "welcome_cards" USING btree ("guild_id","user_id","template");--> statement-breakpoint
-CREATE INDEX "idx_pg_giveaways_guild_status" ON "giveaways" USING btree ("guild_id","status");--> statement-breakpoint
-CREATE INDEX "idx_pg_giveaways_ends_at" ON "giveaways" USING btree ("ends_at");--> statement-breakpoint
-CREATE INDEX "idx_pg_giveaways_channel" ON "giveaways" USING btree ("channel_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_giveaway_entries_user" ON "giveaway_entries" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_polls_guild_status" ON "polls" USING btree ("guild_id","status");--> statement-breakpoint
-CREATE INDEX "idx_pg_polls_message" ON "polls" USING btree ("message_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_poll_votes_poll" ON "poll_votes" USING btree ("poll_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_birthday_visibility_user" ON "birthday_visibility" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_birthday_change_user" ON "birthday_change_log" USING btree ("user_id","guild_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_birthday_change_until" ON "birthday_change_log" USING btree ("cooldown_until");--> statement-breakpoint
-CREATE INDEX "idx_pg_birthday_history_user" ON "birthday_history" USING btree ("user_id","guild_id","announced_at");--> statement-breakpoint
-CREATE INDEX "idx_pg_birthday_history_guild" ON "birthday_history" USING btree ("guild_id","announced_at");--> statement-breakpoint
-CREATE INDEX "idx_pg_reaction_roles_message" ON "reaction_roles" USING btree ("guild_id","message_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_reaction_roles_guild" ON "reaction_roles" USING btree ("guild_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_reaction_roles_kind" ON "reaction_roles" USING btree ("guild_id","kind","message_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_user_economy_balance" ON "user_economy" USING btree ("guild_id","balance");--> statement-breakpoint
 CREATE INDEX "idx_pg_economy_tx_user" ON "economy_transactions" USING btree ("guild_id","user_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_economy_tx_created" ON "economy_transactions" USING btree ("guild_id","created_at");--> statement-breakpoint
@@ -818,16 +807,27 @@ CREATE INDEX "idx_pg_user_inventory_user" ON "user_inventory" USING btree ("guil
 CREATE INDEX "idx_pg_inventory_drops_status" ON "inventory_drops" USING btree ("guild_id","status","expires_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_inventory_drops_message" ON "inventory_drops" USING btree ("message_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_inventory_transfers_to" ON "inventory_transfers" USING btree ("guild_id","to_user_id","created_at");--> statement-breakpoint
-CREATE INDEX "idx_pg_sticky_roles_user" ON "sticky_roles" USING btree ("guild_id","user_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_reminders_status" ON "reminders" USING btree ("status","fire_at");--> statement-breakpoint
-CREATE INDEX "idx_pg_reminders_user" ON "reminders" USING btree ("user_id","status","fire_at");--> statement-breakpoint
-CREATE INDEX "idx_pg_word_triggers_guild" ON "word_triggers" USING btree ("guild_id");--> statement-breakpoint
-CREATE INDEX "idx_pg_custom_commands_guild" ON "custom_commands" USING btree ("guild_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_reports_guild_status" ON "reports" USING btree ("guild_id","status","created_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_reports_reporter" ON "reports" USING btree ("guild_id","reporter_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_reports_reported" ON "reports" USING btree ("guild_id","reported_id","status");--> statement-breakpoint
 CREATE INDEX "idx_pg_report_actions_report" ON "report_actions" USING btree ("report_id","created_at");--> statement-breakpoint
+CREATE INDEX "idx_pg_reaction_roles_message" ON "reaction_roles" USING btree ("guild_id","message_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_reaction_roles_guild" ON "reaction_roles" USING btree ("guild_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_reaction_roles_kind" ON "reaction_roles" USING btree ("guild_id","kind","message_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_temp_voice_state_guild" ON "temp_voice_state" USING btree ("guild_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_sticky_roles_user" ON "sticky_roles" USING btree ("guild_id","user_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_giveaways_guild_status" ON "giveaways" USING btree ("guild_id","status");--> statement-breakpoint
+CREATE INDEX "idx_pg_giveaways_ends_at" ON "giveaways" USING btree ("ends_at");--> statement-breakpoint
+CREATE INDEX "idx_pg_giveaways_channel" ON "giveaways" USING btree ("channel_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_giveaway_entries_user" ON "giveaway_entries" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_polls_guild_status" ON "polls" USING btree ("guild_id","status");--> statement-breakpoint
+CREATE INDEX "idx_pg_polls_message" ON "polls" USING btree ("message_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_poll_votes_poll" ON "poll_votes" USING btree ("poll_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_reminders_status" ON "reminders" USING btree ("status","fire_at");--> statement-breakpoint
+CREATE INDEX "idx_pg_reminders_user" ON "reminders" USING btree ("user_id","status","fire_at");--> statement-breakpoint
+CREATE INDEX "idx_pg_word_triggers_guild" ON "word_triggers" USING btree ("guild_id");--> statement-breakpoint
+CREATE INDEX "idx_pg_custom_commands_guild" ON "custom_commands" USING btree ("guild_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_pg_user_guild_captcha" ON "user_captchas" USING btree ("user_id","guild_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_auth_sessions_user" ON "auth_sessions" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "idx_pg_auth_sessions_expires" ON "auth_sessions" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_auth_sessions_token_hash" ON "auth_sessions" USING btree ("refresh_token_hash");--> statement-breakpoint
