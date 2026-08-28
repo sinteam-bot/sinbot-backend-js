@@ -17,33 +17,33 @@ class StatsService {
         const last24h = Date.now() - 24 * 3600 * 1000;
         const last7d = Date.now() - 7 * 24 * 3600 * 1000;
 
-        const [members] = await db.pool.query(
+        const members = await db.pool.query(
             `SELECT COUNT(*)::int AS count FROM server_members WHERE deleted_at IS NULL AND left_at IS NULL`,
             []
         );
-        const [msgs24h] = await db.pool.query(
+        const msgs24h = await db.pool.query(
             `SELECT COUNT(*)::int AS count FROM event_log WHERE guild_id = $1 AND event_type LIKE 'message_%' AND created_at > $2`,
             [guildId, last24h]
         );
-        const [warns24h] = await db.pool.query(
+        const warns24h = await db.pool.query(
             `SELECT COUNT(*)::int AS count FROM mod_logs WHERE guild_id = $1 AND action = 'warn' AND created_at > $2`,
             [guildId, last24h]
         );
-        const [activeUsers7d] = await db.pool.query(
+        const activeUsers7d = await db.pool.query(
             `SELECT COUNT(DISTINCT actor_id)::int AS count FROM event_log WHERE guild_id = $1 AND actor_id IS NOT NULL AND created_at > $2`,
             [guildId, last7d]
         );
-        const [ticketsOpen] = await db.pool.query(
+        const ticketsOpen = await db.pool.query(
             `SELECT COUNT(*)::int AS count FROM tickets WHERE guild_id = $1 AND status IN ('open', 'claimed')`,
             [guildId]
         );
 
         return {
-            members: members.rows?.[0]?.count || 0,
-            messages_24h: msgs24h.rows?.[0]?.count || 0,
-            warnings_24h: warns24h.rows?.[0]?.count || 0,
-            active_users_7d: activeUsers7d.rows?.[0]?.count || 0,
-            tickets_open: ticketsOpen.rows?.[0]?.count || 0
+            members: members?.rows?.[0]?.count || 0,
+            messages_24h: msgs24h?.rows?.[0]?.count || 0,
+            warnings_24h: warns24h?.rows?.[0]?.count || 0,
+            active_users_7d: activeUsers7d?.rows?.[0]?.count || 0,
+            tickets_open: ticketsOpen?.rows?.[0]?.count || 0
         };
     }
 

@@ -12,6 +12,7 @@
 
 const { Controller, Get, Post } = require('../../../core/index.js');
 const { ReportsService } = require('../services/reports.service.js');
+const { config } = require('../../../config/index.js');
 
 class ReportsController {
     static inject = [ReportsService];
@@ -22,8 +23,8 @@ class ReportsController {
 
     async list(req) {
         try {
-            const guildId = req.query.guild_id || process.env.GUILD_ID;
-            if (!guildId) return { success: false, error: 'guild_id requis' };
+            const guildId = req.query.guild_id || process.env.GUILD_ID || config.discord?.guild_id;
+            if (!guildId) return { success: true, data: [], total: 0 };
             const limit = Math.min(parseInt(req.query.limit) || 50, 200);
             const offset = Math.max(parseInt(req.query.offset) || 0, 0);
             const data = await this.service.list(guildId, {
@@ -50,20 +51,21 @@ class ReportsController {
 
     async create(req) {
         try {
-            const { getConfig } = require('../../../config/index.js');
-            const cfg = getConfig().features?.reports || {};
+            const { guildId, reporterId, reportedId, channelId, messageId, reason, category } = req.body || {};
+            const finalGuildId = guildId || process.env.GUILD_ID || config.discord?.guild_id;
+            if (!finalGuildId || !reporterId || !reportedId || !reason) {
+                return { success: false, error: 'champs obligatoires manquants' };
+            }
             const r = await this.service.create({
-                guildId: req.body.guildId || process.env.GUILD_ID,
-                reporterId: req.body.reporterId,
-                reportedId: req.body.reportedId,
-                channelId: req.body.channelId || null,
-                messageId: req.body.messageId || null,
-                reason: req.body.reason,
-                category: req.body.category || 'other',
-                config: cfg
+                guildId: finalGuildId,
+                reporterId,
+                reportedId,
+                channelId: channelId || null,
+                messageId: messageId || null,
+                reason,
+                category: category || 'other'
             });
-            if (!r.ok) return { success: false, error: r.error, data: r.data || null };
-            return { success: true, data: r.data };
+            return { success: true, data: r };
         } catch (err) {
             return { success: false, error: err.message };
         }
@@ -71,11 +73,10 @@ class ReportsController {
 
     async resolve(req) {
         try {
-            const r = await this.service.resolve(
-                req.params.id, req.body.staffId, req.body.action || 'custom', req.body.notes
-            );
-            if (!r.ok) return { success: false, error: r.error };
-            return { success: true, data: r.data };
+            const { staffId, action, notes } = req.body || {};
+            if (!staffId) return { success: false, error: 'staffId requis' };
+            const r = await this.service.resolve(req.params.id, staffId, action || 'custom', notes || null);
+            return { success: true, data: r };
         } catch (err) {
             return { success: false, error: err.message };
         }
@@ -83,11 +84,10 @@ class ReportsController {
 
     async dismiss(req) {
         try {
-            const r = await this.service.dismiss(
-                req.params.id, req.body.staffId, req.body.notes
-            );
-            if (!r.ok) return { success: false, error: r.error };
-            return { success: true, data: r.data };
+            const { staffId, notes } = req.body || {};
+            if (!staffId) return { success: false, error: 'staffId requis' };
+            const r = await this.service.dismiss(req.params.id, staffId, notes || null);
+            return { success: true, data: r };
         } catch (err) {
             return { success: false, error: err.message };
         }
@@ -104,10 +104,10 @@ class ReportsController {
 
     async stats(req) {
         try {
-            const guildId = req.query.guild_id || process.env.GUILD_ID;
-            if (!guildId) return { success: false, error: 'guild_id requis' };
+            const guildId = req.query.guild_id || process.env.GUILD_ID || config.discord?.guild_id;
+            if (!guildId) return { success: true, data: { open: 0, resolved: 0, dismissed: 0, total: 0 } };
             const data = await this.service.stats(guildId);
-            return { success: true, data };
+            return { success: true, data: data || { open: 0, resolved: 0, dismissed: 0, total: 0 } };
         } catch (err) {
             return { success: false, error: err.message };
         }

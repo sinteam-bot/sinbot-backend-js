@@ -885,10 +885,8 @@ function createWebRouter(client) {
         }
     });
 
-    // ============================================
-    // 5. SALON VIRTUEL : LOGS DU BOT (CONSULTATION & SSE)
-    // ============================================
-    router.get('/logs', (req, res) => {
+    // Logs système/console (Winston / File Logger)
+    router.get('/logs/system', (req, res) => {
         try {
             const { level, category, search, limit, since } = req.query;
             const logs = logger.getLogs({ level, category, search, limit, since });
@@ -900,6 +898,25 @@ function createWebRouter(client) {
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
+    });
+
+    router.get('/logs', (req, res, next) => {
+        // Si les paramètres demandent spécifiquement les logs applicatifs/console
+        if (req.query.level !== undefined || req.query.category !== undefined || req.query.since !== undefined || req.query.system === 'true') {
+            try {
+                const { level, category, search, limit, since } = req.query;
+                const logs = logger.getLogs({ level, category, search, limit, since });
+                return res.json({
+                    success: true,
+                    data: logs,
+                    total: logs.length
+                });
+            } catch (error) {
+                return res.status(500).json({ success: false, error: error.message });
+            }
+        }
+        // Sinon déléguer au LogsController de Phase 4 (Audit logs en BDD)
+        next();
     });
 
     // Server-Sent Events (SSE) pour le flux de logs en direct

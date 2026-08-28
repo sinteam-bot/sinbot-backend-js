@@ -10,6 +10,7 @@ const { LogsService } = require('./services/logs.service.js');
 const { StatsService } = require('./services/stats.service.js');
 const { LogsListeners } = require('./events/logs-listeners.js');
 const { LogsController } = require('./controllers/logs.controller.js');
+const { StatsController } = require('./controllers/stats.controller.js');
 
 featureRegistry.define('logs', {
     defaults,
@@ -17,11 +18,11 @@ featureRegistry.define('logs', {
     onDisable: async (guildId) => console.log(`💤 [logs] disabled on ${guildId}`)
 });
 
-class LogsModule {}
+class LogsModule { }
 
 Module({
     providers: [LogsService, StatsService],
-    controllers: [LogsController],
+    controllers: [LogsController, StatsController],
     events: [LogsListeners]
 })(LogsModule);
 
