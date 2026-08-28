@@ -140,7 +140,7 @@ class DailyMessageService {
                     inline: true
                 }
             )
-            .setFooter({ text: 'Validation avant 09:00 (Auto à 11:00) • Chienne Bot' })
+            .setFooter({ text: 'Validation avant 09:00 (Auto à 11:00) • Bot' })
             .setTimestamp();
 
         if (options.regenCount && options.regenCount > 0) {
@@ -385,7 +385,7 @@ class DailyMessageService {
             const successEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                 .setColor('#2ecc71')
                 .setTitle('✅ [Validé] Message du jour programmé pour 09:00')
-                .setFooter({ text: `Validé par @${interaction.user.username} • Chienne Bot` });
+                .setFooter({ text: `Validé par @${interaction.user.username} • Bot` });
 
             await interaction.editReply({
                 embeds: [successEmbed],

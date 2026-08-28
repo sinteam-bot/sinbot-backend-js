@@ -827,6 +827,30 @@ const customCommands = pgTable('custom_commands', {
     index('idx_pg_custom_commands_guild').on(table.guildId)
 ]);
 
+// 58. temp_voice_config (Phase 12b)
+const tempVoiceConfig = pgTable('temp_voice_config', {
+    guildId: text('guild_id').primaryKey(),
+    categoryId: text('category_id'),
+    format: text('format').notNull().default("{user}'s game"),
+    deleteDelaySeconds: integer('delete_delay_seconds').notNull().default(5),
+    maxPerGuild: integer('max_per_guild').notNull().default(0),
+    lockedRoleId: text('locked_role_id'),
+    joinChannelsJson: text('join_channels_json'),
+    enabled: integer('enabled').notNull().default(0),
+    updatedAt: integer('updated_at').notNull()
+});
+
+// 59. temp_voice_state (Phase 12b)
+const tempVoiceState = pgTable('temp_voice_state', {
+    channelId: text('channel_id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    creatorId: text('creator_id'),
+    lastEmptyAt: integer('last_empty_at').notNull().default(0),
+    createdAt: integer('created_at').notNull()
+}, (table) => [
+    index('idx_pg_temp_voice_state_guild').on(table.guildId)
+]);
+
 // 58. reports (Phase 12)
 const reports = pgTable('reports', {
     id: text('id').primaryKey(),
@@ -918,5 +942,7 @@ module.exports = {
     wordTriggers,
     customCommands,
     reports,
-    reportActions
+    reportActions,
+    tempVoiceConfig,
+    tempVoiceState
 };

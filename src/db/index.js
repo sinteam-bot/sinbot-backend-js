@@ -853,6 +853,28 @@ const PG_TABLES_DDL = `
         UNIQUE (guild_id, name)
     );
     CREATE INDEX IF NOT EXISTS idx_custom_commands_guild ON custom_commands(guild_id);
+
+    -- Phase 12b: Temp Voice (Join-to-Create)
+    CREATE TABLE IF NOT EXISTS temp_voice_config (
+        guild_id TEXT PRIMARY KEY,
+        category_id TEXT,
+        format TEXT NOT NULL DEFAULT "{user}'s game",
+        delete_delay_seconds INTEGER NOT NULL DEFAULT 5,
+        max_per_guild INTEGER NOT NULL DEFAULT 0,
+        locked_role_id TEXT,
+        join_channels_json TEXT,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS temp_voice_state (
+        channel_id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        creator_id TEXT,
+        last_empty_at INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_temp_voice_state_guild ON temp_voice_state(guild_id);
 `;
 
 let pgTablesInitialized = false;

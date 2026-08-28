@@ -9,6 +9,6 @@
 module.exports = {
     enabled: true,
     color: '#5865F2',
-    footer: 'Chienne Bot — Information',
+    footer: 'Bot — Information',
     show_id: true
 };
