@@ -817,10 +817,10 @@ function createWebRouter(client) {
                 logger.info(`Message ${messageId} modifié sur #${channel.name} par interface Web`, 'WEB');
             }
 
-            // Mettre à jour dans la base SQLite si présent
+            // Mettre à jour dans la base de données si présent
             try {
                 await db.pool.query(
-                    'UPDATE discord_messages SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE message_id = ?',
+                    'UPDATE discord_messages SET content = $1, updated_at = CURRENT_TIMESTAMP WHERE message_id = $2',
                     [editedContent, messageId]
                 );
             } catch (e) {
@@ -864,10 +864,10 @@ function createWebRouter(client) {
                 logger.info(`Message ${messageId} supprimé sur #${channel.name} par interface Web`, 'WEB');
             }
 
-            // Supprimer de la base SQLite si présent
+            // Supprimer de la base de données si présent
             try {
                 await db.pool.query(
-                    'DELETE FROM discord_messages WHERE message_id = ?',
+                    'DELETE FROM discord_messages WHERE message_id = $1',
                     [messageId]
                 );
             } catch (e) {

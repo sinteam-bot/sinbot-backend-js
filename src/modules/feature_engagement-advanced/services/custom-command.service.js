@@ -20,7 +20,7 @@ class CustomCommandService {
         this._cooldowns = new Map(); // key: `g::name`, value: ts
     }
 
-    async create({ guildId, name, responseText, responseEmbed, restrictChannels, restrictRoles, cooldown, createdBy }) {
+    async create({ guildId, name, responseText, responseEmbed, restrictChannels, restrictChannelIds, restrictRoles, restrictRoleIds, cooldown, createdBy }) {
         if (!guildId || !name) {
             return { ok: false, error: 'missing_params' };
         }
@@ -35,13 +35,16 @@ class CustomCommandService {
         if (existing) {
             return { ok: false, error: 'name_taken' };
         }
+        const channels = restrictChannels || restrictChannelIds;
+        const roles = restrictRoles || restrictRoleIds;
+
         const created = await this.repo.insertCustomCommand({
             guildId,
             name: lc,
             responseText: responseText?.slice(0, 500) || null,
             responseEmbedJson: responseEmbed ? JSON.stringify(responseEmbed) : null,
-            restrictChannelIdsJson: restrictChannels?.length ? JSON.stringify(restrictChannels) : null,
-            restrictRoleIdsJson: restrictRoles?.length ? JSON.stringify(restrictRoles) : null,
+            restrictChannelIdsJson: channels?.length ? JSON.stringify(channels) : null,
+            restrictRoleIdsJson: roles?.length ? JSON.stringify(roles) : null,
             cooldownSeconds: cooldown ?? 5,
             createdBy
         });
@@ -79,14 +82,16 @@ class CustomCommandService {
         }
 
         // Channel restrict
-        if (command.restrictChannelIds?.length && !command.restrictChannelIds.includes(message.channelId)) {
+        const allowedChannels = command.restrictChannelIds || command.restrictChannels || [];
+        if (allowedChannels?.length && !allowedChannels.includes(message.channelId)) {
             return { ok: false, reason: 'channel_not_allowed' };
         }
 
         // Role restrict
-        if (command.restrictRoleIds?.length && member) {
+        const allowedRoles = command.restrictRoleIds || command.restrictRoles || [];
+        if (allowedRoles?.length && member) {
             const memberRoleIds = Array.from(member.roles?.cache?.keys() || []);
-            const hasAllowed = command.restrictRoleIds.some(rid => memberRoleIds.includes(rid));
+            const hasAllowed = allowedRoles.some(rid => memberRoleIds.includes(rid));
             if (!hasAllowed) return { ok: false, reason: 'role_required' };
         }
 

@@ -111,10 +111,12 @@ class TempVoiceListener {
             if (config.lockedRoleId) {
                 overwrites.push({ id: config.lockedRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect] });
             }
+            let cat = null;
             if (config.categoryId) {
-                const cat = await guild.channels.fetch(config.categoryId).catch(() => null);
+                cat = await guild.channels.fetch(config.categoryId).catch(() => null);
                 if (!cat || cat.type !== ChannelType.GuildCategory) {
                     // fallback : à la racine du guild
+                    cat = null;
                 }
             }
             const created = await guild.channels.create({
