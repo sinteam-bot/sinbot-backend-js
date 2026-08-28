@@ -13,6 +13,7 @@ const { CardsModule } = require('./feature_cards/cards.module.js');
 const { EngagementModule } = require('./feature_engagement/engagement.module.js');
 const { BirthdaysModule } = require('./feature_birthdays/birthdays.module.js');
 const { ReactionRolesModule } = require('./feature_reaction-roles/reaction-roles.module.js');
+const { EconomyModule } = require('./feature_economy/economy.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -32,7 +33,8 @@ const appModules = [
     CardsModule,
     EngagementModule,
     BirthdaysModule,
-    ReactionRolesModule
+    ReactionRolesModule,
+    EconomyModule
 ];
 
 module.exports = {
@@ -51,5 +53,6 @@ module.exports = {
     CardsModule,
     EngagementModule,
     BirthdaysModule,
-    ReactionRolesModule
+    ReactionRolesModule,
+    EconomyModule
 };
