@@ -22,9 +22,9 @@ class EngagementAdvancedController {
     async listReminders(req) {
         try {
             const userId = req.query.user_id;
-            if (!userId) return { success: false, error: 'user_id requis' };
+            if (!userId) return { success: true, data: [] };
             const data = await this.reminder.listByUser(userId);
-            return { success: true, data };
+            return { success: true, data: data || [] };
         } catch (err) {
             return { success: false, error: err.message };
         }
@@ -34,7 +34,7 @@ class EngagementAdvancedController {
         try {
             const r = await this.reminder.createReminder({
                 userId: req.body.userId,
-                guildId: req.body.guildId,
+                guildId: req.body.guildId || process.env.GUILD_ID,
                 channelId: req.body.channelId,
                 text: req.body.text,
                 fireAt: req.body.fireAt
@@ -58,10 +58,10 @@ class EngagementAdvancedController {
 
     async listTriggers(req) {
         try {
-            const guildId = req.query.guild_id;
-            if (!guildId) return { success: false, error: 'guild_id requis' };
+            const guildId = req.query.guild_id || process.env.GUILD_ID;
+            if (!guildId) return { success: true, data: [] };
             const data = await this.trigger.list(guildId);
-            return { success: true, data };
+            return { success: true, data: data || [] };
         } catch (err) {
             return { success: false, error: err.message };
         }
@@ -70,7 +70,7 @@ class EngagementAdvancedController {
     async createTrigger(req) {
         try {
             const r = await this.trigger.create({
-                guildId: req.body.guildId,
+                guildId: req.body.guildId || process.env.GUILD_ID,
                 triggerText: req.body.triggerText,
                 matchType: req.body.matchType || 'exact',
                 responseText: req.body.responseText,
@@ -99,10 +99,10 @@ class EngagementAdvancedController {
 
     async listCustomCommands(req) {
         try {
-            const guildId = req.query.guild_id;
-            if (!guildId) return { success: false, error: 'guild_id requis' };
+            const guildId = req.query.guild_id || process.env.GUILD_ID;
+            if (!guildId) return { success: true, data: [] };
             const data = await this.customs.list(guildId);
-            return { success: true, data };
+            return { success: true, data: data || [] };
         } catch (err) {
             return { success: false, error: err.message };
         }
