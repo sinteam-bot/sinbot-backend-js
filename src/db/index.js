@@ -789,6 +789,39 @@ const PG_TABLES_DDL = `
     );
     CREATE INDEX IF NOT EXISTS idx_reminders_status ON reminders(status, fire_at);
     CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, status, fire_at);
+
+    -- Phase 11.2-3: Word triggers + Custom commands
+    CREATE TABLE IF NOT EXISTS word_triggers (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        trigger_text TEXT NOT NULL,
+        match_type TEXT NOT NULL DEFAULT 'exact',
+        response_text TEXT,
+        response_embed_json TEXT,
+        exclude_channel_ids_json TEXT,
+        exclude_role_ids_json TEXT,
+        cooldown_seconds INTEGER NOT NULL DEFAULT 10,
+        created_by TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_word_triggers_guild ON word_triggers(guild_id);
+
+    CREATE TABLE IF NOT EXISTS custom_commands (
+        id TEXT PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        response_text TEXT,
+        response_embed_json TEXT,
+        restrict_channel_ids_json TEXT,
+        restrict_role_ids_json TEXT,
+        cooldown_seconds INTEGER NOT NULL DEFAULT 5,
+        created_by TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE (guild_id, name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_custom_commands_guild ON custom_commands(guild_id);
 `;
 
 /**

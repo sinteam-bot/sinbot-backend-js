@@ -789,6 +789,42 @@ const reminders = pgTable('reminders', {
     index('idx_pg_reminders_user').on(table.userId, table.status, table.fireAt)
 ]);
 
+// 56. word_triggers (Phase 11.2)
+const wordTriggers = pgTable('word_triggers', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    triggerText: text('trigger_text').notNull(),
+    matchType: text('match_type').notNull().default('exact'),
+    responseText: text('response_text'),
+    responseEmbedJson: text('response_embed_json'),
+    excludeChannelIdsJson: text('exclude_channel_ids_json'),
+    excludeRoleIdsJson: text('exclude_role_ids_json'),
+    cooldownSeconds: integer('cooldown_seconds').notNull().default(10),
+    createdBy: text('created_by'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull()
+}, (table) => [
+    index('idx_pg_word_triggers_guild').on(table.guildId)
+]);
+
+// 57. custom_commands (Phase 11.3)
+const customCommands = pgTable('custom_commands', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    name: text('name').notNull(),
+    responseText: text('response_text'),
+    responseEmbedJson: text('response_embed_json'),
+    restrictChannelIdsJson: text('restrict_channel_ids_json'),
+    restrictRoleIdsJson: text('restrict_role_ids_json'),
+    cooldownSeconds: integer('cooldown_seconds').notNull().default(5),
+    createdBy: text('created_by'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull()
+}, (table) => [
+    unique('idx_pg_custom_commands_unique').on(table.guildId, table.name),
+    index('idx_pg_custom_commands_guild').on(table.guildId)
+]);
+
 module.exports = {
     userEvents,
     formResponses,
@@ -844,5 +880,7 @@ module.exports = {
     inventoryTransfers,
     stickyRoles,
     guildStats,
-    reminders
+    reminders,
+    wordTriggers,
+    customCommands
 };
