@@ -1,4 +1,4 @@
-const { pgTable, text, integer, bigint, serial, timestamp, primaryKey, index, uniqueIndex } = require('drizzle-orm/pg-core');
+const { pgTable, text, integer, bigint, serial, timestamp, primaryKey, index, uniqueIndex, unique } = require('drizzle-orm/pg-core');
 const { sql } = require('drizzle-orm');
 
 // 1. user_events

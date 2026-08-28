@@ -2,14 +2,12 @@ const { test, describe, before } = require('node:test');
 const assert = require('node:assert');
 const DiscordCacheService = require('../src/services/discordCacheService.js');
 const { pool } = require('../src/database.js');
-const { rawClient, initPgTables } = require('../src/db/index.js');
+const { ensureTestDbReady } = require('./helpers/pglite');
 
 describe('Discord Cache Service Tests', () => {
 
     before(async () => {
-        if (rawClient) {
-            await initPgTables(rawClient);
-        }
+        await ensureTestDbReady();
     });
 
     test('cacheGuildEmojis: should store emojis in discord_emojis', async () => {

@@ -824,10 +824,15 @@ const PG_TABLES_DDL = `
     CREATE INDEX IF NOT EXISTS idx_custom_commands_guild ON custom_commands(guild_id);
 `;
 
+let pgTablesInitialized = false;
+
 /**
  * Initialise automatiquement la structure des tables pour PostgreSQL
  */
 async function initPgTables(client) {
+    if (pgTablesInitialized) return;
+    pgTablesInitialized = true;
+
     await client.query(PG_TABLES_DDL);
 
     // Migration progressive automatique des colonnes manquantes pour PostgreSQL
@@ -923,8 +928,8 @@ function createPGliteAdapter() {
         return client.close();
     };
 
-    // Initialiser les tables immédiatement
-    client.exec(PG_TABLES_DDL)
+    // Initialiser les tables immédiatement (expose la promesse pour attendre si besoin)
+    client.ready = client.exec(PG_TABLES_DDL)
         .catch(err => console.error('Erreur DDL PGlite:', err));
 
     return client;
