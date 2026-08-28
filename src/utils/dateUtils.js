@@ -21,19 +21,23 @@ function toISOStringSafe(val, fallback = null) {
     }
 
     if (typeof val === 'number') {
-        const d = new Date(val);
+        // Heuristique : un timestamp Unix en secondes est < 1e12 (avant l'an 33658).
+        // Un timestamp en millisecondes est >= 1e12.
+        // Discord renvoie ses timestamps en secondes (expiresAt, etc.).
+        const ms = val < 1e12 ? val * 1000 : val;
+        const d = new Date(ms);
         return !isNaN(d.getTime()) ? d.toISOString() : fallback;
     }
 
     if (typeof val === 'string') {
         let trimmed = val.trim();
         if (!trimmed) return fallback;
-        
+
         // Si format SQLite "YYYY-MM-DD HH:MM:SS" ou sans fuseau, forcer UTC
         if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(trimmed)) {
             trimmed = trimmed.replace(' ', 'T') + 'Z';
         }
-        
+
         const d = new Date(trimmed);
         if (!isNaN(d.getTime())) {
             return d.toISOString();
@@ -56,7 +60,10 @@ function toISOStringSafe(val, fallback = null) {
 
 /**
  * Convertit de façon sécurisée en objet Date valide.
- * 
+ *
+ * Supporte les timestamps en secondes (heuristique : < 1e12) et en
+ * millisecondes. Utile pour les timestamps Discord qui sont en secondes.
+ *
  * @param {Date|string|number|null|undefined} val
  * @param {Date|null} [fallback=null]
  * @returns {Date|null}
@@ -64,7 +71,7 @@ function toISOStringSafe(val, fallback = null) {
 function toDateSafe(val, fallback = null) {
     if (val === null || val === undefined) return fallback;
     if (val instanceof Date) return !isNaN(val.getTime()) ? val : fallback;
-    
+
     if (typeof val === 'string') {
         let str = val.trim();
         if (!str) return fallback;
@@ -75,9 +82,10 @@ function toDateSafe(val, fallback = null) {
         const d = new Date(str);
         return !isNaN(d.getTime()) ? d : fallback;
     }
-    
+
     if (typeof val === 'number') {
-        const d = new Date(val);
+        const ms = val < 1e12 ? val * 1000 : val;
+        const d = new Date(ms);
         return !isNaN(d.getTime()) ? d : fallback;
     }
 

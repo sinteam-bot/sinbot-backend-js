@@ -56,8 +56,10 @@ describe('InvitesService', () => {
 
     beforeEach(async () => {
         dbCtx = await createTestDb();
-        const repo = new InvitesRepository(dbCtx.db, dbCtx.schema);
-        service = new InvitesService(repo, dbCtx.schema);
+        const repo = new InvitesRepository();
+        repo.setDb(dbCtx.db, dbCtx.schema);
+        service = new InvitesService(repo);
+        service.setDb(dbCtx.db, dbCtx.schema);
     });
 
     test('getUserStats via SQL brut : real + bonus + leaves', async () => {
@@ -146,6 +148,23 @@ describe('InvitesService', () => {
         );
         assert.strictEqual(msg1, '1 utilisation');
         assert.strictEqual(msg5, '5 utilisations');
+    });
+
+    test('dateUtils (toISOStringSafe, toDateSafe) : utilisé pour expiresAt/createdAt', () => {
+        // Vérifie que les utilitaires de date gèrent les valeurs Discord :
+        // - Date object
+        // - timestamp en secondes (Discord API)
+        // - timestamp en millisecondes
+        // - null / undefined
+        const { toISOStringSafe, toDateSafe } = require('../src/utils/dateUtils.js');
+
+        assert.strictEqual(toISOStringSafe(null), null);
+        assert.strictEqual(toISOStringSafe(new Date('2024-01-01T00:00:00Z')), '2024-01-01T00:00:00.000Z');
+        assert.strictEqual(toISOStringSafe(1704067200), '2024-01-01T00:00:00.000Z');
+
+        assert.strictEqual(toDateSafe(null), null);
+        assert.strictEqual(toDateSafe(1704067200).toISOString(), '2024-01-01T00:00:00.000Z');
+        assert.strictEqual(toDateSafe(1704067200000).toISOString(), '2024-01-01T00:00:00.000Z');
     });
 
     test('leaderboard : top inviters triés par total', async () => {

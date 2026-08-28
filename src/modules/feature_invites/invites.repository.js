@@ -18,10 +18,17 @@ const {
 } = require('./db/schema.js');
 
 class InvitesRepository {
-    constructor(dbInstance, schemaInstance) {
-        if (!dbInstance) {
-            throw new Error('InvitesRepository: dbInstance is required');
-        }
+    constructor() {
+        const { db: defaultDb, schema: defaultSchema } = require('../../db/index.js');
+        this.db = defaultDb;
+        this.schema = defaultSchema;
+    }
+
+    /**
+     * Override de la connexion DB (utile pour les tests unitaires qui
+     * utilisent une instance PGlite éphémère).
+     */
+    setDb(dbInstance, schemaInstance) {
         this.db = dbInstance;
         this.schema = schemaInstance;
     }

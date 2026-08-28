@@ -25,7 +25,6 @@ class InvitesListener {
 
     setClient(client) { this._client = client; }
 
-    @OnEvent('clientReady')
     async onReady(client) {
         this._client = client;
         for (const [, guild] of client.guilds.cache) {
@@ -39,7 +38,6 @@ class InvitesListener {
             `${client.guilds.cache.size} guilde(s).`);
     }
 
-    @OnEvent('inviteCreate')
     async onInviteCreate(invite) {
         try {
             await this.service.onInviteCreate(invite.guild, invite);
@@ -48,7 +46,6 @@ class InvitesListener {
         }
     }
 
-    @OnEvent('inviteDelete')
     async onInviteDelete(invite) {
         try {
             await this.service.onInviteDelete(invite.guild, invite.code);
@@ -57,7 +54,6 @@ class InvitesListener {
         }
     }
 
-    @OnEvent('guildMemberAdd')
     async onMemberAdd(member) {
         const config = await this.service._getConfig(member.guild.id);
         if (!config) return;
@@ -122,7 +118,6 @@ class InvitesListener {
         }
     }
 
-    @OnEvent('guildMemberRemove')
     async onMemberRemove(member) {
         const config = await this.service._getConfig(member.guild.id);
         if (!config) return;
@@ -162,3 +157,9 @@ class InvitesListener {
 }
 
 module.exports = { InvitesListener };
+
+OnEvent('clientReady')(InvitesListener.prototype, 'onReady');
+OnEvent('inviteCreate')(InvitesListener.prototype, 'onInviteCreate');
+OnEvent('inviteDelete')(InvitesListener.prototype, 'onInviteDelete');
+OnEvent('guildMemberAdd')(InvitesListener.prototype, 'onMemberAdd');
+OnEvent('guildMemberRemove')(InvitesListener.prototype, 'onMemberRemove');

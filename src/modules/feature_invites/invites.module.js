@@ -6,7 +6,6 @@ const { Module } = require('../../core/index.js');
 const { featureRegistry } = require('../../core/feature-registry.js');
 
 const defaults = require('./config/defaults.js');
-const schema = require('./config/schema.js');
 const { InvitesRepository } = require('./invites.repository.js');
 const { InvitesService } = require('./services/invites.service.js');
 const { InvitesListener } = require('./events/invites-listener.js');
@@ -15,7 +14,6 @@ const { InviteCommands } = require('./commands/invite-commands.js');
 
 featureRegistry.define('invites', {
     defaults,
-    configSchema: schema,
     onEnable: async (guildId) => console.log(`🎟️ [invites] enabled on ${guildId}`),
     onDisable: async (guildId) => console.log(`💤 [invites] disabled on ${guildId}`)
 });

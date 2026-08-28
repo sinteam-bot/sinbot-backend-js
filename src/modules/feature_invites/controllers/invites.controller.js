@@ -8,7 +8,6 @@
  */
 
 const { Controller, Get } = require('../../../core/index.js');
-const { featureRegistry } = require('../../../core/feature-registry.js');
 const { InvitesService } = require('../services/invites.service.js');
 
 class InvitesController {
@@ -18,7 +17,6 @@ class InvitesController {
         this.service = service;
     }
 
-    @Get('/:guildId/:userId')
     async getUserStats(req, res) {
         const { guildId, userId } = req.params;
         const config = await this.service._getConfig(guildId);
@@ -28,7 +26,6 @@ class InvitesController {
         return res.json({ success: true, data: info });
     }
 
-    @Get('/:guildId/leaderboard')
     async getLeaderboard(req, res) {
         const { guildId } = req.params;
         const limit = Math.min(parseInt(req.query.limit, 10) || 25, 100);
@@ -39,7 +36,6 @@ class InvitesController {
         return res.json({ success: true, data });
     }
 
-    @Get('/:guildId/blacklist')
     async getBlacklist(req, res) {
         const { guildId } = req.params;
         const config = await this.service._getConfig(guildId);
@@ -50,6 +46,9 @@ class InvitesController {
     }
 }
 
-Controller('/api/invites')(InvitesController.prototype);
+Controller('/api/invites')(InvitesController);
+Get('/:guildId/:userId')(InvitesController.prototype, 'getUserStats');
+Get('/:guildId/leaderboard')(InvitesController.prototype, 'getLeaderboard');
+Get('/:guildId/blacklist')(InvitesController.prototype, 'getBlacklist');
 
 module.exports = { InvitesController };

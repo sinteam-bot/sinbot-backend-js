@@ -16,6 +16,7 @@
 const { featureRegistry } = require('../../../core/feature-registry.js');
 const { Injectable } = require('../../../core/index.js');
 const { eq, and, isNull } = require('drizzle-orm');
+const { toISOStringSafe, toDateSafe } = require('../../../utils/dateUtils.js');
 const { InvitesRepository } = require('../invites.repository.js');
 
 class InvitesService {
@@ -23,8 +24,19 @@ class InvitesService {
 
     constructor(repository, schemaInstance = null) {
         this.repo = repository;
-        this.db = repository.db;
-        this.schema = schemaInstance || repository.schema;
+        this.db = repository ? repository.db : null;
+        this.schema = schemaInstance || (repository ? repository.schema : null);
+        this._inviteCache = new Map();
+        this._memberCounter = new Map();
+    }
+
+    /**
+     * Override de la connexion (utile pour les tests unitaires).
+     */
+    setDb(dbInstance, schemaInstance) {
+        this.db = dbInstance;
+        this.schema = schemaInstance || this.schema;
+        this.repo.setDb(dbInstance, schemaInstance || this.repo.schema);
     }
 
     /**
@@ -57,8 +69,8 @@ class InvitesService {
                     inviterId: invite.inviter?.id || null,
                     inviterUsername: invite.inviter?.username || null,
                     channelId: invite.channel?.id || null,
-                    expiresAt: invite.expiresAt ? new Date(invite.expiresAt).getTime() : null,
-                    createdAt: invite.createdAt ? new Date(invite.createdAt).getTime() : Date.now()
+                    expiresAt: toISOStringSafe(invite.expiresAt),
+                    createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
                 });
                 await this.repo.upsertInviteCode(code, guild.id, {
                     channelId: invite.channel?.id || null,
@@ -66,8 +78,8 @@ class InvitesService {
                     inviterUsername: invite.inviter?.username || null,
                     maxUses: invite.maxUses || 0,
                     uses: invite.uses || 0,
-                    expiresAt: invite.expiresAt ? new Date(invite.expiresAt).toISOString() : null,
-                    createdAt: invite.createdAt ? new Date(invite.createdAt).getTime() : Date.now()
+                    expiresAt: toISOStringSafe(invite.expiresAt),
+                    createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
                 });
             }
             this._inviteCache.set(guild.id, map);
@@ -89,8 +101,8 @@ class InvitesService {
             inviterUsername: invite.inviter?.username || null,
             maxUses: invite.maxUses || 0,
             uses: invite.uses || 0,
-            expiresAt: invite.expiresAt ? new Date(invite.expiresAt).toISOString() : null,
-            createdAt: invite.createdAt ? new Date(invite.createdAt).getTime() : Date.now()
+            expiresAt: toISOStringSafe(invite.expiresAt),
+            createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
         });
         const cache = this._inviteCache.get(guild.id) || new Map();
         cache.set(invite.code, {
@@ -100,8 +112,8 @@ class InvitesService {
             inviterId: invite.inviter?.id || null,
             inviterUsername: invite.inviter?.username || null,
             channelId: invite.channel?.id || null,
-            expiresAt: invite.expiresAt ? new Date(invite.expiresAt).getTime() : null,
-            createdAt: invite.createdAt ? new Date(invite.createdAt).getTime() : Date.now()
+            expiresAt: Date.parse(invite.expiresAt) || null,
+            createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
         });
         this._inviteCache.set(guild.id, cache);
     }
@@ -161,8 +173,8 @@ class InvitesService {
             inviterUsername: invite.inviter?.username || null,
             maxUses: invite.maxUses || 0,
             uses: invite.uses || 0,
-            expiresAt: invite.expiresAt ? new Date(invite.expiresAt).toISOString() : null,
-            createdAt: invite.createdAt ? new Date(invite.createdAt).getTime() : Date.now()
+            expiresAt: toISOStringSafe(invite.expiresAt),
+            createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
         });
 
         return {
