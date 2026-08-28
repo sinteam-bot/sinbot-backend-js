@@ -1708,6 +1708,46 @@ function createWebRouter(client) {
         }
     });
 
+    // Vue d'ensemble agrégée des jeux pour le dashboard (Phase 8.4)
+    router.get('/games/stats', async (req, res) => {
+        try {
+            const { getConfig } = require('../config/index.js');
+            const conf = getConfig();
+            const counterChannel = conf.counter?.channel_id;
+            const countdownChannel = conf.countdown?.channel_id;
+            const [counterState, countdownState, counterScores, countdownScores] = await Promise.all([
+                counterChannel ? db.getCounterState(counterChannel).catch(() => null) : null,
+                countdownChannel ? db.getCountdownState(countdownChannel).catch(() => null) : null,
+                counterChannel ? db.getCountdownScores(counterChannel, 100).catch(() => []) : [],
+                countdownChannel ? db.getCountdownScores(countdownChannel, 100).catch(() => []) : []
+            ]);
+            res.json({
+                success: true,
+                data: {
+                    counter: {
+                        configured: !!counterChannel,
+                        channelId: counterChannel,
+                        state: counterState,
+                        topPlayers: counterScores.slice(0, 10)
+                    },
+                    countdown: {
+                        configured: !!countdownChannel,
+                        channelId: countdownChannel,
+                        state: countdownState,
+                        topPlayers: countdownScores.slice(0, 10)
+                    },
+                    enabled: {
+                        counter: conf.counter?.enabled !== false,
+                        countdown: conf.countdown?.enabled !== false
+                    }
+                }
+            });
+        } catch (error) {
+            logger.error(`Erreur GET /api/games/stats: ${error.message}`, 'WEB');
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
     // ============================================
     // 9. COMMANDES DU BOT & PERMISSIONS
     // ============================================
