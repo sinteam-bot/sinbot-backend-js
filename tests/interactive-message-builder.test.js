@@ -2,7 +2,6 @@
  * Tests for the shared InteractiveMessageBuilder (Phase 10 v2)
  */
 
-const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { InteractiveMessageBuilder } = require('../src/services/interactive-message-builder.js');
 

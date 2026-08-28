@@ -149,4 +149,117 @@ Command({ name: 'reactionrole-add', builder: addBuilder })(ReactionRoleCommands.
 Command({ name: 'reactionrole-remove', builder: removeBuilder })(ReactionRoleCommands.prototype, 'executeRemove');
 Command({ name: 'reactionrole-list', builder: listBuilder })(ReactionRoleCommands.prototype, 'executeList');
 
+async function executeAddButton(interaction) {
+    if (!isAdmin(interaction)) {
+        return interaction.reply({ content: '❌ Réservé aux admins (ManageRoles)', ephemeral: true });
+    }
+    const channel = interaction.options.getChannel('channel');
+    const messageId = interaction.options.getString('message_id');
+    const label = interaction.options.getString('label');
+    const style = interaction.options.getString('style') || 'primary';
+    const emoji = interaction.options.getString('emoji');
+    const action = interaction.options.getString('action') || 'toggle_role';
+    const role = interaction.options.getRole('role');
+    const url = interaction.options.getString('url');
+
+    const metadata = { label, style, emoji, action, url, customIdSuffix: messageId };
+    if (role) metadata.roleId = role.id;
+    if (action !== 'open_url' && !role) {
+        return interaction.reply({ content: '❌ role requis pour action "' + action + '"', ephemeral: true });
+    }
+    if (action === 'open_url' && !url) {
+        return interaction.reply({ content: '❌ url requis pour action open_url', ephemeral: true });
+    }
+
+    const r = await this.service.create({
+        guildId: interaction.guild.id,
+        channelId: channel.id,
+        messageId,
+        kind: 'button',
+        roleId: role ? role.id : null,
+        metadata
+    });
+    if (!r.ok) {
+        return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
+    }
+    return interaction.reply({ content: `✅ Bouton **${label}** ajouté.`, ephemeral: true });
+}
+
+const addButtonBuilder = new SlashCommandBuilder()
+    .setName('reactionrole-add-button')
+    .setDescription('Ajouter un bouton (toggle_role/give_role/take_role/open_url) à un message (admin)')
+    .addChannelOption(o => o.setName('channel').setDescription('Salon du message').setRequired(true))
+    .addStringOption(o => o.setName('message_id').setDescription('ID du message').setRequired(true))
+    .addStringOption(o => o.setName('label').setDescription('Texte du bouton (max 80)').setRequired(true).setMaxLength(80))
+    .addStringOption(o => o.setName('style').setDescription('Style du bouton').setRequired(false).addChoices(
+        { name: 'primary', value: 'primary' },
+        { name: 'secondary', value: 'secondary' },
+        { name: 'success', value: 'success' },
+        { name: 'danger', value: 'danger' },
+        { name: 'link (pour open_url)', value: 'link' }
+    ))
+    .addStringOption(o => o.setName('emoji').setDescription('Emoji du bouton (optionnel)').setRequired(false).setMaxLength(50))
+    .addStringOption(o => o.setName('action').setDescription('Action').setRequired(false).addChoices(
+        { name: 'toggle_role (default)', value: 'toggle_role' },
+        { name: 'give_role (ajouter si absent)', value: 'give_role' },
+        { name: 'take_role (retirer si présent)', value: 'take_role' },
+        { name: 'open_url (lien externe)', value: 'open_url' }
+    ))
+    .addRoleOption(o => o.setName('role').setDescription('Rôle à attribuer/retirer (sauf open_url)').setRequired(false))
+    .addStringOption(o => o.setName('url').setDescription('URL pour open_url (sinon inutile)').setRequired(false).setMaxLength(200))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles);
+
+async function executeAddSelect(interaction) {
+    if (!isAdmin(interaction)) {
+        return interaction.reply({ content: '❌ Réservé aux admins (ManageRoles)', ephemeral: true });
+    }
+    const channel = interaction.options.getChannel('channel');
+    const messageId = interaction.options.getString('message_id');
+    const placeholder = interaction.options.getString('placeholder');
+    const minValues = interaction.options.getInteger('min_values') ?? 1;
+    const maxValues = interaction.options.getInteger('max_values') ?? 1;
+    const optionsStr = interaction.options.getString('options');
+
+    // Parse les options : format "Label|value|roleId?;Label|value|roleId?;..."
+    const options = optionsStr.split(';').map(s => {
+        const parts = s.split('|').map(p => p.trim());
+        if (parts.length < 2) return null;
+        const opt = { label: parts[0], value: parts[1] };
+        if (parts[2]) opt.roleId = parts[2];
+        return opt;
+    }).filter(Boolean);
+
+    if (options.length === 0 || options.length > 25) {
+        return interaction.reply({ content: '❌ options invalides (1 à 25 attendues, format: Label|value|roleId? séparées par ;)', ephemeral: true });
+    }
+
+    const roleId = options.find(o => o.roleId)?.roleId;
+    const r = await this.service.create({
+        guildId: interaction.guild.id,
+        channelId: channel.id,
+        messageId,
+        kind: 'select',
+        roleId,
+        metadata: { placeholder, minValues, maxValues, options }
+    });
+    if (!r.ok) {
+        return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
+    }
+    return interaction.reply({ content: `✅ Select avec ${options.length} option(s) ajouté.`, ephemeral: true });
+}
+
+const addSelectBuilder = new SlashCommandBuilder()
+    .setName('reactionrole-add-select')
+    .setDescription('Ajouter un select menu (max 25 options) à un message (admin)')
+    .addChannelOption(o => o.setName('channel').setDescription('Salon du message').setRequired(true))
+    .addStringOption(o => o.setName('message_id').setDescription('ID du message').setRequired(true))
+    .addStringOption(o => o.setName('placeholder').setDescription('Texte affiché quand rien n\'est sélectionné').setRequired(false).setMaxLength(100))
+    .addIntegerOption(o => o.setName('min_values').setDescription('Nb min d\'options (0 = optionnel, default 1)').setRequired(false).setMinValue(0).setMaxValue(25))
+    .addIntegerOption(o => o.setName('max_values').setDescription('Nb max d\'options (1 = single, default 1)').setRequired(false).setMinValue(1).setMaxValue(25))
+    .addStringOption(o => o.setName('options').setDescription('Options: "Label|value|roleId?" séparées par ;').setRequired(true).setMaxLength(1000))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles);
+
+Command({ name: 'reactionrole-add-button', builder: addButtonBuilder })(ReactionRoleCommands.prototype, 'executeAddButton');
+Command({ name: 'reactionrole-add-select', builder: addSelectBuilder })(ReactionRoleCommands.prototype, 'executeAddSelect');
+
 module.exports = { ReactionRoleCommands };

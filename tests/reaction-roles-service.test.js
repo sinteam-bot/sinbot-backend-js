@@ -78,7 +78,7 @@ describe('ReactionRolesService', () => {
     test('create rejette un emoji manquant', async () => {
         const r = await svc.create({ guildId: 'g1', channelId: 'c1', messageId: 'm1', emoji: '', roleId: 'r1' });
         assert.strictEqual(r.ok, false);
-        assert.strictEqual(r.error, 'missing_params');
+        assert.strictEqual(r.error, 'invalid_emoji');
     });
 
     test('create rejette @everyone comme role', async () => {

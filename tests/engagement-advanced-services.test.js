@@ -5,7 +5,6 @@
  * sont testés en isolation (sans discord.js).
  */
 
-const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const { ReminderService } = require('../src/modules/feature_engagement-advanced/services/reminder.service.js');
 const { WordTriggerService } = require('../src/modules/feature_engagement-advanced/services/word-trigger.service.js');

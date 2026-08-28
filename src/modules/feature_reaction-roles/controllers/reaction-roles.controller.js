@@ -47,9 +47,57 @@ class ReactionRolesController {
                 emoji: req.body.emoji,
                 roleId: req.body.roleId,
                 description: req.body.description,
-                mode: req.body.mode
+                mode: req.body.mode,
+                kind: req.body.kind,
+                metadata: req.body.metadata
             });
             if (!r.ok) return { success: false, error: r.error, data: r.data || null };
+            return { success: true, data: r.data };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    async createButton(req) {
+        try {
+            const r = await this.service.create({
+                guildId: req.body.guildId || process.env.GUILD_ID,
+                channelId: req.body.channelId,
+                messageId: req.body.messageId,
+                kind: 'button',
+                roleId: req.body.roleId,
+                metadata: {
+                    label: req.body.label,
+                    style: req.body.style || 'primary',
+                    emoji: req.body.emoji,
+                    action: req.body.action || 'toggle_role',
+                    url: req.body.url,
+                    customIdSuffix: req.body.customIdSuffix
+                }
+            });
+            if (!r.ok) return { success: false, error: r.error };
+            return { success: true, data: r.data };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    async createSelect(req) {
+        try {
+            const r = await this.service.create({
+                guildId: req.body.guildId || process.env.GUILD_ID,
+                channelId: req.body.channelId,
+                messageId: req.body.messageId,
+                kind: 'select',
+                roleId: req.body.options?.find(o => o.roleId)?.roleId,
+                metadata: {
+                    placeholder: req.body.placeholder,
+                    minValues: req.body.minValues,
+                    maxValues: req.body.maxValues,
+                    options: req.body.options || []
+                }
+            });
+            if (!r.ok) return { success: false, error: r.error };
             return { success: true, data: r.data };
         } catch (err) {
             return { success: false, error: err.message };
@@ -93,6 +141,8 @@ class ReactionRolesController {
 Controller('/api/reaction-roles')(ReactionRolesController);
 Get('/')(ReactionRolesController.prototype, 'list');
 Post('/')(ReactionRolesController.prototype, 'create');
+Post('/button')(ReactionRolesController.prototype, 'createButton');
+Post('/select')(ReactionRolesController.prototype, 'createSelect');
 Patch('/:id')(ReactionRolesController.prototype, 'update');
 Delete('/:id')(ReactionRolesController.prototype, 'delete');
 Post('/bulk')(ReactionRolesController.prototype, 'deleteBulk');

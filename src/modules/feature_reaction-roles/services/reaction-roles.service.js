@@ -1,53 +1,76 @@
 /**
  * reaction-roles.service.js — logique métier des rôles à réaction
  *
- *   - create({ guildId, channelId, messageId, emoji, roleId, description })
- *   - list / get / update / delete / deleteByMessage
- *   - applyToMember(member, emoji, op)   : add/remove role suite à une reaction
- *   - getEmojiKey(reaction)               : normalise emoji en string clé
+ * Phase 10 v1 : reactions emoji → role
+ * Phase 10 v2 : buttons (toggle_role/give_role/take_role/open_url) + select menus
  *
- * Toutes les operations discord.js (channel.send, member.roles.add/remove)
- * sont déléguées au listener events/reaction-listener.js.
+ * Utilise le composant partagé InteractiveMessageBuilder
+ * (src/services/interactive-message-builder.js) pour valider
+ * et exécuter les actions.
  */
 
+const crypto = require('crypto');
 const { Injectable } = require('../../../core/index.js');
 const { ReactionRolesRepository } = require('./reaction-roles.repository.js');
+const { InteractiveMessageBuilder } = require('../../../services/interactive-message-builder.js');
 
 class ReactionRolesService {
     static inject = [ReactionRolesRepository];
 
     constructor(repo) {
         this.repo = repo;
+        this.builder = new InteractiveMessageBuilder();
     }
 
     /**
-     * Crée un reaction-role.
+     * Crée un reaction-role (kind=reaction par défaut).
+     * Si kind=button|select, metadata est validé via InteractiveMessageBuilder.
      * @returns {Promise<{ok: boolean, error?: string, data?: any}>}
      */
-    async create({ guildId, channelId, messageId, emoji, roleId, description, mode }) {
-        if (!guildId || !channelId || !messageId || !emoji || !roleId) {
+    async create({ guildId, channelId, messageId, emoji, roleId, description, mode, kind, metadata }) {
+        const k = kind || 'reaction';
+
+        if (!guildId || !channelId || !messageId) {
             return { ok: false, error: 'missing_params' };
         }
         if (roleId === guildId) {
             return { ok: false, error: 'cannot_use_everyone' };
         }
-        const emojiKey = this.normalizeEmoji(emoji);
-        if (!emojiKey) return { ok: false, error: 'invalid_emoji' };
 
-        const existing = await this.repo.findByMessageEmoji(messageId, emojiKey);
-        if (existing) {
-            return { ok: false, error: 'already_exists', data: existing };
+        let comp;
+        if (k === 'reaction') {
+            const emojiKey = this.normalizeEmoji(emoji);
+            if (!emojiKey) return { ok: false, error: 'invalid_emoji' };
+
+            const existing = await this.repo.findByMessageEmoji(messageId, emojiKey);
+            if (existing) {
+                return { ok: false, error: 'already_exists', data: existing };
+            }
+            comp = { id: crypto.randomUUID(), emoji: emojiKey, roleId, description, mode: mode || 'toggle' };
+        } else {
+            // Build a temporary component object for validation
+            comp = { kind: k, ...metadata, roleId, customIdSuffix: metadata?.customIdSuffix };
+            try {
+                this.builder.validateComponent(comp);
+            } catch (err) {
+                return { ok: false, error: `invalid_metadata: ${err.message}` };
+            }
+            // For button, we need a stable id (used in custom_id)
+            comp.id = comp.id || crypto.randomUUID();
         }
-        const id = crypto.randomUUID();
+
+        const id = comp.id;
         const created = await this.repo.insert({
             id,
             guildId,
             channelId,
             messageId,
-            emoji: emojiKey,
-            roleId,
-            description: description || null,
-            mode: mode || 'toggle'
+            emoji: comp.emoji || '',
+            roleId: comp.roleId || '',
+            description: comp.description || null,
+            mode: k === 'reaction' ? (mode || 'toggle') : null,
+            kind: k,
+            metadata: k === 'reaction' ? null : (metadata || null)
         });
         return { ok: true, data: created };
     }
@@ -79,9 +102,6 @@ class ReactionRolesService {
 
     /**
      * Normalise un emoji en string clé pour la BDD.
-     * Accepte :
-     *   - une string brute (unicode ou nom custom)  -> inchangé
-     *   - un objet discord.js ReactionEmoji          -> name:id si custom, name sinon
      */
     normalizeEmoji(emoji) {
         if (!emoji) return null;
@@ -94,16 +114,29 @@ class ReactionRolesService {
     }
 
     /**
-     * Récupère la config d'un reaction-role par message+emoji.
+     * Récupère un reaction-role par message+emoji (Phase 10 v1).
      */
     async findForReaction(messageId, emoji) {
         const key = this.normalizeEmoji(emoji);
         if (!key) return null;
         return this.repo.findByMessageEmoji(messageId, key);
     }
+
+    /**
+     * Récupère un component par custom_id (Phase 10 v2).
+     * Le custom_id est de la forme `ir:<componentId>` ou `ir:<componentId>:<suffix>`.
+     */
+    async findForCustomId(messageId, customId) {
+        const parsed = this.builder.parseCustomId(customId);
+        if (!parsed) return null;
+        const list = await this.repo.listByMessage('', messageId);
+        // Filter by kind != reaction and matching id
+        return list.find(c =>
+            (c.kind === 'button' || c.kind === 'select') && c.id === parsed.id
+        ) || null;
+    }
 }
 
-const crypto = require('crypto');
 Injectable()(ReactionRolesService);
 
 module.exports = { ReactionRolesService };
