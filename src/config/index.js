@@ -113,13 +113,20 @@ function loadYamlFile(filePath) {
         return {};
     }
 
-    const content = fs.readFileSync(filePath, 'utf-8');
-    if (yaml && typeof yaml.load === 'function') {
-        return yaml.load(content) || {};
-    } else if (yaml && typeof yaml.parse === 'function') {
-        return yaml.parse(content) || {};
-    } else {
-        return basicYamlParse(content);
+    try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        if (!content || !content.trim()) {
+            return {};
+        }
+        if (yaml && typeof yaml.load === 'function') {
+            return yaml.load(content) || {};
+        } else if (yaml && typeof yaml.parse === 'function') {
+            return yaml.parse(content) || {};
+        } else {
+            return basicYamlParse(content);
+        }
+    } catch (err) {
+        return {};
     }
 }
 
@@ -336,19 +343,28 @@ function getConfig() {
 function saveConfig(newConfig) {
     currentConfig = newConfig;
     const targetFile = activeConfigPath || path.join(PROJECT_ROOT, 'config.yml');
+    const tmpFile = `${targetFile}.tmp.${process.pid}.${Date.now()}`;
 
-    if (yaml && typeof yaml.dump === 'function') {
-        const yamlStr = yaml.dump(newConfig, {
-            indent: 2,
-            lineWidth: -1,
-            noRefs: true
-        });
-        fs.writeFileSync(targetFile, yamlStr, 'utf-8');
-    } else {
-        // Fallback si pas de lib dump
-        fs.writeFileSync(targetFile, JSON.stringify(newConfig, null, 2), 'utf-8');
+    try {
+        if (yaml && typeof yaml.dump === 'function') {
+            const yamlStr = yaml.dump(newConfig, {
+                indent: 2,
+                lineWidth: -1,
+                noRefs: true
+            });
+            fs.writeFileSync(tmpFile, yamlStr, 'utf-8');
+        } else {
+            // Fallback si pas de lib dump
+            fs.writeFileSync(tmpFile, JSON.stringify(newConfig, null, 2), 'utf-8');
+        }
+        fs.renameSync(tmpFile, targetFile);
+        console.log(`💾 [Config] Configuration sauvegardée avec succès dans ${targetFile}`);
+    } catch (err) {
+        if (fs.existsSync(tmpFile)) {
+            try { fs.unlinkSync(tmpFile); } catch (e) {}
+        }
+        throw err;
     }
-    console.log(`💾 [Config] Configuration sauvegardée avec succès dans ${targetFile}`);
 }
 
 /**
