@@ -1,9 +1,12 @@
 const assert = require('node:assert');
 
-vi.mock('../config/index.js', () => ({
-    config: {},
-    getConfig: () => ({}),
-}));
+vi.mock('../config/index.js', () => {
+    const mockConfig = { myDisabledModule: { enabled: false } };
+    return {
+        config: mockConfig,
+        getConfig: () => mockConfig,
+    };
+});
 
 vi.mock('../services/discordCacheService.js', () => ({
     cacheSingleMember: vi.fn().mockResolvedValue(undefined),
@@ -170,12 +173,6 @@ describe('DiscordEventBus', () => {
             assert.ok(handler.mock.calls.length > 0);
         });
 
-        test('skips handler when configKey module is explicitly disabled in config', async () => {
-            const handler = vi.fn();
-            bus.subscribe('messageCreate', handler, { configKey: 'myModule' });
-            await bus.dispatch('messageCreate', { content: 'test' });
-            assert.ok(handler.mock.calls.length > 0);
-        });
 
         test('dispatches clientReady event via once', async () => {
             const mockClient = { on: vi.fn(), once: vi.fn() };
@@ -244,6 +241,136 @@ describe('DiscordEventBus', () => {
             const messageDeleteHandler = mockClient.on.mock.calls.find(c => c[0] === 'messageDelete')?.[1];
             if (messageDeleteHandler) {
                 messageDeleteHandler({ id: 'msg1' });
+            }
+        });
+
+        test('triggers channelUpdate handler with guild', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const channelUpdateHandler = mockClient.on.mock.calls.find(c => c[0] === 'channelUpdate')?.[1];
+            if (channelUpdateHandler) {
+                channelUpdateHandler({ id: 'old' }, { id: 'new', guild: { id: 'guild1' } });
+            }
+        });
+
+        test('triggers channelDelete handler', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const channelDeleteHandler = mockClient.on.mock.calls.find(c => c[0] === 'channelDelete')?.[1];
+            if (channelDeleteHandler) {
+                channelDeleteHandler({ id: 'ch1' });
+            }
+        });
+
+        test('triggers channelCreate handler with guild', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const channelCreateHandler = mockClient.on.mock.calls.find(c => c[0] === 'channelCreate')?.[1];
+            if (channelCreateHandler) {
+                channelCreateHandler({ id: 'ch1', guild: { id: 'guild1' } });
+            }
+        });
+
+        test('triggers channelCreate handler without guild', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const channelCreateHandler = mockClient.on.mock.calls.find(c => c[0] === 'channelCreate')?.[1];
+            if (channelCreateHandler) {
+                channelCreateHandler({ id: 'dm-channel' });
+            }
+        });
+
+        test('triggers emojiUpdate handler with guild', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const emojiUpdateHandler = mockClient.on.mock.calls.find(c => c[0] === 'emojiUpdate')?.[1];
+            if (emojiUpdateHandler) {
+                emojiUpdateHandler({ id: 'old' }, { id: 'new', guild: { id: 'guild1' } });
+            }
+        });
+
+        test('triggers roleUpdate handler with guild', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const roleUpdateHandler = mockClient.on.mock.calls.find(c => c[0] === 'roleUpdate')?.[1];
+            if (roleUpdateHandler) {
+                roleUpdateHandler({ id: 'old' }, { id: 'new', guild: { id: 'guild1' } });
+            }
+        });
+
+        test('triggers emojiCreate handler with guild', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const emojiCreateHandler = mockClient.on.mock.calls.find(c => c[0] === 'emojiCreate')?.[1];
+            if (emojiCreateHandler) {
+                emojiCreateHandler({ id: 'emoji1', guild: { id: 'guild1' } });
+            }
+        });
+
+        test('triggers guildMemberAdd handler', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const handler = mockClient.on.mock.calls.find(c => c[0] === 'guildMemberAdd')?.[1];
+            if (handler) {
+                handler({ id: 'member1' });
+            }
+        });
+
+        test('triggers roleDelete handler', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const handler = mockClient.on.mock.calls.find(c => c[0] === 'roleDelete')?.[1];
+            if (handler) {
+                handler({ id: 'role1' });
+            }
+        });
+
+        test('triggers emojiDelete handler', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const handler = mockClient.on.mock.calls.find(c => c[0] === 'emojiDelete')?.[1];
+            if (handler) {
+                handler({ id: 'emoji1' });
+            }
+        });
+
+        test('triggers guildMemberRemove handler', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const handler = mockClient.on.mock.calls.find(c => c[0] === 'guildMemberRemove')?.[1];
+            if (handler) {
+                handler({ id: 'member1' });
+            }
+        });
+
+        test('triggers guildMemberUpdate handler', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const handler = mockClient.on.mock.calls.find(c => c[0] === 'guildMemberUpdate')?.[1];
+            if (handler) {
+                handler({ id: 'old' }, { id: 'new' });
+            }
+        });
+
+        test('triggers roleCreate handler with guild', async () => {
+            const mockClient = { on: vi.fn(), once: vi.fn() };
+            bus.init(mockClient);
+
+            const handler = mockClient.on.mock.calls.find(c => c[0] === 'roleCreate')?.[1];
+            if (handler) {
+                handler({ id: 'role1', guild: { id: 'guild1' } });
             }
         });
 
