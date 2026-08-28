@@ -48,7 +48,7 @@ class GiftService {
         // 2) XP cadeau (si configuré)
         if (config.gifts?.xp_per_birthday && config.gifts.xp_per_birthday > 0) {
             try {
-                const { addXP } = require('../../../database.js');
+                const { addXP } = require('../../../db/legacy-bridge.js').xpLevel;
                 await addXP(user.id, user.username, config.gifts.xp_per_birthday, 'event', `Anniversaire +${config.gifts.xp_per_birthday} XP`);
                 given.push('xp');
             } catch (err) {

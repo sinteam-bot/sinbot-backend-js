@@ -1,4 +1,4 @@
-const { pool } = require('../database.js');
+const { pool } = require('../db/legacy-bridge.js');
 const { toISOStringSafe } = require('../utils/dateUtils.js');
 const logger = require('../utils/logger.js');
 

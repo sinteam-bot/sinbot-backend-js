@@ -1,7 +1,7 @@
 const { eq, and, desc, sql } = require('drizzle-orm');
 const { db, schema } = require('../../db/index.js');
 const { Repository } = require('../../core/index.js');
-const { getBotState, setBotState } = require('../../database.js');
+const { getBotState, setBotState } = require('../../db/legacy-bridge.js').botState;
 
 class DailyMessageRepository {
     constructor() {

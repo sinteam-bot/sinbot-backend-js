@@ -13,7 +13,7 @@ const {
     saveDumpChannel,
     saveDumpThread,
     saveDumpMessagesBatch
-} = require("./database.js");
+} = require("./db/legacy-bridge.js").dumpDiscord;
 
 const client = new Client({
     intents: [

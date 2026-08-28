@@ -1,4 +1,4 @@
-const { logUserEvent } = require("../database.js");
+const { logUserEvent } = require("../db/legacy-bridge.js").audit;
 const { executeCommand } = require("../utils/commandHandler.js");
 const DiscordCacheService = require("../services/discordCacheService.js");
 

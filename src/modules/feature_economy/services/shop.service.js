@@ -98,7 +98,7 @@ class ShopService {
                         }
                         if (item.xpReward && item.xpReward > 0) {
                             try {
-                                const { addXP } = require('../../../database.js');
+                                const { addXP } = require('../../../db/legacy-bridge.js').xpLevel;
                                 await addXP(userId, member.user.username, item.xpReward, 'event', `Achat ${item.name}`);
                             } catch (err) {
                                 console.warn('[ShopService] Erreur ajout XP achat:', err.message);

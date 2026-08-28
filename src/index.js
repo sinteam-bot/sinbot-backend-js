@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { config } = require('./config/index.js');
 
-const { logUserEvent, getUserEvents, getGlobalStats } = require("./database.js");
+const { audit } = require("./db/legacy-bridge.js");
+const { logUserEvent, getUserEvents, getGlobalStats } = audit;
 const { loadCommands } = require("./utils/commandHandler.js");
 const logger = require("./utils/logger.js");
 const createWebRouter = require("./web/webRouter.js");
