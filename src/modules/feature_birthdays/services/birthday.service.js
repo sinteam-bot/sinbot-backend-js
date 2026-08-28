@@ -200,6 +200,11 @@ class BirthdayService {
             cooldownUntil
         });
 
+        // S'assurer que l'anniversaire est visible sur le serveur d'enregistrement
+        if (guildId) {
+            await this.setVisibility(userId, guildId, true);
+        }
+
         return { ok: true, birthdate: normalized, nextChangeAt: cooldownUntil };
     }
 
@@ -343,18 +348,36 @@ class BirthdayService {
     _parseBirthdateParts(input) {
         if (!input) return null;
         const s = String(input).trim();
+        const currentYear = new Date().getFullYear();
+
+        // ISO YYYY-MM-DD
         const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
         if (iso) {
-            return { year: parseInt(iso[1], 10), month: parseInt(iso[2], 10), day: parseInt(iso[3], 10) };
+            const y = parseInt(iso[1], 10);
+            return {
+                year: y < currentYear ? y : null,
+                month: parseInt(iso[2], 10),
+                day: parseInt(iso[3], 10)
+            };
         }
+
+        // Format ISO sans année --MM-DD ou MM-DD
+        const noYearIso = s.match(/^--?(\d{1,2})-(\d{1,2})$/);
+        if (noYearIso) {
+            return { year: null, month: parseInt(noYearIso[1], 10), day: parseInt(noYearIso[2], 10) };
+        }
+
         const parts = s.split(/[-/]/);
         if (parts.length === 3) {
             if (parts[0].length === 4) {
-                return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10), day: parseInt(parts[2], 10) };
+                const y = parseInt(parts[0], 10);
+                return { year: y < currentYear ? y : null, month: parseInt(parts[1], 10), day: parseInt(parts[2], 10) };
             } else {
-                return { day: parseInt(parts[0], 10), month: parseInt(parts[1], 10), year: parseInt(parts[2], 10) };
+                const y = parseInt(parts[2], 10);
+                return { day: parseInt(parts[0], 10), month: parseInt(parts[1], 10), year: y < currentYear ? y : null };
             }
         } else if (parts.length === 2) {
+            // DD/MM européen
             return { year: null, month: parseInt(parts[1], 10), day: parseInt(parts[0], 10) };
         }
         return null;
@@ -362,8 +385,8 @@ class BirthdayService {
 
     /**
      * Valide et normalise une date d'anniversaire
-     * Accepte : YYYY-MM-DD, DD/MM, DD-MM, MM/DD
-     * Retourne : string YYYY-MM-DD
+     * Accepte : YYYY-MM-DD, DD/MM/YYYY, DD/MM, DD-MM, MM-DD, JJMM
+     * Retourne : string ISO (YYYY-MM-DD ou --MM-DD)
      */
     _validateBirthdate(input) {
         if (!input) return { ok: false, error: 'empty' };
@@ -373,17 +396,51 @@ class BirthdayService {
         if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)) {
             const [y, m, d] = s.split('-').map(Number);
             if (m < 1 || m > 12 || d < 1 || d > 31) return { ok: false, error: 'invalid_date' };
+            const currentYear = new Date().getFullYear();
+            if (y >= currentYear) {
+                return { ok: true, normalized: `--${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` };
+            }
             return { ok: true, normalized: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` };
         }
 
-        // DD/MM ou DD-MM (format européen)
+        // DD/MM/YYYY ou DD-MM-YYYY (format européen avec année)
+        const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (dmy) {
+            const d = parseInt(dmy[1], 10);
+            const m = parseInt(dmy[2], 10);
+            const y = parseInt(dmy[3], 10);
+            if (m < 1 || m > 12 || d < 1 || d > 31) return { ok: false, error: 'invalid_date' };
+            const currentYear = new Date().getFullYear();
+            if (y >= currentYear) {
+                return { ok: true, normalized: `--${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` };
+            }
+            return { ok: true, normalized: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` };
+        }
+
+        // DD/MM ou DD-MM (format européen sans année)
         const slash = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
         if (slash) {
             const d = parseInt(slash[1], 10);
             const m = parseInt(slash[2], 10);
             if (m < 1 || m > 12 || d < 1 || d > 31) return { ok: false, error: 'invalid_date' };
-            const y = new Date().getFullYear();
-            return { ok: true, normalized: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` };
+            return { ok: true, normalized: `--${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` };
+        }
+
+        // 4 chiffres compacts JJMM (ex: 0109 pour 1er Septembre, 0901)
+        const digits4 = s.match(/^(\d{2})(\d{2})$/);
+        if (digits4) {
+            let d = parseInt(digits4[1], 10);
+            let m = parseInt(digits4[2], 10);
+            if (m < 1 || m > 12) {
+                if (d >= 1 && d <= 12 && m >= 1 && m <= 31) {
+                    const temp = d;
+                    d = m;
+                    m = temp;
+                }
+            }
+            if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+                return { ok: true, normalized: `--${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` };
+            }
         }
 
         return { ok: false, error: 'invalid_format' };
@@ -411,23 +468,44 @@ class BirthdayService {
         if (!birthdate) return null;
         const parsed = this._parseBirthdateParts(birthdate);
         if (!parsed || !parsed.year) return null;
-        let age = atDate.getFullYear() - parsed.year;
+        const currentYear = atDate.getFullYear();
+        if (parsed.year >= currentYear) return null;
+
+        let age = currentYear - parsed.year;
         const m = (atDate.getMonth() + 1) - parsed.month;
         if (m < 0 || (m === 0 && atDate.getDate() < parsed.day)) age--;
+        if (age <= 0) return null;
         return age;
     }
 
     /**
-     * Rend le template avec les variables Draftbot
+     * Rend le template avec les variables Draftbot et Twig/Liquid {% if age %}
      */
     renderTemplate(template, vars) {
         if (!template) return '';
-        return String(template)
-            .replace(/\{user\}/g, vars.userId ? `<@${vars.userId}>` : '')
+        const templateEngine = require('../../../utils/templateEngine.js');
+        let rendered = template;
+        try {
+            rendered = templateEngine.render(template, vars);
+        } catch {
+            rendered = template;
+        }
+
+        // Nettoyer les reliquats d'âge si pas d'âge fourni
+        if (!vars.age || vars.age <= 0) {
+            rendered = String(rendered)
+                .replace(/Tu fêtes tes \*\*(\?|\{age\}|0)\s*ans\*\*\s*aujourd'hui\s*!\s*/gi, '')
+                .replace(/Tu as \*\*(\?|\{age\}|0)\s*ans\*\*\s*!\s*/gi, '');
+        }
+
+        return String(rendered)
+            .replace(/\{user\}/g, vars.userId ? `<@${vars.userId}>` : (vars.user || ''))
             .replace(/\{username\}/g, vars.username || 'Utilisateur')
-            .replace(/\{age\}/g, String(vars.age ?? '?'))
+            .replace(/\{age\}/g, vars.age && vars.age > 0 ? String(vars.age) : '')
             .replace(/\{role\}/g, vars.roleId ? `<@&${vars.roleId}>` : '')
-            .replace(/\{gifts\}/g, vars.gifts || 'Aucun cadeau');
+            .replace(/\{gifts\}/g, vars.gifts || 'Aucun cadeau')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
     }
 }
 

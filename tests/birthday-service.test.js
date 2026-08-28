@@ -181,7 +181,16 @@ describe('BirthdayService', () => {
 
         test('échoue en silence sur variables manquantes', () => {
             const r = svc.renderTemplate('User={user} Age={age}', {});
-            assert.strictEqual(r, 'User= Age=?');
+            assert.strictEqual(r, 'User= Age=');
+        });
+
+        test('gère les conditions {% if age %}', () => {
+            const tpl = '🎂 Joyeux anniversaire {user} ! {% if age %}Tu fêtes tes **{age} ans** aujourd\'hui ! {% endif %}🎉';
+            const withAge = svc.renderTemplate(tpl, { userId: '123', age: 25 });
+            assert.strictEqual(withAge, '🎂 Joyeux anniversaire <@123> ! Tu fêtes tes **25 ans** aujourd\'hui ! 🎉');
+
+            const withoutAge = svc.renderTemplate(tpl, { userId: '123', age: null });
+            assert.strictEqual(withoutAge, '🎂 Joyeux anniversaire <@123> ! 🎉');
         });
     });
 
