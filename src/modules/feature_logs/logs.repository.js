@@ -1,24 +1,21 @@
 /**
  * feature_logs/logs.repository.js
  *
- * Repository du module Logs. Réexporte les fonctions transverses du
- * bridge (audit + members + discordCache) tant qu'elles ne sont pas
- * portées en Drizzle natif.
- *
- * Le module logs consomme :
- *   - `audit` : archive d'événements Discord
- *   - `members` : historique des membres
- *   - `discordCache` : cache des entités Discord
+ * Repository composite du module Logs. Agrège les repositories transverses
+ * (audit, members, discord-cache) car le module logs est transverse par
+ * nature (il observe tous les autres modules).
  */
 
 const { Repository } = require('../../core/index.js');
-const { audit, members, discordCache } = require('../../db/legacy-bridge.js');
+const { AuditRepository } = require('../../db/schemas/shared/audit.repository.js');
+const { MembersRepository } = require('../../db/schemas/shared/members.repository.js');
+const { DiscordCacheRepository } = require('../../db/schemas/shared/discord-cache.repository.js');
 
 class LogsRepository {
     constructor() {
-        this._audit = audit;
-        this._members = members;
-        this._cache = discordCache;
+        this._audit = new AuditRepository();
+        this._members = new MembersRepository();
+        this._cache = new DiscordCacheRepository();
     }
 
     // --- audit ---

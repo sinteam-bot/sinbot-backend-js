@@ -48,8 +48,9 @@ class GiftService {
         // 2) XP cadeau (si configuré)
         if (config.gifts?.xp_per_birthday && config.gifts.xp_per_birthday > 0) {
             try {
-                const { addXP } = require('../../../db/legacy-bridge.js').xpLevel;
-                await addXP(user.id, user.username, config.gifts.xp_per_birthday, 'event', `Anniversaire +${config.gifts.xp_per_birthday} XP`);
+                const { XPLevelRepository } = require('../../../feature_xp-level/xp-level.repository.js');
+                const xpRepo = new XPLevelRepository();
+                await xpRepo.addXP(user.id, user.username, config.gifts.xp_per_birthday, 'event', `Anniversaire +${config.gifts.xp_per_birthday} XP`);
                 given.push('xp');
             } catch (err) {
                 console.warn(`[GiftService] XP gift failed: ${err.message}`);

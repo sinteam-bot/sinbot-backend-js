@@ -1,6 +1,6 @@
 const assert = require('node:assert');
 const DiscordCacheService = require('../src/services/discordCacheService.js');
-const { pool } = require('../src/db/legacy-bridge.js');
+const { pool } = require('../src/db/index.js');
 const { ensureTestDbReady } = require('./helpers/pglite');
 
 describe('Discord Cache Service Tests', () => {
@@ -243,7 +243,8 @@ describe('Discord Cache Service Tests', () => {
     });
 
     test('markMemberLeft & logMemberEvent: safely handle missing username and guildId without constraint errors', async () => {
-        const dbHelper = require('../src/db/legacy-bridge.js').members;
+        const { MembersRepository } = require('../src/db/schemas/shared/members.repository.js');
+        const dbHelper = new MembersRepository();
         // Insérer un membre de test
         await dbHelper.registerNewMember({
             user_id: 'user_leave_test',

@@ -2,7 +2,9 @@ const { EmbedBuilder } = require('discord.js');
 const { execSync } = require('child_process');
 const { Injectable } = require('../../core/index.js');
 const { config, getConfig } = require('../../config/index.js');
-const { getBotState, setBotState } = require('../../db/legacy-bridge.js').botState;
+const { BotStateRepository } = require('../../db/schemas/shared/bot-state.repository.js');
+const botStateRepo = new BotStateRepository();
+const { getBotState, setBotState } = botStateRepo;
 
 class StartupNotifierService {
     constructor() {}

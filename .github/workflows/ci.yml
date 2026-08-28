@@ -21,6 +21,15 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Lint DB references (no legacy bridge)
+        run: |
+          echo "=== Vérification : aucun import de legacy-bridge (supprimé) ==="
+          if grep -rn "require\(['\"][^'\"]*legacy-bridge" src/ tests/ 2>/dev/null; then
+            echo "❌ Des imports de legacy-bridge subsistent !"
+            exit 1
+          fi
+          echo "✅ Aucun import de legacy-bridge"
+
       - name: Lint DB references (no legacy database.js)
         run: |
           echo "=== Vérification : aucun import de database.js ==="

@@ -1,4 +1,17 @@
-const db = require('../db/legacy-bridge.js').legacy;
+const { AuditRepository } = require('../db/schemas/shared/audit.repository.js');
+const { DiscordCacheRepository } = require('../db/schemas/shared/discord-cache.repository.js');
+const { MembersRepository } = require('../db/schemas/shared/members.repository.js');
+const { DumpDiscordRepository } = require('../db/schemas/shared/dump-discord.repository.js');
+const auditRepo = new AuditRepository();
+const cacheRepo = new DiscordCacheRepository();
+const membersRepo = new MembersRepository();
+const dumpRepo = new DumpDiscordRepository();
+const db = {
+    ...auditRepo,
+    ...cacheRepo,
+    ...membersRepo,
+    ...dumpRepo
+};
 const logger = require('./logger.js');
 const { toISOStringSafe } = require('./dateUtils.js');
 

@@ -1,29 +1,73 @@
 /**
  * db/schemas/shared/openai.repository.js
  *
- * Repository transverse pour les opérations OpenAI (saveOpenAIMessage,
- * getLastOpenAIMessageId). Réexporte depuis le bridge tant que le
- * feature `feature_daily-message` n'a pas porté ces fonctions en
- * Drizzle natif.
+ * Repository transverse pour les opérations OpenAI / OpenRouter
+ * (table `openaimessages` définie dans `openai.js`).
  *
- * Le schéma associé (`openaimessages` table) est défini dans
- * `db/schemas/shared/openai.js`.
+ * Le code est porté nativement depuis `src/db/legacy-bridge-impl.js`.
  */
 
+const { desc, sql } = require('drizzle-orm');
 const { Repository } = require('../../../core/index.js');
-const { openai } = require('../legacy-bridge.js');
+const { db, schema } = require('../../index.js');
+const { openaimessages } = require('./openai.js');
 
 class OpenAIRepository {
     constructor() {
-        this._bridge = openai;
+        this.db = db;
+        this.schema = schema;
     }
 
     async saveOpenAIMessage(data) {
-        return this._bridge.saveOpenAIMessage(data);
+        try {
+            const [saved] = await this.db.insert(openaimessages)
+                .values({
+                    msgid: data.msgid,
+                    prompt: data.prompt,
+                    instruction: data.instruction || null,
+                    model: data.model || 'unknow',
+                    tokeninput: parseInt(data.tokeninput, 10) || 0,
+                    tokenoutput: parseInt(data.tokenoutput, 10) || 0,
+                    content: data.content,
+                    previousmsgid: data.previousMsgId || null,
+                    rawdata: data.rawData ? JSON.stringify(data.rawData) : null,
+                    updatedAt: sql`CURRENT_TIMESTAMP`
+                })
+                .onConflictDoUpdate({
+                    target: openaimessages.msgid,
+                    set: {
+                        prompt: data.prompt,
+                        instruction: data.instruction || null,
+                        model: data.model || 'unknow',
+                        tokeninput: parseInt(data.tokeninput, 10) || 0,
+                        tokenoutput: parseInt(data.tokenoutput, 10) || 0,
+                        content: data.content,
+                        previousmsgid: data.previousMsgId || null,
+                        rawdata: data.rawData ? JSON.stringify(data.rawData) : null,
+                        updatedAt: sql`CURRENT_TIMESTAMP`
+                    }
+                })
+                .returning();
+
+            return saved;
+        } catch (error) {
+            console.error('❌ Erreur saveOpenAIMessage:', error);
+            throw error;
+        }
     }
 
     async getLastOpenAIMessageId() {
-        return this._bridge.getLastOpenAIMessageId();
+        try {
+            const [latest] = await this.db.select({ msgid: openaimessages.msgid })
+                .from(openaimessages)
+                .orderBy(desc(openaimessages.id))
+                .limit(1);
+
+            return latest ? latest.msgid : null;
+        } catch (error) {
+            console.error('❌ Erreur getLastOpenAIMessageId:', error);
+            throw error;
+        }
     }
 }
 

@@ -8,12 +8,9 @@ const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const path = require('path');
 const { config } = require('./config/index.js');
 
-const {
-    saveDumpUser,
-    saveDumpChannel,
-    saveDumpThread,
-    saveDumpMessagesBatch
-} = require("./db/legacy-bridge.js").dumpDiscord;
+const { DumpDiscordRepository } = require("./db/schemas/shared/dump-discord.repository.js");
+const dumpRepo = new DumpDiscordRepository();
+const { saveDumpUser, saveDumpChannel, saveDumpThread, saveDumpMessagesBatch } = dumpRepo;
 
 const client = new Client({
     intents: [

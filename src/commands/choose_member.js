@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getMemberForGrognement } = require("../db/legacy-bridge.js").commands
+const { CommandsRepository } = require("../db/schemas/shared/commands.repository.js");
+const commandsRepo = new CommandsRepository();
 
 module.exports = {
     // Définition de la Slash Command
@@ -17,7 +18,7 @@ module.exports = {
     async executeSlash(interaction) {
         try {
 
-            const userId = await getMemberForGrognement();
+            const userId = await commandsRepo.getMemberForGrognement();
             interaction.reply({
                 content: `Le membre est <@${userId}>`
                 //,ephemeral: true

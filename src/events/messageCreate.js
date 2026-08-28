@@ -1,4 +1,5 @@
-const { logUserEvent } = require("../db/legacy-bridge.js").audit;
+const { AuditRepository } = require("../db/schemas/shared/audit.repository.js");
+const auditRepo = new AuditRepository();
 const { executeCommand } = require("../utils/commandHandler.js");
 const DiscordCacheService = require("../services/discordCacheService.js");
 
@@ -37,7 +38,7 @@ module.exports = {
         }
 
         // 3. Log d'activité utilisateur (l'attribution d'XP est gérée par XPLevelModule via l'EventBus)
-        await logUserEvent(
+        await auditRepo.logUserEvent(
             message.author.id,
             message.author.username,
             'message',
