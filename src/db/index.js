@@ -653,22 +653,24 @@ const PG_TABLES_DDL = `
     CREATE INDEX IF NOT EXISTS idx_birthday_history_user ON birthday_history(user_id, guild_id, announced_at);
     CREATE INDEX IF NOT EXISTS idx_birthday_history_guild ON birthday_history(guild_id, announced_at);
 
-    -- Phase RR: Reaction Roles
+    -- Phase RR: Reaction Roles (v1 + v2 : components)
     CREATE TABLE IF NOT EXISTS reaction_roles (
         id TEXT PRIMARY KEY,
         guild_id TEXT NOT NULL,
         channel_id TEXT NOT NULL,
         message_id TEXT NOT NULL,
-        emoji TEXT NOT NULL,
-        role_id TEXT NOT NULL,
+        emoji TEXT NOT NULL DEFAULT '',
+        role_id TEXT NOT NULL DEFAULT '',
         description TEXT,
         mode TEXT NOT NULL DEFAULT 'toggle',
+        kind TEXT NOT NULL DEFAULT 'reaction',
+        metadata TEXT,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        UNIQUE (message_id, emoji)
+        updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_reaction_roles_message ON reaction_roles(guild_id, message_id);
     CREATE INDEX IF NOT EXISTS idx_reaction_roles_guild ON reaction_roles(guild_id);
+    CREATE INDEX IF NOT EXISTS idx_reaction_roles_kind ON reaction_roles(guild_id, kind, message_id);
 
     -- Phase 9: Economy & Inventory
     CREATE TABLE IF NOT EXISTS user_economy (
@@ -889,7 +891,12 @@ async function initPgTables(client) {
         `ALTER TABLE server_members ALTER COLUMN updated_at TYPE BIGINT;`,
         `ALTER TABLE sticky_roles ALTER COLUMN saved_at TYPE BIGINT;`,
         `ALTER TABLE guild_stats ALTER COLUMN updated_at TYPE BIGINT;`,
-        `ALTER TABLE poll_votes ALTER COLUMN voted_at TYPE BIGINT;`
+        `ALTER TABLE poll_votes ALTER COLUMN voted_at TYPE BIGINT;`,
+        `ALTER TABLE reaction_roles ALTER COLUMN emoji SET DEFAULT '';`,
+        `ALTER TABLE reaction_roles ALTER COLUMN role_id SET DEFAULT '';`,
+        `ALTER TABLE reaction_roles ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'reaction';`,
+        `ALTER TABLE reaction_roles ADD COLUMN IF NOT EXISTS metadata TEXT;`,
+        `CREATE INDEX IF NOT EXISTS idx_reaction_roles_kind ON reaction_roles(guild_id, kind, message_id);`
     ];
 
     for (const stmt of migrationStatements) {

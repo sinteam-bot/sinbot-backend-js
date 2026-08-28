@@ -643,16 +643,18 @@ const reactionRoles = pgTable('reaction_roles', {
     guildId: text('guild_id').notNull(),
     channelId: text('channel_id').notNull(),
     messageId: text('message_id').notNull(),
-    emoji: text('emoji').notNull(),
-    roleId: text('role_id').notNull(),
+    emoji: text('emoji').notNull().default(''),
+    roleId: text('role_id').notNull().default(''),
     description: text('description'),
     mode: text('mode').notNull().default('toggle'),
+    kind: text('kind').notNull().default('reaction'),
+    metadata: text('metadata'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull()
 }, (table) => [
-    uniqueIndex('idx_pg_reaction_roles_unique').on(table.messageId, table.emoji),
     index('idx_pg_reaction_roles_message').on(table.guildId, table.messageId),
-    index('idx_pg_reaction_roles_guild').on(table.guildId)
+    index('idx_pg_reaction_roles_guild').on(table.guildId),
+    index('idx_pg_reaction_roles_kind').on(table.guildId, table.kind, table.messageId)
 ]);
 
 // 47. user_economy (Phase 9)
