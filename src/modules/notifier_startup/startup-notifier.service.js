@@ -49,6 +49,42 @@ class StartupNotifierService {
     }
 
     /**
+     * Récupère l'historique des commits depuis le dépôt Git local
+     */
+    getLocalGitCommits(limit = 5, fromSha = null) {
+        try {
+            const notifierConfig = this.getConfig();
+            const repo = notifierConfig.github?.repo || process.env.GITHUB_REPO || 'sinteam-bot/chienne-bot';
+            const repoUrl = `https://github.com/${repo}`;
+
+            const range = fromSha ? `${fromSha}..HEAD` : `-n ${limit}`;
+            const stdout = execSync(`git log ${range} --pretty=format:"%H|%an|%s"`, {
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'ignore'],
+                timeout: 2000
+            }).trim();
+
+            if (!stdout) return [];
+
+            return stdout.split('\n').filter(Boolean).map(line => {
+                const [sha, author, ...msgParts] = line.split('|');
+                const message = msgParts.join('|');
+                return {
+                    sha,
+                    author: { login: author, name: author },
+                    commit: {
+                        author: { name: author },
+                        message
+                    },
+                    html_url: sha ? `${repoUrl}/commit/${sha}` : null
+                };
+            });
+        } catch {
+            return [];
+        }
+    }
+
+    /**
      * Effectue un appel vers l'API GitHub
      */
     async fetchGithubApi(endpoint) {
@@ -78,14 +114,18 @@ class StartupNotifierService {
             clearTimeout(timeoutId);
 
             if (!response.ok) {
-                console.warn(`⚠️ [StartupNotifier] GitHub API [${response.status}] pour ${url}`);
+                if (process.env.NODE_ENV === 'production') {
+                    console.warn(`⚠️ [StartupNotifier] GitHub API [${response.status}] pour ${url}`);
+                }
                 return null;
             }
 
             return await response.json();
         } catch (error) {
             clearTimeout(timeoutId);
-            console.warn(`⚠️ [StartupNotifier] Erreur connexion GitHub API (${url}):`, error.message);
+            if (process.env.NODE_ENV === 'production') {
+                console.warn(`⚠️ [StartupNotifier] Erreur connexion GitHub API (${url}):`, error.message);
+            }
             return null;
         }
     }
@@ -131,19 +171,40 @@ class StartupNotifierService {
             let isUpdate = false;
             let effectiveSha = currentCommit.sha;
 
-            // 1. Récupération des commits récents
+            // 1. Récupération des commits récents (Priorité GitHub API avec fallback Git local)
             const githubCommits = await this.fetchGithubApi('/commits?per_page=5');
             if (Array.isArray(githubCommits) && githubCommits.length > 0) {
                 latestCommits = githubCommits;
                 if (!effectiveSha) {
                     effectiveSha = githubCommits[0].sha;
                 }
+            } else {
+                // Fallback Git local (dev local / offline / rate limit)
+                const localCommits = this.getLocalGitCommits(5);
+                if (localCommits.length > 0) {
+                    latestCommits = localCommits;
+                    if (!effectiveSha) {
+                        effectiveSha = localCommits[0].sha;
+                    }
+                }
             }
 
             // 2. Détection de mise à jour
             if (lastNotifiedCommit && effectiveSha && lastNotifiedCommit !== effectiveSha) {
                 isUpdate = true;
-                comparison = await this.fetchGithubApi(`/compare/${lastNotifiedCommit}...${effectiveSha}`);
+                const comp = await this.fetchGithubApi(`/compare/${lastNotifiedCommit}...${effectiveSha}`);
+                if (comp && Array.isArray(comp.commits)) {
+                    comparison = comp;
+                } else {
+                    // Fallback comparaison locale Git
+                    const diffCommits = this.getLocalGitCommits(10, lastNotifiedCommit);
+                    if (diffCommits.length > 0) {
+                        comparison = {
+                            commits: diffCommits,
+                            html_url: `${repoUrl}/compare/${lastNotifiedCommit}...${effectiveSha}`
+                        };
+                    }
+                }
             }
 
             // 3. Construction de l'embed

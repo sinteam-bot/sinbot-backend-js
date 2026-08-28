@@ -20,6 +20,7 @@ const {
 function createWebRouter(client) {
     const router = express.Router();
     const rateLimiters = createRateLimiters();
+    let _lastMembersFetch = 0;
 
     // Middleware de validation des paramètres Discord (:channelId, :messageId, :userId)
     router.param('channelId', (req, res, next, value) => {
@@ -976,10 +977,18 @@ function createWebRouter(client) {
             let membersList = [];
 
             if (guild) {
-                try {
-                    await guild.members.fetch();
-                } catch (e) {
-                    logger.warn(`Échec fetch guild.members: ${e.message}`, 'API');
+                // Ne solliciter la passerelle Discord (Opcode 8) que si le cache local est vide ou après 5 minutes
+                const now = Date.now();
+                if (guild.members.cache.size === 0 || req.query.force_fetch === 'true' || (now - _lastMembersFetch > 5 * 60 * 1000)) {
+                    try {
+                        await guild.members.fetch();
+                        _lastMembersFetch = now;
+                    } catch (e) {
+                        // Si rate-limit Opcode 8 de Discord, utiliser le cache existant sans spammer
+                        if (!e.message?.includes('opcode 8') && guild.members.cache.size === 0) {
+                            logger.warn(`Échec fetch guild.members: ${e.message}`, 'API');
+                        }
+                    }
                 }
 
                 const members = guild.members.cache;
