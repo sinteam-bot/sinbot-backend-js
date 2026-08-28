@@ -259,10 +259,40 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString()
     });
 });
+
+// ============================================
+// DOCUMENTATION OPENAPI 3.1 & SCALAR UI
+// ============================================
+const { OpenApiGenerator } = require('./core/index.js');
+const openApiGenerator = new OpenApiGenerator({
+    title: 'ChienneBot Discord API',
+    version: '1.0.0',
+    description: 'Documentation interactive de l\'API REST & Webhooks du bot Discord.'
+});
+
+const openApiSpec = openApiGenerator.generateSpec({ app, moduleManager, client, config });
+const openApiPath = path.join(__dirname, '../docs/openapi.json');
+openApiGenerator.exportToFile(openApiPath, openApiSpec);
+
+// Endpoints OpenAPI & Documentation interactive
+app.get('/api/docs/openapi.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.json(openApiSpec);
+});
+
+app.get('/api/docs', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
+    res.send(openApiGenerator.getScalarHtml({
+        title: 'ChienneBot API Reference',
+        specUrl: '/api/docs/openapi.json'
+    }));
+});
+app.get('/docs', (req, res) => res.redirect('/api/docs'));
+
 // SPA Fallback pour le routage des pages Nuxt
 app.use((req, res, next) => {
     if (req.method !== 'GET') return next();
-    if (req.path.startsWith('/api') || req.path.startsWith('/webhook') || req.path === '/health') {
+    if (req.path.startsWith('/api') || req.path.startsWith('/webhook') || req.path === '/health' || req.path.startsWith('/docs')) {
         return next();
     }
     const indexPath = path.join(publicPath, 'index.html');
@@ -285,6 +315,8 @@ const httpServer = app.listen(PORT, () => {
     console.log('');
     console.log(`✅ Serveur sur le port: ${PORT}`);
     console.log(`🖥️  Interface Web: http://localhost:${PORT}/`);
+    console.log(`📚 Documentation API: http://localhost:${PORT}/api/docs`);
+    console.log(`📖 OpenAPI Spec: http://localhost:${PORT}/api/docs/openapi.json`);
     console.log(`📡 Webhook URL: http://localhost:${PORT}/webhook/send-message`);
     console.log(`📊 API Stats: http://localhost:${PORT}/api/stats`);
     console.log(`❤️  Health: http://localhost:${PORT}/health`);

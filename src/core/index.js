@@ -2,6 +2,7 @@ const { Container, container } = require('./container.js');
 const { DiscordEventBus, eventBus } = require('./event-bus.js');
 const { ModuleManager, moduleManager } = require('./module-manager.js');
 const { FeatureRegistry, featureRegistry } = require('./feature-registry.js');
+const { OpenApiGenerator } = require('./openapi-generator.js');
 const { getConfig, config } = require('../config/index.js');
 const decorators = require('./decorators.js');
 
@@ -14,6 +15,7 @@ module.exports = {
     moduleManager,
     FeatureRegistry,
     featureRegistry,
+    OpenApiGenerator,
     getConfig,
     config,
     ...decorators
