@@ -37,16 +37,70 @@ class InvitesRepository {
 
     async upsertInviteCode(code, guildId, data = {}) {
         const now = Date.now();
+        // Normalisation : `null || null` retournerait `""` si la valeur est
+        // une chaîne vide. On utilise une fonction helper pour s'assurer
+        // que seules les valeurs "vraies" (non-null, non-undefined, non-vides)
+        // passent.
+        const norm = (v) => {
+            if (v == null) return null;
+            if (typeof v === 'string' && v.trim() === '') return null;
+            return v;
+        };
+        // Log debug des valeurs reçues si activé
+        if (process.env.INVITES_DEBUG) {
+            console.log('[upsertInviteCode]', {
+                code, guildId,
+                expiresAt_in: data.expiresAt, type: typeof data.expiresAt,
+                expiresAt_norm: norm(data.expiresAt)
+            });
+        }
+        // On force les null via SQL brut pour éviter tout mapping Drizzle
+        // (notamment la conversion de `null` en `""` qui peut survenir dans
+        // certaines versions de PGlite/Drizzle).
+        const sql = `
+            INSERT INTO invite_codes (
+                code, guild_id, channel_id, inviter_id, inviter_username,
+                max_uses, uses, expires_at, created_at, updated_at, deleted
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            ON CONFLICT (code) DO UPDATE SET
+                channel_id = EXCLUDED.channel_id,
+                inviter_id = EXCLUDED.inviter_id,
+                inviter_username = EXCLUDED.inviter_username,
+                max_uses = EXCLUDED.max_uses,
+                uses = EXCLUDED.uses,
+                expires_at = EXCLUDED.expires_at,
+                updated_at = EXCLUDED.updated_at
+            RETURNING *
+        `;
+        const client = this.db.pool || this.db._.session?.client || null;
+        if (client && typeof client.query === 'function') {
+            // PGlite / pg direct
+            const result = await client.query(sql, [
+                code,
+                guildId,
+                norm(data.channelId),
+                norm(data.inviterId),
+                norm(data.inviterUsername),
+                data.maxUses ?? 0,
+                data.uses ?? 0,
+                norm(data.expiresAt),
+                data.createdAt || now,
+                now,
+                0
+            ]);
+            return result.rows?.[0] || null;
+        }
+        // Fallback Drizzle (devrait être inutile avec PGlite/pg)
         const [row] = await this.db.insert(inviteCodes)
             .values({
                 code,
                 guildId,
-                channelId: data.channelId || null,
-                inviterId: data.inviterId || null,
-                inviterUsername: data.inviterUsername || null,
+                channelId: norm(data.channelId),
+                inviterId: norm(data.inviterId),
+                inviterUsername: norm(data.inviterUsername),
                 maxUses: data.maxUses ?? 0,
                 uses: data.uses ?? 0,
-                expiresAt: data.expiresAt || null,
+                expiresAt: norm(data.expiresAt),
                 createdAt: data.createdAt || now,
                 updatedAt: now,
                 deleted: 0
@@ -54,12 +108,12 @@ class InvitesRepository {
             .onConflictDoUpdate({
                 target: inviteCodes.code,
                 set: {
-                    channelId: data.channelId || null,
-                    inviterId: data.inviterId || null,
-                    inviterUsername: data.inviterUsername || null,
+                    channelId: norm(data.channelId),
+                    inviterId: norm(data.inviterId),
+                    inviterUsername: norm(data.inviterUsername),
                     maxUses: data.maxUses ?? 0,
                     uses: data.uses ?? 0,
-                    expiresAt: data.expiresAt || null,
+                    expiresAt: norm(data.expiresAt),
                     updatedAt: now
                 }
             })

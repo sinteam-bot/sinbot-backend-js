@@ -85,7 +85,15 @@ class InvitesService {
             this._inviteCache.set(guild.id, map);
             return map;
         } catch (e) {
+            // Log détaillé pour aider au debug
             console.warn(`[InvitesService] refreshInviteCache(${guild.id}):`, e.message);
+            if (process.env.INVITES_DEBUG) {
+                console.warn('[InvitesService] Full error:', e);
+                console.warn('[InvitesService] Cache state:', {
+                    cached: this._inviteCache.has(guild.id),
+                    size: this._inviteCache.get(guild.id)?.size
+                });
+            }
             return this._inviteCache.get(guild.id) || new Map();
         }
     }

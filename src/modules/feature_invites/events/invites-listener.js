@@ -27,6 +27,16 @@ class InvitesListener {
 
     async onReady(client) {
         this._client = client;
+        // Attendre que les migrations DB soient appliquées avant la première
+        // opération (sinon INSERT sur table inexistante en prod).
+        const { ready: dbReady } = require('../../../db/index.js');
+        if (dbReady && typeof dbReady.then === 'function') {
+            try {
+                await dbReady;
+            } catch (e) {
+                console.warn('[InvitesListener] DB ready failed:', e.message);
+            }
+        }
         for (const [, guild] of client.guilds.cache) {
             try {
                 await this.service.refreshInviteCache(guild);
