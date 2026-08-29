@@ -21,14 +21,14 @@ const {
 const TEST_DATA_DIR = path.join(os.tmpdir(), `c12-loader-test-${Date.now()}`);
 
 async function setupTestData() {
-    // Créer la structure
-    await fsp.mkdir(path.join(TEST_DATA_DIR, 'common'), { recursive: true });
+    // Créer la structure (nouvelle convention : data/base.config.yml)
+    await fsp.mkdir(TEST_DATA_DIR, { recursive: true });
     await fsp.mkdir(path.join(TEST_DATA_DIR, 'example'), { recursive: true });
     await fsp.mkdir(path.join(TEST_DATA_DIR, 'default'), { recursive: true });
 
-    // data/common/base.yml
+    // data/base.config.yml
     await fsp.writeFile(
-        path.join(TEST_DATA_DIR, 'common', 'config.yml'),
+        path.join(TEST_DATA_DIR, 'base.config.yml'),
         'database:\n  url: "postgres://test"\nweb:\n  port: 1234\n',
         'utf8'
     );
@@ -52,7 +52,6 @@ async function setupTestData() {
 function patchDataDir() {
     const mod = require('../../src/config/c12-loader.js');
     mod.DATA_DIR = TEST_DATA_DIR;
-    mod.COMMON_DIR = path.join(TEST_DATA_DIR, 'common');
     mod.DEFAULT_DIR = path.join(TEST_DATA_DIR, 'default');
     mod.EXAMPLE_DIR = path.join(TEST_DATA_DIR, 'example');
     // Vider les caches internes

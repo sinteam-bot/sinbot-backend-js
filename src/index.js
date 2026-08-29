@@ -149,9 +149,19 @@ app.use('/api', createWebRouter(client));
 
 // Initialiser et monter l'architecture modulaire & EventBus (style NestJS / Angular)
 const { moduleManager } = require('./core/index.js');
-const { appModules } = require('./modules/index.js');
-moduleManager.init(client, app);
-moduleManager.registerModules(appModules);
+const { loadAppModules } = require('./modules/index.js');
+
+(async () => {
+    try {
+        // Charge la liste filtrée des modules selon data/base.config.yml
+        // (cf. loadAppModules() : désactive les features.<name>: false).
+        const enabledModules = await loadAppModules();
+        moduleManager.init(client, app);
+        moduleManager.registerModules(enabledModules);
+    } catch (err) {
+        console.error('❌ Erreur chargement modules:', err);
+    }
+})();
 
 // Routeur Features (Phase 0) — branché après l'enregistrement des modules
 // pour que le FeatureRegistry connaisse déjà toutes les features déclarées.

@@ -6,17 +6,24 @@
  *
  * Hiérarchie de chargement (par feature, par guilde) :
  *
- *   1. data/example/<feature>.config.example.yml   (defaults code, versionné)
- *   2. data/default/<feature>.config.yml            (defaults admin, gitignore)
- *   3. data/{guildId}/<feature>.config.yml          (override guilde, gitignore)
- *   4. env vars: CONFIG_<FEATURE>_<KEY>              (runtime override)
+ *   1. data/example/<feature>.config.yml          (defaults code, versionné)
+ *   2. data/default/<feature>.config.yml           (defaults admin, gitignore)
+ *   3. data/{guildId}/<feature>.config.yml         (override guilde, gitignore)
+ *   4. env vars: CONFIG_<FEATURE>_<KEY>             (runtime override)
  *
  * Hiérarchie de chargement (config globale) :
  *
- *   1. data/common/base.yml                        (defaults infra, versionné)
- *   2. data/common/config.yml                      (admin, gitignore)
- *   3. env vars: CONFIG_<KEY>                       (runtime)
- *   4. data/common/{NODE_ENV}.yml                  (production.yml, test.yml)
+ *   1. data/base.config.yml                        (defaults infra, versionné)
+ *   2. data/{NODE_ENV}.config.yml                  (surcharge par env, gitignore)
+ *   3. env vars (CONFIG_*)                        (runtime)
+ *
+ * Section `features.<name>: false` dans base.config.yml :
+ *   - Si false : la feature n'est pas chargée du tout (pas d'API, pas de
+ *     commandes, pas d'events, pas de listeners).
+ *   - Si true (ou absent) : la feature est chargée normalement.
+ *   - Surcharge possible dans {NODE_ENV}.config.yml (ex: production.
+ *     config.yml met `features.invites: true` pour activer en prod alors
+ *     que base.config.yml l'a à false).
  *
  * Phase 4 du plan migrate-to-c12.md.
  */
@@ -28,7 +35,6 @@ const { loadConfig, watchConfig } = require('c12');
 const { eventBus } = require('../core/event-bus.js');
 
 const DATA_DIR = path.resolve(__dirname, '../../data');
-const COMMON_DIR = path.join(DATA_DIR, 'common');
 const DEFAULT_DIR = path.join(DATA_DIR, 'default');
 const EXAMPLE_DIR = path.join(DATA_DIR, 'example');
 
@@ -39,9 +45,6 @@ const WATCH_ENABLED = process.env.NODE_ENV !== 'production';
  */
 function _dataDir() {
     return module.exports.DATA_DIR || DATA_DIR;
-}
-function _commonDir() {
-    return module.exports.COMMON_DIR || COMMON_DIR;
 }
 function _defaultDir() {
     return module.exports.DEFAULT_DIR || DEFAULT_DIR;
@@ -68,9 +71,11 @@ async function getGlobalConfig(options = {}) {
     if (_globalConfigPromise) return _globalConfigPromise;
 
     _globalConfigPromise = (async () => {
+        // c12 cherche base.config.{yml,yaml,...} dans _dataDir() + surcharge
+        // par env (production.config.yml, dev.config.yml, test.config.yml).
         const result = await loadConfig({
-            cwd: _commonDir(),
-            name: 'config',
+            cwd: _dataDir(),
+            name: 'base',
             envName: process.env.NODE_ENV || undefined
         });
         _globalConfigCache = result.config || {};
@@ -81,6 +86,31 @@ async function getGlobalConfig(options = {}) {
         return await _globalConfigPromise;
     } finally {
         _globalConfigPromise = null;
+    }
+}
+
+// ============== Activation globale des features ==============
+
+/**
+ * Détermine si une feature est activée globalement (via data/base.config.yml
+ * et surcharge par env).
+ *
+ * Logique :
+ *   1. Charger la config globale
+ *   2. Si `features.<name>` est explicitement false → désactivée
+ *   3. Sinon (true ou absent) → activée par défaut
+ *
+ * Si la config globale ne peut pas être chargée, on autorise par défaut
+ * (fail-open) pour ne pas bloquer le bot en cas d'erreur de chargement.
+ */
+async function isFeatureGloballyEnabled(name) {
+    try {
+        const cfg = await getGlobalConfig();
+        if (!cfg.features || typeof cfg.features !== 'object') return true;
+        return cfg.features[name] !== false;
+    } catch (err) {
+        console.warn(`[c12-loader] isFeatureGloballyEnabled(${name}):`, err.message);
+        return true; // fail-open
     }
 }
 
@@ -263,7 +293,6 @@ function unwatchAll() {
 
 module.exports = {
     DATA_DIR,
-    COMMON_DIR,
     DEFAULT_DIR,
     EXAMPLE_DIR,
     getGlobalConfig,
@@ -273,6 +302,7 @@ module.exports = {
     watchFeatureConfig,
     unwatchFeatureConfig,
     unwatchAll,
+    isFeatureGloballyEnabled,
     // Helpers internes (exportés pour les tests)
     _deepMerge
 };

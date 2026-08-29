@@ -24,7 +24,39 @@ const { InvitesModule } = require('./feature_invites/invites.module.js');
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
 
-const appModules = [
+/**
+ * Mapping entre un module et le nom court de la feature dans la config
+ * (cf. section `features:` de data/base.config.yml).
+ *
+ * Si une feature est absente de ce mapping, elle est TOUJOURS activée
+ * (fail-open : on ne bloque pas un module inconnu de la config).
+ */
+const MODULE_FEATURE_MAP = {
+    [RoadToInfiniteModule.name]: 'counter',
+    [CountDownModule.name]: 'countdown',
+    [SecurityQuestionModule.name]: 'captcha',
+    [StartupNotifierModule.name]: 'startup_notifier',
+    [BumpReminderModule.name]: 'bump_reminder',
+    [XPLevelModule.name]: 'xp',
+    [DailyMessageModule.name]: 'daily_message',
+    [WelcomeModule.name]: 'welcome',
+    [AutoModModule.name]: 'automod',
+    [TicketsModule.name]: 'tickets',
+    [LogsModule.name]: 'logs',
+    [CardsModule.name]: 'cards',
+    [EngagementModule.name]: 'engagement',
+    [BirthdaysModule.name]: 'birthdays',
+    [ReactionRolesModule.name]: 'reaction-roles',
+    [ReportsModule.name]: 'reports',
+    [TempVoiceModule.name]: 'temp_voice',
+    [EconomyModule.name]: 'economy',
+    [StickyRolesModule.name]: 'sticky_roles',
+    [InfoModule.name]: 'info',
+    [EngagementAdvancedModule.name]: 'engagement_advanced',
+    [InvitesModule.name]: 'invites'
+};
+
+const ALL_MODULES = [
     RoadToInfiniteModule,
     CountDownModule,
     SecurityQuestionModule,
@@ -49,7 +81,53 @@ const appModules = [
     InvitesModule
 ];
 
+/**
+ * Charge la liste des modules activés selon data/base.config.yml.
+ * Si `features.<name>: false`, le module correspondant n'est PAS inclus
+ * dans la liste retournée. Cela désactive API, commandes, events, listeners.
+ *
+ * Fail-open : si la config ne peut pas être chargée (erreur c12, fichier
+ * manquant, etc.), TOUS les modules sont chargés pour ne pas casser le bot.
+ */
+async function loadAppModules() {
+    const { isFeatureGloballyEnabled } = require('../config/c12-loader.js');
+    const enabled = [];
+    const disabled = [];
+
+    for (const Module of ALL_MODULES) {
+        const featureName = MODULE_FEATURE_MAP[Module.name];
+        // Si pas de mapping, on autorise par défaut
+        if (!featureName) {
+            enabled.push(Module);
+            continue;
+        }
+        const isEnabled = await isFeatureGloballyEnabled(featureName);
+        if (isEnabled) {
+            enabled.push(Module);
+        } else {
+            disabled.push({ name: Module.name, feature: featureName });
+        }
+    }
+
+    if (disabled.length > 0) {
+        console.log(`🚫 [modules] ${disabled.length} module(s) désactivé(s) via features.* dans data/base.config.yml :`);
+        for (const d of disabled) {
+            console.log(`   - ${d.name} (feature: ${d.feature})`);
+        }
+    }
+
+    return enabled;
+}
+
+// Pour la rétrocompatibilité, on garde `appModules` qui contient TOUS les
+// modules. Le filtrage par `loadAppModules()` est optionnel : si l'appelant
+// ne fait pas le filtrage, le bot charge tout (comportement legacy).
+const appModules = ALL_MODULES;
+
 module.exports = {
+    ALL_MODULES,
+    MODULE_FEATURE_MAP,
+    loadAppModules,
     appModules,
     RoadToInfiniteModule,
     CountDownModule,
