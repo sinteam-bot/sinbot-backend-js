@@ -1,36 +1,18 @@
 /**
- * Slash commands /giveaway-* et /poll-*
+ * giveaways/commands/giveaway-commands.js
  *
- * /giveaway-start [modal: prize, duration, winners]  : crée et envoie l'embed
- * /giveaway-end   [giveawayId]                          : termine manuellement
- * /giveaway-reroll [giveawayId]                        : retire au sort
- * /giveaway-list                                      : liste les giveaways actifs
- * /giveaway-cancel [giveawayId]                       : annule
+ * Commandes slash pour les giveaways.
  *
- * /poll-create  [modal: question, options, duration, multi]
- * /poll-end     [pollId]
- * /poll-list
- * /poll-delete  [pollId]
+ * Issue du split de game_engagement/ (Phase 9.2 du plan migrate-to-c12).
  */
 
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
-const { Command, getConfig } = require('../../../core/index.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { Command } = require('../../../core/index.js');
 const { GiveawayService } = require('../services/giveaway.service.js');
-const { PollService } = require('../services/poll.service.js');
 
-function requireMod(interaction) {
-    return interaction.member?.permissions?.has?.(PermissionFlagsBits.ManageMessages);
-}
-
-class EngagementCommands {
-    static inject = [GiveawayService, PollService];
-
-    constructor(giveaway, poll) {
-        this.giveaway = giveaway;
-        this.poll = poll;
-    }
-
-    // =================== /giveaway-start ===================
+class GiveawayCommands {
+    static inject = [GiveawayService];
+    constructor(service) { this.service = service; }
 
     async executeGiveawayStart(interaction) {
         if (!requireMod(interaction)) {
@@ -130,98 +112,6 @@ class EngagementCommands {
         return interaction.reply({ content: '✅ Giveaway annulé' });
     }
 
-    // =================== /poll-create ===================
-
-    async executePollCreate(interaction) {
-        if (!requireMod(interaction)) {
-            return interaction.reply({ content: '❌ Réservé aux modérateurs', ephemeral: true });
-        }
-        const question = interaction.options.getString('question');
-        const duration = interaction.options.getString('duration');
-        const multiChoice = interaction.options.getBoolean('multi_choice') || false;
-        const optsStr = interaction.options.getString('options');
-
-        const options = optsStr.split('|').map(s => s.trim()).filter(Boolean);
-        if (options.length < 2 || options.length > 10) {
-            return interaction.reply({ content: '❌ 2 à 10 options attendues (séparées par |)', ephemeral: true });
-        }
-        const durationMs = duration === 'never' ? null : this._parseDuration(duration);
-        if (duration !== 'never' && !durationMs) {
-            return interaction.reply({ content: '❌ Durée invalide', ephemeral: true });
-        }
-
-        try {
-            const p = await this.poll.create({
-                guildId: interaction.guild.id,
-                channelId: interaction.channel.id,
-                question,
-                options,
-                multiChoice,
-                anonymous: false,
-                durationMs,
-                createdBy: interaction.user.id
-            });
-            const embed = await this.poll.buildEmbed(p);
-            const row = new ActionRowBuilder();
-            for (let i = 0; i < options.length; i++) {
-                row.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`poll:vote:${p.id}:${i}`)
-                        .setLabel(`${i + 1}. ${options[i].slice(0, 30)}`)
-                        .setStyle(ButtonStyle.Secondary)
-                );
-            }
-            const sent = await interaction.reply({ embeds: [embed], components: [row], fetchReply: true });
-            await this.poll.setMessageId(p.id, sent.id);
-            return { id: p.id };
-        } catch (err) {
-            return interaction.editReply({ content: `❌ ${err.message}` });
-        }
-    }
-
-    async executePollEnd(interaction) {
-        if (!requireMod(interaction)) {
-            return interaction.reply({ content: '❌ Réservé aux modérateurs', ephemeral: true });
-        }
-        const id = interaction.options.getString('id');
-        const p = await this.poll.end(id);
-        if (!p) return interaction.reply({ content: '❌ Sondage introuvable', ephemeral: true });
-        const tally = await this.poll.tally(id);
-        const lines = tally.perOption.map(o => `**${o.index + 1}.** ${o.label}: ${o.count}`);
-        return interaction.reply({ content: `📊 Sondage terminé\n\n${lines.join('\n')}` });
-    }
-
-    async executePollList(interaction) {
-        const list = await this.poll.list({ guildId: interaction.guild.id, status: 'active', limit: 25 });
-        if (list.length === 0) {
-            return interaction.reply({ content: 'ℹ️ Aucun sondage actif', ephemeral: true });
-        }
-        const lines = list.map(p => `• **${p.question}** — ${p.options.length} options${p.endsAt ? ` — finit <t:${Math.floor(p.endsAt / 1000)}:R>` : ''}`);
-        return interaction.reply({ content: lines.join('\n'), ephemeral: true });
-    }
-
-    async executePollDelete(interaction) {
-        if (!requireMod(interaction)) {
-            return interaction.reply({ content: '❌ Réservé aux modérateurs', ephemeral: true });
-        }
-        const id = interaction.options.getString('id');
-        const p = await this.poll.get(id);
-        if (!p) return interaction.reply({ content: '❌ Sondage introuvable', ephemeral: true });
-        await this.poll.end(id);
-        return interaction.reply({ content: '✅ Sondage fermé' });
-    }
-
-    _parseDuration(str) {
-        if (!str) return null;
-        const m = String(str).trim().match(/^(\d+)\s*(s|m|h|d)$/i);
-        if (!m) return null;
-        const n = parseInt(m[1], 10);
-        const mult = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2].toLowerCase()];
-        return n * mult;
-    }
-}
-
-// =================== BUILDERS ===================
 
 const giveawayStartBuilder = new SlashCommandBuilder()
     .setName('giveaway-start')
@@ -254,39 +144,15 @@ const giveawayCancelBuilder = new SlashCommandBuilder()
     .addStringOption(o => o.setName('id').setDescription('ID du giveaway').setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
 
-const pollCreateBuilder = new SlashCommandBuilder()
-    .setName('poll-create')
-    .setDescription('Créer un sondage')
-    .addStringOption(o => o.setName('question').setDescription('Question').setRequired(true).setMaxLength(256))
-    .addStringOption(o => o.setName('options').setDescription('Options séparées par | (2-10)').setRequired(true).setMaxLength(500))
-    .addStringOption(o => o.setName('duration').setDescription('Durée (ex: 1h, 1d) ou "never"').setRequired(true))
-    .addBooleanOption(o => o.setName('multi_choice').setDescription('Choix multiple ?').setRequired(false))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
-
-const pollEndBuilder = new SlashCommandBuilder()
-    .setName('poll-end')
-    .setDescription('Terminer un sondage manuellement')
-    .addStringOption(o => o.setName('id').setDescription('ID du sondage').setRequired(true))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
-
-const pollListBuilder = new SlashCommandBuilder()
-    .setName('poll-list')
-    .setDescription('Lister les sondages actifs');
-
-const pollDeleteBuilder = new SlashCommandBuilder()
-    .setName('poll-delete')
-    .setDescription('Fermer un sondage')
-    .addStringOption(o => o.setName('id').setDescription('ID du sondage').setRequired(true))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
+Command({ name: 'giveaway-start', builder: giveawayStartBuilder })(EngagementCommands.prototype, 'executeGiveawayStart');
+Command({ name: 'giveaway-end', builder: giveawayEndBuilder })(EngagementCommands.prototype, 'executeGiveawayEnd');
+Command({ name: 'giveaway-reroll', builder: giveawayRerollBuilder })(EngagementCommands.prototype, 'executeGiveawayReroll');
+Command({ name: 'giveaway-list', builder: giveawayListBuilder })(EngagementCommands.prototype, 'executeGiveawayList');
+Command({ name: 'giveaway-cancel', builder: giveawayCancelBuilder })(EngagementCommands.prototype, 'executeGiveawayCancel');
 
 Command({ name: 'giveaway-start', builder: giveawayStartBuilder })(EngagementCommands.prototype, 'executeGiveawayStart');
 Command({ name: 'giveaway-end', builder: giveawayEndBuilder })(EngagementCommands.prototype, 'executeGiveawayEnd');
 Command({ name: 'giveaway-reroll', builder: giveawayRerollBuilder })(EngagementCommands.prototype, 'executeGiveawayReroll');
 Command({ name: 'giveaway-list', builder: giveawayListBuilder })(EngagementCommands.prototype, 'executeGiveawayList');
 Command({ name: 'giveaway-cancel', builder: giveawayCancelBuilder })(EngagementCommands.prototype, 'executeGiveawayCancel');
-Command({ name: 'poll-create', builder: pollCreateBuilder })(EngagementCommands.prototype, 'executePollCreate');
-Command({ name: 'poll-end', builder: pollEndBuilder })(EngagementCommands.prototype, 'executePollEnd');
-Command({ name: 'poll-list', builder: pollListBuilder })(EngagementCommands.prototype, 'executePollList');
-Command({ name: 'poll-delete', builder: pollDeleteBuilder })(EngagementCommands.prototype, 'executePollDelete');
-
-module.exports = { EngagementCommands };
+module.exports = { GiveawayCommands };

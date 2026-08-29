@@ -27,7 +27,8 @@ const { AutoModModule } = require('./security_automod/automod.module.js');
 const { TicketsModule } = require('./community_tickets/tickets.module.js');
 const { LogsModule } = require('./security_logs/logs.module.js');
 const { CardsModule } = require('./welcome_cards/cards.module.js');
-const { EngagementModule } = require('./game_engagement/engagement.module.js');
+const { GiveawaysModule } = require('./util_giveaways/giveaways.module.js');
+const { PollsModule } = require('./util_polls/polls.module.js');
 const { BirthdaysModule } = require('./engagement_birthdays/birthdays.module.js');
 const { ReactionRolesModule } = require('./community_reaction-roles/reaction-roles.module.js');
 const { ReportsModule } = require('./community_reports/reports.module.js');
@@ -63,7 +64,8 @@ const MODULE_FEATURE_MAP = {
     [TicketsModule.name]: 'tickets',
     [LogsModule.name]: 'logs',
     [CardsModule.name]: 'cards',
-    [EngagementModule.name]: 'engagement',
+    [GiveawaysModule.name]: 'giveaways',
+    [PollsModule.name]: 'polls',
     [BirthdaysModule.name]: 'birthdays',
     [ReactionRolesModule.name]: 'reaction-roles',
     [ReportsModule.name]: 'reports',
@@ -91,7 +93,8 @@ const ALL_MODULES = [
     TicketsModule,
     LogsModule,
     CardsModule,
-    EngagementModule,
+    GiveawaysModule,
+    PollsModule,
     BirthdaysModule,
     ReactionRolesModule,
     EconomyModule,
@@ -165,7 +168,8 @@ module.exports = {
     TicketsModule,
     LogsModule,
     CardsModule,
-    EngagementModule,
+    GiveawaysModule,
+    PollsModule,
     BirthdaysModule,
     ReactionRolesModule,
     EconomyModule,
