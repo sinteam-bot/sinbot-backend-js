@@ -12,10 +12,10 @@
  */
 
 const { Injectable } = require('../../../core/index.js');
-const { EngagementAdvancedRepository } = require('./reminders.repository.js');
+const { RemindersRepository } = require('./reminders.repository.js');
 
 class ReminderService {
-    static inject = [EngagementAdvancedRepository];
+    static inject = [RemindersRepository];
 
     constructor(repo) {
         this.repo = repo;

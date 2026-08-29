@@ -15,25 +15,24 @@ const assert = require('node:assert');
 const { WordTriggerService } = require('../../src/modules/util_word_triggers/services/word-trigger.service.js');
 
 function makeService({ repo } = {}) {
-    const svc = new WordTriggerService(repo);
-    return svc;
+    return new WordTriggerService(repo || makeMockRepo());
 }
 
 function makeMockRepo() {
     const triggers = new Map();
-    const cooldowns = new Map(); // key: triggerId, value: timestamp
+    const cooldowns = new Map();
     return {
-        async insertWordTrigger(t) {
+        async insertTrigger(t) {
             const id = t.id || `wt_${triggers.size + 1}`;
             const row = { ...t, id };
             triggers.set(id, row);
             return row;
         },
-        async getWordTrigger(id) { return triggers.get(id) || null; },
-        async listWordTriggers(guildId) {
+        async getTrigger(id) { return triggers.get(id) || null; },
+        async listTriggers(guildId) {
             return [...triggers.values()].filter(t => t.guildId === guildId);
         },
-        async deleteWordTrigger(id) { return triggers.delete(id); },
+        async deleteTrigger(id) { return triggers.delete(id); },
         async findMatchingTriggers(guildId, content) {
             return [...triggers.values()].filter(t => t.guildId === guildId).filter(t => {
                 return t.triggerText && content.toLowerCase().includes(t.triggerText.toLowerCase());
@@ -49,17 +48,32 @@ describe('WordTriggerService', () => {
     describe('create', () => {
         test('rejette sans guildId ou triggerText', async () => {
             const svc = makeService({ repo: makeMockRepo() });
-            await assert.rejects(() => svc.create({}), /requis/);
+            const r = await svc.create({});
+            assert.strictEqual(r.ok, false);
+            assert.strictEqual(r.error, 'missing_params');
         });
 
-        test('crée un trigger avec matchType par défaut', async () => {
+        test('rejette regex matchType', async () => {
+            const svc = makeService({ repo: makeMockRepo() });
+            const r = await svc.create({ guildId: 'g1', triggerText: 'a', matchType: 'regex', responseText: 'A' });
+            assert.strictEqual(r.ok, false);
+            assert.strictEqual(r.error, 'regex_not_supported_yet');
+        });
+
+        test('rejette sans responseText ni responseEmbed', async () => {
+            const svc = makeService({ repo: makeMockRepo() });
+            const r = await svc.create({ guildId: 'g1', triggerText: 'a' });
+            assert.strictEqual(r.ok, false);
+            assert.strictEqual(r.error, 'response_required');
+        });
+
+        test('crée un trigger avec matchType exact par défaut', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            const t = await svc.create({
-                guildId: 'g1', triggerText: 'hello', responseText: 'hi back'
-            });
-            assert.strictEqual(t.guildId, 'g1');
-            assert.strictEqual(t.matchType || 'contains', 'contains');
+            const r = await svc.create({ guildId: 'g1', triggerText: 'hello', responseText: 'hi back' });
+            assert.strictEqual(r.ok, true);
+            assert.strictEqual(r.data.matchType, 'exact');
+            assert.strictEqual(r.data.guildId, 'g1');
         });
     });
 
@@ -67,17 +81,17 @@ describe('WordTriggerService', () => {
         test('get retourne par id', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            const t = await svc.create({ guildId: 'g1', triggerText: 'a', responseText: 'A' });
-            const fetched = await svc.get(t.id);
+            const r = await svc.create({ guildId: 'g1', triggerText: 'a', responseText: 'A' });
+            const fetched = await svc.get(r.data.id);
             assert.ok(fetched);
         });
 
         test('list filtre par guildId', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            await svc.create({ guildId: 'g1', triggerText: 'a', responseText: 'A' });
-            await svc.create({ guildId: 'g1', triggerText: 'b', responseText: 'B' });
-            await svc.create({ guildId: 'g2', triggerText: 'c', responseText: 'C' });
+            await repo.insertTrigger({ guildId: 'g1', triggerText: 'a', responseText: 'A' });
+            await repo.insertTrigger({ guildId: 'g1', triggerText: 'b', responseText: 'B' });
+            await repo.insertTrigger({ guildId: 'g2', triggerText: 'c', responseText: 'C' });
 
             const g1List = await svc.list('g1');
             assert.strictEqual(g1List.length, 2);
@@ -86,7 +100,7 @@ describe('WordTriggerService', () => {
         test('delete supprime', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            const t = await svc.create({ guildId: 'g1', triggerText: 'a', responseText: 'A' });
+            const t = await repo.insertTrigger({ guildId: 'g1', triggerText: 'a', responseText: 'A' });
             const res = await svc.delete(t.id);
             assert.strictEqual(res.ok, true);
         });
@@ -96,83 +110,85 @@ describe('WordTriggerService', () => {
         test('match contains par défaut', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            await svc.create({ guildId: 'g1', triggerText: 'hello', responseText: 'Hi' });
-            const matches = await svc.findMatching('g1', 'Hello world!');
-            assert.strictEqual(matches.length, 1);
+            await repo.insertTrigger({ guildId: 'g1', triggerText: 'hello', responseText: 'Hi', matchType: 'contains' });
+            await svc.loadCache('g1');
+            const match = await svc.findMatching('g1', 'Hello world!');
+            assert.ok(match);
+            assert.strictEqual(match.triggerText, 'hello');
         });
 
         test('case-insensitive', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            await svc.create({ guildId: 'g1', triggerText: 'BONJOUR', responseText: 'Hi' });
-            const matches = await svc.findMatching('g1', 'bonjour comment ça va');
-            assert.strictEqual(matches.length, 1);
+            await repo.insertTrigger({ guildId: 'g1', triggerText: 'BONJOUR', responseText: 'Hi', matchType: 'contains' });
+            await svc.loadCache('g1');
+            const match = await svc.findMatching('g1', 'bonjour comment ça va');
+            assert.ok(match);
         });
 
         test('match exact', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            await svc.create({ guildId: 'g1', triggerText: 'hello', responseText: 'Hi', matchType: 'exact' });
+            await repo.insertTrigger({ guildId: 'g1', triggerText: 'hello', responseText: 'Hi', matchType: 'exact' });
+            await svc.loadCache('g1');
             const m1 = await svc.findMatching('g1', 'hello');
             const m2 = await svc.findMatching('g1', 'hello world');
-            assert.strictEqual(m1.length, 1);
-            assert.strictEqual(m2.length, 0, 'match exact ne matche pas les sous-strings');
+            assert.ok(m1, 'doit matcher la chaîne exacte');
+            assert.strictEqual(m2, null, 'match exact ne matche pas les sous-strings');
         });
 
-        test('findMatchingSync retourne la même chose (synchrone)', async () => {
+        test('findMatchingSync retourne le même résultat (synchrone)', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            await svc.create({ guildId: 'g1', triggerText: 'salut', responseText: 'Hey' });
-            const matches = svc.findMatchingSync('g1', 'Salut à tous');
-            assert.strictEqual(matches.length, 1);
+            await repo.insertTrigger({ guildId: 'g1', triggerText: 'salut', responseText: 'Hey', matchType: 'contains' });
+            await svc.loadCache('g1');
+            const match = svc.findMatchingSync('g1', 'Salut à tous');
+            assert.ok(match);
         });
     });
 
     describe('shouldFire (cooldown + exclusions)', () => {
         test('OK si pas de cooldown', () => {
-            const repo = makeMockRepo();
-            const svc = makeService({ repo });
-            const t = { id: 'wt1', cooldown: 5000 };
+            const svc = makeService({ repo: makeMockRepo() });
+            const t = { id: 'wt1', guildId: 'g1', cooldownSeconds: 5 };
             const r = svc.shouldFire(t, {}, { id: 'm1' });
             assert.strictEqual(r.ok, true);
         });
 
         test('refuse si en cooldown', () => {
-            const repo = makeMockRepo();
-            const svc = makeService({ repo });
-            const t = { id: 'wt1', cooldown: 60000 };
-            // Déclencher le cooldown
+            const svc = makeService({ repo: makeMockRepo() });
+            const t = { id: 'wt1', guildId: 'g1', cooldownSeconds: 60 };
             svc.incrementCooldown(t);
             const r = svc.shouldFire(t, {}, { id: 'm1' });
             assert.strictEqual(r.ok, false);
+            assert.strictEqual(r.reason, 'cooldown');
         });
 
         test('respecte les exclusions de channel', () => {
-            const repo = makeMockRepo();
-            const svc = makeService({ repo });
-            const t = { id: 'wt1', cooldown: 0, excludeChannels: ['c-forbidden'] };
-            const r = svc.shouldFire(t, { channel: { id: 'c-forbidden' } }, { id: 'm1' });
+            const svc = makeService({ repo: makeMockRepo() });
+            const t = { id: 'wt1', guildId: 'g1', cooldownSeconds: 0, excludeChannelIds: ['c-forbidden'] };
+            const r = svc.shouldFire(t, { channelId: 'c-forbidden' }, { id: 'm1' });
             assert.strictEqual(r.ok, false);
+            assert.strictEqual(r.reason, 'channel_excluded');
         });
 
         test('respecte les exclusions de role', () => {
-            const repo = makeMockRepo();
-            const svc = makeService({ repo });
-            const t = { id: 'wt1', cooldown: 0, excludeRoles: ['role-bad'] };
+            const svc = makeService({ repo: makeMockRepo() });
+            const t = { id: 'wt1', guildId: 'g1', cooldownSeconds: 0, excludeRoleIds: ['role-bad'] };
             const r = svc.shouldFire(
                 t,
                 {},
                 { id: 'm1', roles: { cache: new Map([['role-bad', {}]]) } }
             );
             assert.strictEqual(r.ok, false);
+            assert.strictEqual(r.reason, 'role_excluded');
         });
     });
 
     describe('incrementCooldown', () => {
         test('marque le trigger en cooldown', () => {
-            const repo = makeMockRepo();
-            const svc = makeService({ repo });
-            const t = { id: 'wt1', cooldown: 60000 };
+            const svc = makeService({ repo: makeMockRepo() });
+            const t = { id: 'wt1', guildId: 'g1', cooldownSeconds: 60 };
             svc.incrementCooldown(t);
             const r = svc.shouldFire(t, {}, { id: 'm1' });
             assert.strictEqual(r.ok, false);
@@ -183,13 +199,14 @@ describe('WordTriggerService', () => {
         test('charge les triggers d\'une guilde', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            await svc.create({ guildId: 'g1', triggerText: 'a', responseText: 'A' });
-            await svc.create({ guildId: 'g1', triggerText: 'b', responseText: 'B' });
-            await svc.create({ guildId: 'g2', triggerText: 'c', responseText: 'C' });
+            await repo.insertTrigger({ guildId: 'g1', triggerText: 'a', responseText: 'A', matchType: 'contains' });
+            await repo.insertTrigger({ guildId: 'g1', triggerText: 'b', responseText: 'B', matchType: 'contains' });
+            await repo.insertTrigger({ guildId: 'g2', triggerText: 'c', responseText: 'C', matchType: 'contains' });
 
-            await svc.loadCache('g1');
+            const list = await svc.loadCache('g1');
+            assert.strictEqual(list.length, 2);
             const matches = svc.findMatchingSync('g1', 'a');
-            assert.strictEqual(matches.length, 1);
+            assert.ok(matches);
         });
     });
 });

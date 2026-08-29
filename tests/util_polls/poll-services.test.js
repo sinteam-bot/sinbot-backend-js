@@ -1,7 +1,5 @@
 /**
  * Tests for the PollService (Phase 9.2 du split util_polls)
-const { test, describe } = require('node:test');
-
  *
  * Couvre :
  *  - create : validation des params, parsing des options (JSON string)
@@ -14,6 +12,7 @@ const { test, describe } = require('node:test');
  *  - buildEmbed : embed avec question, options, résultats si showResults
  */
 
+const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { PollService } = require('../../src/modules/util_polls/services/poll.service.js');
 

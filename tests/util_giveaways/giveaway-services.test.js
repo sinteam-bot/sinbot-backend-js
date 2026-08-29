@@ -1,7 +1,5 @@
 /**
  * Tests for the GiveawayService (Phase 9.2 du split util_giveaways)
-const { test, describe } = require('node:test');
-
  *
  * Couvre :
  *  - create : validation des params, insertion en BDD
@@ -14,6 +12,7 @@ const { test, describe } = require('node:test');
  *  - buildUpdatedEmbed : embed avec compteur d'entrées
  */
 
+const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { GiveawayService } = require('../../src/modules/util_giveaways/services/giveaway.service.js');
 

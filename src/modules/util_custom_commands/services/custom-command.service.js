@@ -10,10 +10,10 @@
  */
 
 const { Injectable } = require('../../../core/index.js');
-const { EngagementAdvancedRepository } = require('./engagement.repository.js');
+const { CustomCommandsRepository } = require('./custom-commands.repository.js');
 
 class CustomCommandService {
-    static inject = [EngagementAdvancedRepository];
+    static inject = [CustomCommandsRepository];
 
     constructor(repo) {
         this.repo = repo;

@@ -1,6 +1,7 @@
 /**
+ * Tests for the ReminderService (Phase 9.2 du split util_reminders)
+ *
  * Couvre : createReminder, listByUser, cancel, get, tick, dispatch
-
  */
 
 const { test, describe } = require('node:test');
@@ -30,7 +31,7 @@ function makeMockRepo() {
             if (status) arr = arr.filter(r => r.status === status);
             return limit ? arr.slice(0, limit) : arr;
         },
-        async findDueReminders(limit = 50) {
+        async listDueReminders(limit = 50) {
             const now = Date.now();
             return [...items.values()].filter(r =>
                 r.status === 'pending' && r.fireAt <= now
@@ -85,9 +86,10 @@ describe('ReminderService', () => {
         test('retourne les reminders du user', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            await svc.createReminder({ userId: 'u1', text: 'A', fireAt: Date.now() + 60000 });
-            await svc.createReminder({ userId: 'u1', text: 'B', fireAt: Date.now() + 120000 });
-            await svc.createReminder({ userId: 'u2', text: 'C', fireAt: Date.now() + 180000 });
+            // Bypass cooldown : insertion directe
+            await repo.insertReminder({ id: 'r_1', userId: 'u1', reminderText: 'A', fireAt: Date.now() + 60000, status: 'pending' });
+            await repo.insertReminder({ id: 'r_2', userId: 'u1', reminderText: 'B', fireAt: Date.now() + 120000, status: 'pending' });
+            await repo.insertReminder({ id: 'r_3', userId: 'u2', reminderText: 'C', fireAt: Date.now() + 180000, status: 'pending' });
             const list = await svc.listByUser('u1');
             assert.strictEqual(list.length, 2);
         });
@@ -122,7 +124,7 @@ describe('ReminderService', () => {
             const r = await svc.createReminder({ userId: 'u1', text: 'X', fireAt: Date.now() + 60000 });
             const fetched = await svc.get(r.data.id);
             assert.ok(fetched);
-            assert.strictEqual(fetched.text, 'X');
+            assert.strictEqual(fetched.reminderText, 'X');
         });
     });
 
@@ -130,9 +132,10 @@ describe('ReminderService', () => {
         test('retourne les reminders到期 non annulés', async () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
-            const r1 = await svc.createReminder({ userId: 'u1', text: 'A', fireAt: Date.now() - 1000 });
-            const r2 = await svc.createReminder({ userId: 'u1', text: 'B', fireAt: Date.now() + 60000 });
-            await svc.cancel(r1.data.id, 'u1');
+            // Bypass createReminder validation : insérer directement en repo
+            await repo.insertReminder({ id: 'past1', userId: 'u1', reminderText: 'A', fireAt: Date.now() - 1000, status: 'pending' });
+            await repo.insertReminder({ id: 'future1', userId: 'u1', reminderText: 'B', fireAt: Date.now() + 60000, status: 'pending' });
+            await repo.updateReminder('past1', { status: 'cancelled' });
             const due = await svc.tick();
             assert.strictEqual(due.length, 0);
         });
