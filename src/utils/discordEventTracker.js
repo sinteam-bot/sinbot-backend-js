@@ -6,12 +6,17 @@ const auditRepo = new AuditRepository();
 const cacheRepo = new DiscordCacheRepository();
 const membersRepo = new MembersRepository();
 const dumpRepo = new DumpDiscordRepository();
-const db = {
-    ...auditRepo,
-    ...cacheRepo,
-    ...membersRepo,
-    ...dumpRepo
-};
+// Proxy qui délègue aux repositories (spread ne marche pas car les
+// méthodes sont sur le prototype, pas sur l'instance).
+const db = new Proxy({}, {
+    get(_, prop) {
+        if (prop in cacheRepo) return cacheRepo[prop].bind(cacheRepo);
+        if (prop in membersRepo) return membersRepo[prop].bind(membersRepo);
+        if (prop in dumpRepo) return dumpRepo[prop].bind(dumpRepo);
+        if (prop in auditRepo) return auditRepo[prop].bind(auditRepo);
+        return undefined;
+    }
+});
 const logger = require('./logger.js');
 const { toISOStringSafe } = require('./dateUtils.js');
 
