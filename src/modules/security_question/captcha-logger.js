@@ -3,15 +3,28 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { config, getConfig } = require('../../config/index.js');
 
 /**
+ * Cache en mémoire des messageId des logs Captcha en cours.
+ * Clé = `${guildId}:${userId}` (un seul log "live" par membre).
+ * Vidée quand le bot redémarre — dans ce cas, un nouveau log est créé.
+ * @type {Map<string, string>}
+ */
+const _liveLogCache = new Map();
+
+function _cacheKey(guildId, userId) {
+    return `${guildId}:${userId}`;
+}
+
+/**
  * Construit un Embed riche et interactif pour les logs Captcha
  * @param {string} action - L'action à logger
  * @param {string} message - Le message descriptif
  * @param {string} color - La couleur de l'embed
  * @param {object} options - Options détaillées (member, channel, question, attempts, etc.)
  * @param {object} guild - La guilde Discord
+ * @param {Array} steps - Liste des étapes déjà effectuées (pour l'historique)
  * @returns {{ embed: EmbedBuilder, row: ActionRowBuilder|null }}
  */
-function buildCaptchaLogEmbed(action, message, color = '#5865F2', options = {}, guild = null) {
+function buildCaptchaLogEmbed(action, message, color = '#5865F2', options = {}, guild = null, steps = []) {
     let title = `⚡ [Captcha] ${action}`;
     let embedColor = color;
     let iconEmoji = '⚡';
@@ -25,10 +38,6 @@ function buildCaptchaLogEmbed(action, message, color = '#5865F2', options = {}, 
         title = '✅ [Captcha] Vérification Réussie';
         embedColor = '#57F287';
         iconEmoji = '✅';
-    } else if (normalizedAction.includes('échec') || normalizedAction.includes('echec') || normalizedAction.includes('incorrect') || normalizedAction.includes('échouée') || normalizedAction.includes('echouee')) {
-        title = '⚠️ [Captcha] Réponse Incorrecte';
-        embedColor = '#FEE75C';
-        iconEmoji = '⚠️';
     } else if (normalizedAction.includes('kick') || normalizedAction.includes('expuls')) {
         title = '🚫 [Captcha] Expulsion du Membre';
         embedColor = '#ED4245';
@@ -41,6 +50,12 @@ function buildCaptchaLogEmbed(action, message, color = '#5865F2', options = {}, 
         title = '⏰ [Captcha] Délai Expiré';
         embedColor = '#ED4245';
         iconEmoji = '⏰';
+    } else if (normalizedAction.includes('tentative') || normalizedAction.includes('incorrect') || normalizedAction.includes('échouée') || normalizedAction.includes('echouee')) {
+        // "Tentative échouée" et "Réponse Incorrecte" : on les unifie sous
+        // "Réponse Incorrecte" pour éviter 3 messages séparés.
+        title = '⚠️ [Captcha] Réponse Incorrecte';
+        embedColor = '#FEE75C';
+        iconEmoji = '⚠️';
     }
 
     const member = options.member || null;
@@ -53,10 +68,20 @@ function buildCaptchaLogEmbed(action, message, color = '#5865F2', options = {}, 
     const channelId = options.channelId || channel?.id || null;
     const channelName = options.channelName || channel?.name || null;
 
+    // Description = message actuel + historique condensé
+    let description = `>>> ${message}`;
+    if (steps.length > 1) {
+        const history = steps
+            .slice(0, -1) // tout sauf l'étape courante
+            .map((s, idx) => `**${idx + 1}.** ${s.icon} ${s.action}${s.detail ? ` — ${s.detail}` : ''}`)
+            .join('\n');
+        description = `${history}\n\n>>> ${message}`;
+    }
+
     const embed = new EmbedBuilder()
         .setColor(embedColor)
         .setTitle(title)
-        .setDescription(`>>> ${message}`)
+        .setDescription(description)
         .setTimestamp();
 
     if (user || member) {
@@ -100,16 +125,16 @@ function buildCaptchaLogEmbed(action, message, color = '#5865F2', options = {}, 
         });
     }
 
-    // 4. Réponse soumise
+    // 4. Réponse soumise (dernière uniquement, l'historique est dans la description)
     if (options.userAnswer !== undefined) {
         fields.push({
-            name: '🎯 Réponse Fournie',
+            name: '🎯 Dernière Réponse',
             value: `\`${options.userAnswer}\``,
             inline: true
         });
     }
 
-    // 5. Tentatives
+    // 5. Tentatives (cumul)
     if (options.attempts !== undefined) {
         const maxAttempts = options.maxAttempts || 3;
         fields.push({
@@ -153,7 +178,9 @@ function buildCaptchaLogEmbed(action, message, color = '#5865F2', options = {}, 
     }
 
     embed.setFooter({
-        text: 'Sécurité & Captcha',
+        text: steps.length > 1
+            ? `Sécurité & Captcha · ${steps.length} étape${steps.length > 1 ? 's' : ''}`
+            : 'Sécurité & Captcha',
         iconURL: guild?.iconURL?.() || undefined
     });
 
@@ -205,9 +232,26 @@ function buildCaptchaLogEmbed(action, message, color = '#5865F2', options = {}, 
 }
 
 /**
- * Envoyer un log dans le canal de logs captcha
+ * Renvoie l'icône correspondant à l'action (pour l'historique)
+ */
+function _iconForAction(action) {
+    const a = (action || '').toLowerCase();
+    if (a.includes('création') || a.includes('creation')) return '🛡️';
+    if (a.includes('succès') || a.includes('succes') || a.includes('validé')) return '✅';
+    if (a.includes('kick') || a.includes('expuls')) return '🚫';
+    if (a.includes('déjà') || a.includes('deja')) return 'ℹ️';
+    if (a.includes('expir') || a.includes('timeout')) return '⏰';
+    if (a.includes('tentative') || a.includes('incorrect') || a.includes('échouée') || a.includes('echouee')) return '⚠️';
+    return '⚡';
+}
+
+/**
+ * Envoyer (ou mettre à jour) un log dans le canal de logs captcha.
+ * Pour un même (guildId, userId), les logs successifs éditent le premier
+ * message au lieu d'en créer un nouveau.
+ *
  * @param {object} guild - L'objet Guild de Discord.js
- * @param {string} action - L'action à logger (ex: "Création canal", "Succès captcha", "Tentative échouée", etc.)
+ * @param {string} action - L'action à logger
  * @param {string|object} messageOrOptions - Le message de log ou un objet d'options complet
  * @param {string} color - La couleur de l'embed (optionnel)
  * @param {object} options - Options détaillées supplémentaires (optionnel)
@@ -225,29 +269,77 @@ async function sendCaptchaLog(guild, action, messageOrOptions, color = '#5865F2'
     }
 
     const targetChannelId = mergedOptions.logChannelId || CAPTCHA_CONFIG.CAPTCHA_LOG_CHANNEL || 'mock_channel_id';
+    const userId = mergedOptions.userId || mergedOptions.user?.id || mergedOptions.member?.id || null;
 
     if (!targetChannelId || !guild) {
         console.log(`[CAPTCHA LOG] ${action}: ${message}`);
         return null;
     }
 
+    // Récupère l'historique des étapes pour ce (guild, user)
+    const cacheKey = _cacheKey(guild.id, userId || 'global');
+    if (!_liveLogCache.has(cacheKey)) {
+        _liveLogCache.set(cacheKey, { messageId: null, steps: [] });
+    }
+    const state = _liveLogCache.get(cacheKey);
+
+    // Construit l'étape courante
+    const icon = _iconForAction(action);
+    const stepDetail = mergedOptions.attempts !== undefined
+        ? `tentative ${mergedOptions.attempts}/${mergedOptions.maxAttempts || 3}${mergedOptions.userAnswer !== undefined ? ` (réponse: \`${mergedOptions.userAnswer}\`)` : ''}`
+        : (mergedOptions.userAnswer !== undefined ? `réponse: \`${mergedOptions.userAnswer}\`` : '');
+    state.steps.push({ action, icon, detail: stepDetail });
+
+    // Si l'action est terminale (succès, kick, expiration, déjà), on ferme le log
+    const isTerminal = /(succès|succes|validé|kick|expuls|expir|timeout|déjà|deja)/i.test(action);
+    const keepAlive = !isTerminal; // garder en cache tant que non terminal
+
     try {
         const logChannel = await guild.channels.fetch(targetChannelId).catch(() => null);
-
         if (!logChannel || !logChannel.isTextBased()) {
             console.log(`[CAPTCHA LOG] ${action}: ${message}`);
             return null;
         }
 
-        const { embed, row } = buildCaptchaLogEmbed(action, message, color, mergedOptions, guild);
+        const { embed, row } = buildCaptchaLogEmbed(
+            action, message, color, mergedOptions, guild, state.steps
+        );
 
-        const payload = { embeds: [embed] };
-        if (row) {
-            payload.components = [row];
+        let sent;
+        if (state.messageId) {
+            // Tente d'éditer le message existant
+            try {
+                const existing = await logChannel.messages.fetch(state.messageId);
+                if (existing) {
+                    const payload = { embeds: [embed] };
+                    if (row) payload.components = [row];
+                    sent = await existing.edit(payload);
+                } else {
+                    state.messageId = null;
+                }
+            } catch (e) {
+                // Le message a été supprimé ou inaccessible : on en crée un nouveau
+                state.messageId = null;
+            }
         }
 
-        const sent = await logChannel.send(payload);
-        console.log(`[CAPTCHA LOG] ${action}: ${message}`);
+        if (!state.messageId) {
+            // Premier log (ou fallback après suppression) : on envoie
+            const payload = { embeds: [embed] };
+            if (row) payload.components = [row];
+            sent = await logChannel.send(payload);
+            state.messageId = sent.id;
+        }
+
+        // Si l'action est terminale, on libère le cache après un délai
+        // (laisser 5 min pour d'éventuels logs liés au même user)
+        if (!keepAlive) {
+            setTimeout(() => {
+                _liveLogCache.delete(cacheKey);
+            }, 5 * 60 * 1000);
+        }
+
+        console.log(`[CAPTCHA LOG] ${action} (live log for ${cacheKey})${state.messageId ? ` → msg ${state.messageId}` : ''}: ${message}`);
         return sent;
     } catch (error) {
         console.error('❌ Erreur envoi log captcha:', error.message);
@@ -256,4 +348,11 @@ async function sendCaptchaLog(guild, action, messageOrOptions, color = '#5865F2'
     }
 }
 
-module.exports = { sendCaptchaLog, buildCaptchaLogEmbed };
+/**
+ * Vide le cache des logs live (utile pour les tests).
+ */
+function _clearLiveLogCache() {
+    _liveLogCache.clear();
+}
+
+module.exports = { sendCaptchaLog, buildCaptchaLogEmbed, _clearLiveLogCache };
