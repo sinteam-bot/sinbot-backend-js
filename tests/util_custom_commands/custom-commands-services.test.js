@@ -1,7 +1,5 @@
 /**
  * Tests for the CustomCommandService (Phase 9.2 du split util_custom_commands)
-const { test, describe } = require('node:test');
-
  *
  * Couvre :
  *  - create : validation, parse des champs (responseEmbed JSON, restrictChannelIds/RoleIds strings)
@@ -11,6 +9,7 @@ const { test, describe } = require('node:test');
  *  - loadCache
  */
 
+const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { CustomCommandService } = require('../../src/modules/util_custom_commands/services/custom-command.service.js');
 

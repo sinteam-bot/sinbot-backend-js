@@ -1,7 +1,5 @@
 /**
  * Tests for the WordTriggerService (Phase 9.2 du split util_word_triggers)
-const { test, describe } = require('node:test');
-
  *
  * Couvre :
  *  - create : validation des champs
@@ -12,6 +10,7 @@ const { test, describe } = require('node:test');
  *  - loadCache
  */
 
+const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { WordTriggerService } = require('../../src/modules/util_word_triggers/services/word-trigger.service.js');
 
