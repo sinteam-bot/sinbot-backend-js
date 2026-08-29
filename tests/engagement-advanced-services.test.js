@@ -6,9 +6,9 @@
  */
 
 const assert = require('node:assert');
-const { ReminderService } = require('../src/modules/feature_engagement-advanced/services/reminder.service.js');
-const { WordTriggerService } = require('../src/modules/feature_engagement-advanced/services/word-trigger.service.js');
-const { CustomCommandService } = require('../src/modules/feature_engagement-advanced/services/custom-command.service.js');
+const { ReminderService } = require('../src/modules/game_engagement-advanced/services/reminder.service.js');
+const { WordTriggerService } = require('../src/modules/game_engagement-advanced/services/word-trigger.service.js');
+const { CustomCommandService } = require('../src/modules/game_engagement-advanced/services/custom-command.service.js');
 
 /**
  * FakeRepo unifié pour les 3 services.

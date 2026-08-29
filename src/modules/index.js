@@ -1,25 +1,42 @@
+/**
+ * src/modules/index.js
+ *
+ * Modules du bot, regroupés par catégorie (cf. docs/audit/draftbot-feature-list.md) :
+ *   - game_         : Jeux & événements (counter, countdown, giveaways, etc.)
+ *   - security_     : Sécurité (automod, logs, captcha)
+ *   - community_    : Communauté (tickets, reports, reaction-roles, etc.)
+ *   - welcome_      : Accueil des membres (welcome messages, cards)
+ *   - engagement_   : Engagement (XP, economy, birthdays)
+ *   - util_         : Utilitaires (info, invites)
+ *   - notifier_     : Notifications internes (startup)
+ *   - service_      : Services internes (bump-reminder)
+ *
+ * Chaque module peut être désactivé globalement via data/base.config.yml
+ * (cf. loadAppModules() et isFeatureGloballyEnabled()).
+ */
+
 const { RoadToInfiniteModule } = require('./game_road-to-infinite/road-to-infinite.module.js');
 const { CountDownModule } = require('./game_count-down/count-down.module.js');
-const { SecurityQuestionModule } = require('./security_question/security-question.module.js');
+const { CaptchaModule } = require('./security_captcha/captcha.module.js');
 const { StartupNotifierModule } = require('./notifier_startup/startup-notifier.module.js');
 const { BumpReminderModule } = require('./service_bump-reminder/bump-reminder.module.js');
-const { XPLevelModule } = require('./feature_xp-level/xp-level.module.js');
-const { DailyMessageModule } = require('./feature_daily-message/daily-message.module.js');
-const { WelcomeModule } = require('./feature_welcome/welcome.module.js');
-const { AutoModModule } = require('./feature_automod/automod.module.js');
-const { TicketsModule } = require('./feature_tickets/tickets.module.js');
-const { LogsModule } = require('./feature_logs/logs.module.js');
-const { CardsModule } = require('./feature_cards/cards.module.js');
-const { EngagementModule } = require('./feature_engagement/engagement.module.js');
-const { BirthdaysModule } = require('./feature_birthdays/birthdays.module.js');
-const { ReactionRolesModule } = require('./feature_reaction-roles/reaction-roles.module.js');
-const { ReportsModule } = require('./feature_reports/reports.module.js');
-const { TempVoiceModule } = require('./feature_temp-voice/temp-voice.module.js');
-const { EconomyModule } = require('./feature_economy/economy.module.js');
-const { StickyRolesModule } = require('./feature_sticky-roles/sticky-roles.module.js');
-const { InfoModule } = require('./feature_info/info.module.js');
-const { EngagementAdvancedModule } = require('./feature_engagement-advanced/engagement-advanced.module.js');
-const { InvitesModule } = require('./feature_invites/invites.module.js');
+const { XPLevelModule } = require('./engagement_xp-level/xp-level.module.js');
+const { DailyMessageModule } = require('./community_daily-message/daily-message.module.js');
+const { WelcomeModule } = require('./welcome_welcome/welcome.module.js');
+const { AutoModModule } = require('./security_automod/automod.module.js');
+const { TicketsModule } = require('./community_tickets/tickets.module.js');
+const { LogsModule } = require('./security_logs/logs.module.js');
+const { CardsModule } = require('./welcome_cards/cards.module.js');
+const { EngagementModule } = require('./game_engagement/engagement.module.js');
+const { BirthdaysModule } = require('./engagement_birthdays/birthdays.module.js');
+const { ReactionRolesModule } = require('./community_reaction-roles/reaction-roles.module.js');
+const { ReportsModule } = require('./community_reports/reports.module.js');
+const { TempVoiceModule } = require('./game_temp-voice/temp-voice.module.js');
+const { EconomyModule } = require('./engagement_economy/economy.module.js');
+const { StickyRolesModule } = require('./community_sticky-roles/sticky-roles.module.js');
+const { InfoModule } = require('./util_info/info.module.js');
+const { EngagementAdvancedModule } = require('./game_engagement-advanced/engagement-advanced.module.js');
+const { InvitesModule } = require('./util_invites/invites.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -34,7 +51,7 @@ declareExistingFeatures();
 const MODULE_FEATURE_MAP = {
     [RoadToInfiniteModule.name]: 'counter',
     [CountDownModule.name]: 'countdown',
-    [SecurityQuestionModule.name]: 'captcha',
+    [CaptchaModule.name]: 'captcha',
     [StartupNotifierModule.name]: 'startup_notifier',
     [BumpReminderModule.name]: 'bump_reminder',
     [XPLevelModule.name]: 'xp',
@@ -59,7 +76,7 @@ const MODULE_FEATURE_MAP = {
 const ALL_MODULES = [
     RoadToInfiniteModule,
     CountDownModule,
-    SecurityQuestionModule,
+    CaptchaModule,
     StartupNotifierModule,
     BumpReminderModule,
     XPLevelModule,
@@ -96,7 +113,6 @@ async function loadAppModules() {
 
     for (const Module of ALL_MODULES) {
         const featureName = MODULE_FEATURE_MAP[Module.name];
-        // Si pas de mapping, on autorise par défaut
         if (!featureName) {
             enabled.push(Module);
             continue;
@@ -131,7 +147,7 @@ module.exports = {
     appModules,
     RoadToInfiniteModule,
     CountDownModule,
-    SecurityQuestionModule,
+    CaptchaModule,
     StartupNotifierModule,
     BumpReminderModule,
     XPLevelModule,

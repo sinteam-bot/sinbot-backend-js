@@ -19,23 +19,23 @@ const sharedGuildSettings = require('./shared/guild-settings.js');
 const sharedBotInfo = require('./shared/bot-info.js');
 const sharedOpenai = require('./shared/openai.js');
 
-const xpLevel = require('../../modules/feature_xp-level/db/schema.js');
-const birthdays = require('../../modules/feature_birthdays/db/schema.js');
-const automod = require('../../modules/feature_automod/db/schema.js');
-const tickets = require('../../modules/feature_tickets/db/schema.js');
-const welcome = require('../../modules/feature_welcome/db/schema.js');
-const economy = require('../../modules/feature_economy/db/schema.js');
-const reports = require('../../modules/feature_reports/db/schema.js');
-const reactionRoles = require('../../modules/feature_reaction-roles/db/schema.js');
-const tempVoice = require('../../modules/feature_temp-voice/db/schema.js');
-const stickyRoles = require('../../modules/feature_sticky-roles/db/schema.js');
-const engagement = require('../../modules/feature_engagement/db/schema.js');
-const captcha = require('../../modules/security_question/db/schema.js');
+const xpLevel = require('../../modules/engagement_xp-level/db/schema.js');
+const birthdays = require('../../modules/engagement_birthdays/db/schema.js');
+const automod = require('../../modules/security_automod/db/schema.js');
+const tickets = require('../../modules/community_tickets/db/schema.js');
+const welcome = require('../../modules/welcome_welcome/db/schema.js');
+const economy = require('../../modules/engagement_economy/db/schema.js');
+const reports = require('../../modules/community_reports/db/schema.js');
+const reactionRoles = require('../../modules/community_reaction-roles/db/schema.js');
+const tempVoice = require('../../modules/game_temp-voice/db/schema.js');
+const stickyRoles = require('../../modules/community_sticky-roles/db/schema.js');
+const engagement = require('../../modules/game_engagement/db/schema.js');
+const captcha = require('../../modules/security_captcha/db/schema.js');
 const bumpReminder = require('../../modules/service_bump-reminder/db/schema.js');
 const countdown = require('../../modules/game_count-down/db/schema.js');
 const infinite = require('../../modules/game_road-to-infinite/db/schema.js');
-const info = require('../../modules/feature_info/db/schema.js');
-const invites = require('../../modules/feature_invites/db/schema.js');
+const info = require('../../modules/util_info/db/schema.js');
+const invites = require('../../modules/util_invites/db/schema.js');
 
 module.exports = {
     // Tables transverses (shared)

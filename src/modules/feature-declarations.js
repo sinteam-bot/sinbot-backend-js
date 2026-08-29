@@ -75,7 +75,6 @@ function declareExistingFeatures() {
         },
         {
             name: 'captcha',
-            aliases: ['security_question'],
             defaults: defaultFor('captcha'),
             onEnable: async (guildId) => console.log(`🔒 [captcha] enabled on ${guildId}`),
             onDisable: async (guildId) => console.log(`💤 [captcha] disabled on ${guildId}`)

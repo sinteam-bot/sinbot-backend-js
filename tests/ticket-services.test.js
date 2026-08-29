@@ -3,8 +3,8 @@
  */
 
 const assert = require('node:assert');
-const { TicketService, STATUS } = require('../src/modules/feature_tickets/services/ticket.service.js');
-const { TicketPermissionsService } = require('../src/modules/feature_tickets/services/ticket-permissions.service.js');
+const { TicketService, STATUS } = require('../src/modules/community_tickets/services/ticket.service.js');
+const { TicketPermissionsService } = require('../src/modules/community_tickets/services/ticket-permissions.service.js');
 
 class FakeRepo {
     constructor() {

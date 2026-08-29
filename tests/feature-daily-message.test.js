@@ -1,8 +1,8 @@
 const assert = require('node:assert');
 const { container } = require('../src/core/container.js');
-const { DailyMessageRepository } = require('../src/modules/feature_daily-message/daily-message.repository.js');
-const { DailyMessageService } = require('../src/modules/feature_daily-message/daily-message.service.js');
-const { DailyMessageController } = require('../src/modules/feature_daily-message/daily-message.controller.js');
+const { DailyMessageRepository } = require('../src/modules/community_daily-message/daily-message.repository.js');
+const { DailyMessageService } = require('../src/modules/community_daily-message/daily-message.service.js');
+const { DailyMessageController } = require('../src/modules/community_daily-message/daily-message.controller.js');
 
 describe('Feature: Daily Message Module Tests', () => {
 

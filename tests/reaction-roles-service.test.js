@@ -3,7 +3,7 @@
  */
 
 const assert = require('node:assert');
-const { ReactionRolesService } = require('../src/modules/feature_reaction-roles/services/reaction-roles.service.js');
+const { ReactionRolesService } = require('../src/modules/community_reaction-roles/services/reaction-roles.service.js');
 
 class FakeRepo {
     constructor() {

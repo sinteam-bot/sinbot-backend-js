@@ -3,8 +3,8 @@
  */
 
 const assert = require('node:assert');
-const { GiveawayService, STATUS: GIVEAWAY_STATUS } = require('../src/modules/feature_engagement/services/giveaway.service.js');
-const { PollService, STATUS: POLL_STATUS } = require('../src/modules/feature_engagement/services/poll.service.js');
+const { GiveawayService, STATUS: GIVEAWAY_STATUS } = require('../src/modules/game_engagement/services/giveaway.service.js');
+const { PollService, STATUS: POLL_STATUS } = require('../src/modules/game_engagement/services/poll.service.js');
 
 class FakeEngagementRepo {
     constructor() {

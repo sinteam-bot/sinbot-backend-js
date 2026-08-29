@@ -3,7 +3,7 @@
  */
 
 const assert = require('node:assert');
-const { CardRendererService } = require('../src/modules/feature_cards/services/card-renderer.service.js');
+const { CardRendererService } = require('../src/modules/welcome_cards/services/card-renderer.service.js');
 
 describe('CardRendererService', () => {
     let svc;

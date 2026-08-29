@@ -2,7 +2,7 @@ const { eq, and, desc, asc, sql } = require('drizzle-orm');
 const { db, schema } = require('../../db/index.js');
 const { Repository } = require('../../core/index.js');
 
-class SecurityQuestionRepository {
+class CaptchaRepository {
     constructor() {
         this.db = db;
         this.schema = schema;
@@ -176,7 +176,7 @@ class SecurityQuestionRepository {
                     events = evtRows;
                 }
             } catch (e) {
-                console.warn('[SecurityQuestionRepo] Erreur select discordEventsArchive:', e.message);
+                console.warn('[CaptchaRepo] Erreur select discordEventsArchive:', e.message);
             }
         }
 
@@ -219,12 +219,12 @@ class SecurityQuestionRepository {
                 try {
                     if (m.embedsJson) embeds = JSON.parse(m.embedsJson);
                 } catch (err) {
-                    console.warn(`[SecurityQuestionRepo] Erreur parse embedsJson pour msg ${m.messageId}:`, err.message);
+                    console.warn(`[CaptchaRepo] Erreur parse embedsJson pour msg ${m.messageId}:`, err.message);
                 }
                 try {
                     if (m.attachmentsJson) attachments = JSON.parse(m.attachmentsJson);
                 } catch (err) {
-                    console.warn(`[SecurityQuestionRepo] Erreur parse attachmentsJson pour msg ${m.messageId}:`, err.message);
+                    console.warn(`[CaptchaRepo] Erreur parse attachmentsJson pour msg ${m.messageId}:`, err.message);
                 }
 
                 return {
@@ -339,8 +339,8 @@ class SecurityQuestionRepository {
     }
 }
 
-Repository()(SecurityQuestionRepository);
+Repository()(CaptchaRepository);
 
 module.exports = {
-    SecurityQuestionRepository
+    CaptchaRepository
 };

@@ -12,7 +12,7 @@
  */
 
 const assert = require('node:assert');
-const { BirthdayService, DEFAULT_COOLDOWN_DAYS } = require('../src/modules/feature_birthdays/services/birthday.service.js');
+const { BirthdayService, DEFAULT_COOLDOWN_DAYS } = require('../src/modules/engagement_birthdays/services/birthday.service.js');
 
 /**
  * FakeRepo qui simule le repo Drizzle

@@ -3,7 +3,7 @@
  */
 
 const assert = require('node:assert');
-const { Sanitizer } = require('../src/modules/feature_logs/services/sanitizer.service.js');
+const { Sanitizer } = require('../src/modules/security_logs/services/sanitizer.service.js');
 
 describe('Sanitizer', () => {
     let s;

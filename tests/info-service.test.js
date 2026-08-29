@@ -4,7 +4,7 @@ const { test, describe, beforeEach, afterEach } = require('node:test');
  */
 
 const assert = require('node:assert');
-const { InfoService } = require('../src/modules/feature_info/services/info.service.js');
+const { InfoService } = require('../src/modules/util_info/services/info.service.js');
 
 function makeGuild(opts = {}) {
     return {

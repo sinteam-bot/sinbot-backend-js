@@ -1,8 +1,8 @@
 const assert = require('node:assert');
 const { container } = require('../src/core/container.js');
-const { SecurityQuestionRepository } = require('../src/modules/security_question/security-question.repository.js');
-const { SecurityQuestionService } = require('../src/modules/security_question/security-question.service.js');
-const { SecurityQuestionController } = require('../src/modules/security_question/security-question.controller.js');
+const { CaptchaRepository } = require('../src/modules/security_captcha/captcha.repository.js');
+const { CaptchaService } = require('../src/modules/security_captcha/captcha.service.js');
+const { CaptchaController } = require('../src/modules/security_captcha/captcha.controller.js');
 
 describe('Security Question (Captcha) Module Tests', () => {
 
@@ -12,7 +12,7 @@ describe('Security Question (Captcha) Module Tests', () => {
     const channelId = 'test_chan_sec_1';
 
     test('Repository: should create, get and verify captcha in DB', async () => {
-        const repo = container.resolve(SecurityQuestionRepository);
+        const repo = container.resolve(CaptchaRepository);
         const captcha = await repo.createCaptcha(userId, username, guildId, 'Combien font 3 plus 4 ?', '7', channelId, 10);
 
         assert.ok(captcha);
@@ -34,7 +34,7 @@ describe('Security Question (Captcha) Module Tests', () => {
     });
 
     test('Service: should generate valid French math questions', () => {
-        const service = container.resolve(SecurityQuestionService);
+        const service = container.resolve(CaptchaService);
         const q = service.generateMathQuestion();
 
         assert.ok(q.question);
@@ -44,15 +44,15 @@ describe('Security Question (Captcha) Module Tests', () => {
     });
 
     test('Service: should convert numbers to French words', () => {
-        const service = container.resolve(SecurityQuestionService);
+        const service = container.resolve(CaptchaService);
         assert.strictEqual(service.numberToFrench(1), 'un');
         assert.strictEqual(service.numberToFrench(7), 'sept');
         assert.strictEqual(service.numberToFrench(10), 'dix');
     });
 
     test('Repository & Service: should retrieve channel details and message history', async () => {
-        const repo = container.resolve(SecurityQuestionRepository);
-        const service = container.resolve(SecurityQuestionService);
+        const repo = container.resolve(CaptchaRepository);
+        const service = container.resolve(CaptchaService);
 
         const details = await repo.getCaptchaChannelDetails(channelId, userId);
         assert.ok(details);
@@ -66,7 +66,7 @@ describe('Security Question (Captcha) Module Tests', () => {
     });
 
     test('Controller: should return overview, status and channel messages', async () => {
-        const controller = container.resolve(SecurityQuestionController);
+        const controller = container.resolve(CaptchaController);
         const resLogs = await controller.getLogs();
         assert.ok(resLogs.success);
         assert.ok(resLogs.data);
@@ -84,7 +84,7 @@ describe('Security Question (Captcha) Module Tests', () => {
     });
 
     test('CaptchaLogger: should build rich interactive embed and send logs properly', async () => {
-        const { buildCaptchaLogEmbed, sendCaptchaLog } = require('../src/modules/security_question/captcha-logger.js');
+        const { buildCaptchaLogEmbed, sendCaptchaLog } = require('../src/modules/security_captcha/captcha-logger.js');
 
         // Test 1: Création de canal
         const creationResult = buildCaptchaLogEmbed('Création canal', 'Canal créé pour test', '#5865F2', {

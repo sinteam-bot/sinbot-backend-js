@@ -3,7 +3,7 @@
  */
 
 const assert = require('node:assert');
-const { StickyRolesService } = require('../src/modules/feature_sticky-roles/services/sticky-roles.service.js');
+const { StickyRolesService } = require('../src/modules/community_sticky-roles/services/sticky-roles.service.js');
 
 class FakeRepo {
     constructor() {

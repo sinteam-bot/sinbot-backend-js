@@ -3,7 +3,7 @@
  */
 
 const assert = require('node:assert');
-const { LevelUpService } = require('../src/modules/feature_xp-level/level-up.service.js');
+const { LevelUpService } = require('../src/modules/engagement_xp-level/level-up.service.js');
 
 describe('LevelUpService', () => {
     test('isEnabled suit la config', () => {

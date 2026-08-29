@@ -10,7 +10,7 @@ module.exports = {
             if (interaction.customId?.startsWith('xp:lb:')) {
                 try {
                     const { container } = require('../core/container.js');
-                    const { XPLevelCommand } = require('../modules/feature_xp-level/xp-level.cmd.js');
+                    const { XPLevelCommand } = require('../modules/engagement_xp-level/xp-level.cmd.js');
                     const cmd = container.resolve(XPLevelCommand);
                     await cmd.handleLeaderboardButton(interaction);
                 } catch (err) {

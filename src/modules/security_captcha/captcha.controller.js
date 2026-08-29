@@ -1,8 +1,8 @@
 const { Controller, Get, Post } = require('../../core/index.js');
-const { SecurityQuestionService } = require('./security-question.service.js');
+const { CaptchaService } = require('./captcha.service.js');
 
-class SecurityQuestionController {
-    static inject = [SecurityQuestionService];
+class CaptchaController {
+    static inject = [CaptchaService];
 
     constructor(service) {
         this.service = service;
@@ -53,16 +53,16 @@ class SecurityQuestionController {
     }
 }
 
-Controller('/api/security-question')(SecurityQuestionController);
-Get('')(SecurityQuestionController.prototype, 'getLogs');
-Get('/logs')(SecurityQuestionController.prototype, 'getLogs');
-Get('/messages')(SecurityQuestionController.prototype, 'getChannelMessages');
-Get('/messages/:channelId')(SecurityQuestionController.prototype, 'getChannelMessages');
-Get('/channel/:channelId')(SecurityQuestionController.prototype, 'getChannelMessages');
-Get('/status')(SecurityQuestionController.prototype, 'getStatus');
-Post('/verify')(SecurityQuestionController.prototype, 'verifyUser');
+Controller('/api/captcha')(CaptchaController);
+Get('')(CaptchaController.prototype, 'getLogs');
+Get('/logs')(CaptchaController.prototype, 'getLogs');
+Get('/messages')(CaptchaController.prototype, 'getChannelMessages');
+Get('/messages/:channelId')(CaptchaController.prototype, 'getChannelMessages');
+Get('/channel/:channelId')(CaptchaController.prototype, 'getChannelMessages');
+Get('/status')(CaptchaController.prototype, 'getStatus');
+Post('/verify')(CaptchaController.prototype, 'verifyUser');
 
 module.exports = {
-    SecurityQuestionController
+    CaptchaController
 };
 

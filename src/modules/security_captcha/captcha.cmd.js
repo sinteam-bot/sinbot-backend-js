@@ -1,8 +1,8 @@
 const { Command } = require('../../core/index.js');
-const { SecurityQuestionService } = require('./security-question.service.js');
+const { CaptchaService } = require('./captcha.service.js');
 
-class SecurityQuestionCommand {
-    static inject = [SecurityQuestionService];
+class CaptchaCommand {
+    static inject = [CaptchaService];
 
     constructor(service) {
         this.service = service;
@@ -24,8 +24,8 @@ class SecurityQuestionCommand {
     }
 }
 
-Command({ name: 'verify', description: 'Vérifier l\'état de validation du compte' })(SecurityQuestionCommand.prototype, 'executeCommand');
+Command({ name: 'verify', description: 'Vérifier l\'état de validation du compte' })(CaptchaCommand.prototype, 'executeCommand');
 
 module.exports = {
-    SecurityQuestionCommand
+    CaptchaCommand
 };

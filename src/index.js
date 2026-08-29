@@ -341,7 +341,7 @@ const httpServer = app.listen(PORT, () => {
 
 // WebSocket Live Feed des logs (Phase 4)
 try {
-    const { LogsService } = require('./modules/feature_logs/services/logs.service.js');
+    const { LogsService } = require('./modules/security_logs/services/logs.service.js');
     const { attachLogsWs } = require('./utils/wsLogsServer.js');
     const { container } = require('./core/index.js');
     let logsService = null;

@@ -3,7 +3,7 @@
  */
 
 const assert = require('node:assert');
-const { ReportsService } = require('../src/modules/feature_reports/services/reports.service.js');
+const { ReportsService } = require('../src/modules/community_reports/services/reports.service.js');
 
 class FakeRepo {
     constructor() {

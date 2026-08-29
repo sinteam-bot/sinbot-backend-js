@@ -1,13 +1,13 @@
 const { EmbedBuilder } = require('discord.js');
 const { Injectable } = require('../../core/index.js');
-const { SecurityQuestionRepository } = require('./security-question.repository.js');
+const { CaptchaRepository } = require('./captcha.repository.js');
 const { config, getConfig } = require('../../config/index.js');
 const { sendCaptchaLog } = require('./captcha-logger.js');
 const DiscordCacheService = require('../../services/discordCacheService.js');
 const logger = require('../../utils/logger.js');
 
-class SecurityQuestionService {
-    static inject = [SecurityQuestionRepository];
+class CaptchaService {
+    static inject = [CaptchaRepository];
 
     constructor(repository) {
         this.repo = repository;
@@ -91,7 +91,7 @@ class SecurityQuestionService {
         try {
             return await guild.roles.fetch(roleId);
         } catch (error) {
-            console.error(`❌ [SecurityQuestion] Rôle vérifié (ID: ${roleId}) introuvable:`, error);
+            console.error(`❌ [Captcha] Rôle vérifié (ID: ${roleId}) introuvable:`, error);
             return null;
         }
     }
@@ -127,7 +127,7 @@ class SecurityQuestionService {
 
             return channel;
         } catch (error) {
-            console.error('❌ [SecurityQuestion] Erreur création canal:', error);
+            console.error('❌ [Captcha] Erreur création canal:', error);
             throw error;
         }
     }
@@ -139,7 +139,7 @@ class SecurityQuestionService {
             const welcomeService = container.resolve(WelcomeService);
             await welcomeService.handleWelcome(member);
         } catch (err) {
-            console.error('❌ [SecurityQuestion] Erreur déclenchement accueil:', err);
+            console.error('❌ [Captcha] Erreur déclenchement accueil:', err);
         }
     }
 
@@ -151,7 +151,7 @@ class SecurityQuestionService {
 
         const captchaConfig = this.getConfig();
         if (captchaConfig.enabled === false) {
-            console.log(`ℹ️ [SecurityQuestion] Captcha désactivé - ${member.user.tag} rejoint sans vérification`);
+            console.log(`ℹ️ [Captcha] Captcha désactivé - ${member.user.tag} rejoint sans vérification`);
             await this.triggerWelcome(member);
             return;
         }
@@ -162,7 +162,7 @@ class SecurityQuestionService {
                 const role = await this.getVerifiedRole(member.guild);
                 if (role) {
                     await member.roles.add(role.id).catch(err => {
-                        console.warn('[SecurityQuestion] Impossible d\'ajouter le rôle vérifié:', err.message);
+                        console.warn('[Captcha] Impossible d\'ajouter le rôle vérifié:', err.message);
                     });
                 }
                 await sendCaptchaLog(member.guild, 'Déjà vérifié', `**${member.user.tag}** est déjà vérifié sur le serveur. Rôle appliqué directement.`, '#3498db', {
@@ -204,14 +204,14 @@ class SecurityQuestionService {
                 try {
                     await DiscordCacheService.cacheDiscordMessage(sentMsg);
                 } catch (err) {
-                    console.debug('[SecurityQuestion] Erreur mise en cache message envoyé:', err.message);
+                    console.debug('[Captcha] Erreur mise en cache message envoyé:', err.message);
                 }
             }
 
-            console.log(`🔒 [SecurityQuestion] Captcha envoyé à ${member.user.tag} dans ${channel.name} : "${mathQuestion.question}" (Réponse: ${mathQuestion.answer})`);
+            console.log(`🔒 [Captcha] Captcha envoyé à ${member.user.tag} dans ${channel.name} : "${mathQuestion.question}" (Réponse: ${mathQuestion.answer})`);
 
         } catch (error) {
-            console.error('❌ [SecurityQuestion] Erreur handleMemberJoin:', error);
+            console.error('❌ [Captcha] Erreur handleMemberJoin:', error);
         }
     }
 
@@ -232,7 +232,7 @@ class SecurityQuestionService {
         try {
             await DiscordCacheService.cacheDiscordMessage(message);
         } catch (err) {
-            console.debug('[SecurityQuestion] Cache incoming message failed:', err.message);
+            console.debug('[Captcha] Cache incoming message failed:', err.message);
         }
 
         try {
@@ -242,7 +242,7 @@ class SecurityQuestionService {
             if (captcha.is_verified) {
                 const rep = await message.reply("Vous êtes déjà vérifié !");
                 if (rep) {
-                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[SecurityQuestion] Cache reply failed:', err.message); }
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[Captcha] Cache reply failed:', err.message); }
                 }
                 return true;
             }
@@ -251,7 +251,7 @@ class SecurityQuestionService {
             if (captcha.expires_at && new Date() > new Date(captcha.expires_at)) {
                 const rep = await message.reply("❌ Le temps imparti pour répondre au captcha a expiré.");
                 if (rep) {
-                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[SecurityQuestion] Cache reply failed:', err.message); }
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[Captcha] Cache reply failed:', err.message); }
                 }
                 return true;
             }
@@ -265,13 +265,13 @@ class SecurityQuestionService {
                 await this.repo.markVerified(message.author.id, message.guild.id);
                 const rep = await message.reply("✅ Bravo ! Vous avez validé le captcha avec succès.");
                 if (rep) {
-                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[SecurityQuestion] Cache reply failed:', err.message); }
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[Captcha] Cache reply failed:', err.message); }
                 }
 
                 const role = await this.getVerifiedRole(message.guild);
                 if (role && message.member) {
                     await message.member.roles.add(role.id).catch(err => {
-                        console.warn('[SecurityQuestion] Impossible d\'ajouter le rôle vérifié:', err.message);
+                        console.warn('[Captcha] Impossible d\'ajouter le rôle vérifié:', err.message);
                     });
                 }
 
@@ -292,11 +292,11 @@ class SecurityQuestionService {
 
                 setTimeout(async () => {
                     await message.channel.delete().catch(err => {
-                        console.warn('[SecurityQuestion] Impossible de supprimer le salon captcha:', err.message);
+                        console.warn('[Captcha] Impossible de supprimer le salon captcha:', err.message);
                     });
                 }, 3000);
 
-                console.log(`✅ [SecurityQuestion] ${message.author.tag} a validé son captcha !`);
+                console.log(`✅ [Captcha] ${message.author.tag} a validé son captcha !`);
                 return true;
 
             } else {
@@ -307,11 +307,11 @@ class SecurityQuestionService {
                 if (nextAttempts >= maxAttempts) {
                     const rep = await message.reply("❌ Trop de tentatives infructueuses. Vous allez être expulsé du serveur.");
                     if (rep) {
-                        try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[SecurityQuestion] Cache reply failed:', err.message); }
+                        try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[Captcha] Cache reply failed:', err.message); }
                     }
                     if (message.member) {
                         await message.member.kick('Échec vérification captcha').catch(err => {
-                            console.warn('[SecurityQuestion] Impossible de kick le membre:', err.message);
+                            console.warn('[Captcha] Impossible de kick le membre:', err.message);
                         });
                     }
                     await sendCaptchaLog(message.guild, 'Kick utilisateur', `**${message.author.tag}** a été expulsé du serveur suite au dépassement du nombre maximal de tentatives (**${nextAttempts}/${maxAttempts}**).`, '#e74c3c', {
@@ -327,18 +327,18 @@ class SecurityQuestionService {
 
                     setTimeout(async () => {
                         await message.channel.delete().catch(err => {
-                            console.warn('[SecurityQuestion] Impossible de supprimer le salon captcha:', err.message);
+                            console.warn('[Captcha] Impossible de supprimer le salon captcha:', err.message);
                         });
                     }, 3000);
 
-                    console.log(`🚫 [SecurityQuestion] ${message.author.tag} a dépassé les tentatives max et a été expulsé.`);
+                    console.log(`🚫 [Captcha] ${message.author.tag} a dépassé les tentatives max et a été expulsé.`);
                     return true;
                 }
 
                 const remaining = maxAttempts - nextAttempts;
                 const rep = await message.reply(`❌ Réponse incorrecte. Il vous reste **${remaining}** tentative(s).`);
                 if (rep) {
-                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[SecurityQuestion] Cache reply failed:', err.message); }
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[Captcha] Cache reply failed:', err.message); }
                 }
                 await sendCaptchaLog(message.guild, 'Tentative échouée', `**${message.author.tag}** a soumis une réponse incorrecte (\`${userAnswer}\`). Il lui reste **${remaining}** tentative(s).`, '#f39c12', {
                     member: message.member,
@@ -354,7 +354,7 @@ class SecurityQuestionService {
             }
 
         } catch (error) {
-            console.error('❌ [SecurityQuestion] Erreur handleIncomingMessage:', error);
+            console.error('❌ [Captcha] Erreur handleIncomingMessage:', error);
             return false;
         }
     }
@@ -433,9 +433,9 @@ class SecurityQuestionService {
     }
 }
 
-Injectable()(SecurityQuestionService);
+Injectable()(CaptchaService);
 
 module.exports = {
-    SecurityQuestionService
+    CaptchaService
 };
 

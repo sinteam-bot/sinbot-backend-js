@@ -8,10 +8,10 @@
 
 const assert = require('node:assert');
 const { createTestDb } = require('../src/db/index.js');
-const { InvitesRepository } = require('../src/modules/feature_invites/invites.repository.js');
-const { InvitesService } = require('../src/modules/feature_invites/services/invites.service.js');
+const { InvitesRepository } = require('../src/modules/util_invites/invites.repository.js');
+const { InvitesService } = require('../src/modules/util_invites/services/invites.service.js');
 const { inviteCodes, inviteUses, inviteBonuses, inviteBlacklist, inviteRestore } =
-    require('../src/modules/feature_invites/db/schema.js');
+    require('../src/modules/util_invites/db/schema.js');
 
 async function _seedInviteUse(client, guildId, inviterId, invitedId, opts = {}) {
     const id = opts.id || `use_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

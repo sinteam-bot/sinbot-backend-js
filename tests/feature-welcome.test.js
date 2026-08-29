@@ -1,7 +1,7 @@
 const assert = require('node:assert');
 const { container } = require('../src/core/container.js');
-const { WelcomeService } = require('../src/modules/feature_welcome/welcome.service.js');
-const { WelcomeController } = require('../src/modules/feature_welcome/welcome.controller.js');
+const { WelcomeService } = require('../src/modules/welcome_welcome/welcome.service.js');
+const { WelcomeController } = require('../src/modules/welcome_welcome/welcome.controller.js');
 
 describe('Feature: Welcome Module Tests', () => {
 

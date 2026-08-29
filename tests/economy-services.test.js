@@ -3,9 +3,9 @@
  */
 
 const assert = require('node:assert');
-const { EconomyService } = require('../src/modules/feature_economy/services/economy.service.js');
-const { ShopService } = require('../src/modules/feature_economy/services/shop.service.js');
-const { InventoryService } = require('../src/modules/feature_economy/services/inventory.service.js');
+const { EconomyService } = require('../src/modules/engagement_economy/services/economy.service.js');
+const { ShopService } = require('../src/modules/engagement_economy/services/shop.service.js');
+const { InventoryService } = require('../src/modules/engagement_economy/services/inventory.service.js');
 
 /**
  * FakeRepo: in-memory simulation of EconomyRepository

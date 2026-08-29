@@ -12,10 +12,10 @@ describe('BotLogger & Winston-Style Source Localization Tests', () => {
 
     test('inferModuleFromPath accurately identifies module from relative path', () => {
         assert.strictEqual(logger.inferModuleFromPath('src/modules/service_bump-reminder/bump-reminder.service.js'), 'BUMP');
-        assert.strictEqual(logger.inferModuleFromPath('src/modules/feature_welcome/welcome.service.js'), 'WELCOME');
-        assert.strictEqual(logger.inferModuleFromPath('src/modules/feature_daily-message/daily-message.service.js'), 'DAILY');
-        assert.strictEqual(logger.inferModuleFromPath('src/modules/security_question/security-question.service.js'), 'CAPTCHA');
-        assert.strictEqual(logger.inferModuleFromPath('src/modules/feature_xp-level/xp-level.service.js'), 'XP');
+        assert.strictEqual(logger.inferModuleFromPath('src/modules/welcome_welcome/welcome.service.js'), 'WELCOME');
+        assert.strictEqual(logger.inferModuleFromPath('src/modules/community_daily-message/daily-message.service.js'), 'DAILY');
+        assert.strictEqual(logger.inferModuleFromPath('src/modules/security_captcha/security-question.service.js'), 'CAPTCHA');
+        assert.strictEqual(logger.inferModuleFromPath('src/modules/engagement_xp-level/xp-level.service.js'), 'XP');
         assert.strictEqual(logger.inferModuleFromPath('src/modules/game_count-down/count-down.service.js'), 'COUNTDOWN');
         assert.strictEqual(logger.inferModuleFromPath('src/modules/game_road-to-infinite/road-to-infinite.service.js'), 'INFINITE');
         assert.strictEqual(logger.inferModuleFromPath('src/modules/notifier_startup/startup-notifier.service.js'), 'STARTUP');

@@ -26,7 +26,7 @@ describe('LogsController (HTTP integration)', () => {
     let app, server, baseUrl, controller;
 
     beforeAll(async () => {
-        const { LogsController } = require('../src/modules/feature_logs/controllers/logs.controller.js');
+        const { LogsController } = require('../src/modules/security_logs/controllers/logs.controller.js');
         controller = new LogsController(createStubLogs(), createStubStats());
         app = express();
         app.use(express.json());

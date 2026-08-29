@@ -1,8 +1,8 @@
 const assert = require('node:assert');
 const { container } = require('../src/core/container.js');
-const { XPLevelRepository } = require('../src/modules/feature_xp-level/xp-level.repository.js');
-const { XPLevelService } = require('../src/modules/feature_xp-level/xp-level.service.js');
-const { XPLevelController } = require('../src/modules/feature_xp-level/xp-level.controller.js');
+const { XPLevelRepository } = require('../src/modules/engagement_xp-level/xp-level.repository.js');
+const { XPLevelService } = require('../src/modules/engagement_xp-level/xp-level.service.js');
+const { XPLevelController } = require('../src/modules/engagement_xp-level/xp-level.controller.js');
 
 describe('Feature: XP & Level Module Tests', () => {
 
@@ -74,7 +74,7 @@ describe('Feature: XP & Level Module Tests', () => {
     test('Service & Repository: should fetch reward roles and assign them safely', async () => {
         const repo = container.resolve(XPLevelRepository);
         const service = container.resolve(XPLevelService);
-        const levelUp = container.resolve(require('../src/modules/feature_xp-level/level-up.service.js').LevelUpService);
+        const levelUp = container.resolve(require('../src/modules/engagement_xp-level/level-up.service.js').LevelUpService);
 
         const roles = await repo.getRewardRoles('guild_123');
         assert.ok(Array.isArray(roles));

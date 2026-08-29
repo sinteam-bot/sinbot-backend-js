@@ -1336,7 +1336,7 @@ function createWebRouter(client) {
     router.get('/daily-messages', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const { DailyMessageService } = require('../modules/community_daily-message/daily-message.service.js');
             const dailyService = container.resolve(DailyMessageService);
             const conf = getConfig ? getConfig() : config;
 
@@ -1447,7 +1447,7 @@ function createWebRouter(client) {
     const handleGenerateDraft = async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const { DailyMessageService } = require('../modules/community_daily-message/daily-message.service.js');
             const dailyService = container.resolve(DailyMessageService);
             const dailyData = await dailyService.generateDailyMessageContent(new Date());
             await dailyService.saveCurrentDraft(dailyData);
@@ -1479,7 +1479,7 @@ function createWebRouter(client) {
     router.post('/daily-messages/accept', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const { DailyMessageService } = require('../modules/community_daily-message/daily-message.service.js');
             const dailyService = container.resolve(DailyMessageService);
             const accepted = await dailyService.acceptDraft(req.body?.draft);
 
@@ -1498,7 +1498,7 @@ function createWebRouter(client) {
     router.post('/daily-messages/reject', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const { DailyMessageService } = require('../modules/community_daily-message/daily-message.service.js');
             const dailyService = container.resolve(DailyMessageService);
             await dailyService.rejectDraft();
 
@@ -1516,7 +1516,7 @@ function createWebRouter(client) {
     router.post('/daily-messages/regenerate', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const { DailyMessageService } = require('../modules/community_daily-message/daily-message.service.js');
             const dailyService = container.resolve(DailyMessageService);
             const newDraft = await dailyService.regenerateDraft(new Date());
 
@@ -1538,7 +1538,7 @@ function createWebRouter(client) {
     const handlePublishNow = async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { DailyMessageService } = require('../modules/feature_daily-message/daily-message.service.js');
+            const { DailyMessageService } = require('../modules/community_daily-message/daily-message.service.js');
             const dailyService = container.resolve(DailyMessageService);
 
             const text = req.body?.text || req.body?.content;
@@ -1648,8 +1648,8 @@ function createWebRouter(client) {
     router.get('/captcha-logs', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { SecurityQuestionService } = require('../modules/security_question/security-question.service.js');
-            const service = container.resolve(SecurityQuestionService);
+            const { CaptchaService } = require('../modules/security_captcha/captcha.service.js');
+            const service = container.resolve(CaptchaService);
             const overview = await service.getCaptchaOverview();
             res.json({
                 success: true,
@@ -1664,8 +1664,8 @@ function createWebRouter(client) {
     router.get(['/captcha-logs/messages', '/captcha-logs/:channelId/messages', '/captcha/messages'], async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { SecurityQuestionService } = require('../modules/security_question/security-question.service.js');
-            const service = container.resolve(SecurityQuestionService);
+            const { CaptchaService } = require('../modules/security_captcha/captcha.service.js');
+            const service = container.resolve(CaptchaService);
             const channelId = req.params?.channelId || req.query?.channel_id || req.query?.channelId;
             const userId = req.query?.user_id || req.query?.userId;
             const guildId = req.query?.guild_id || req.query?.guildId;

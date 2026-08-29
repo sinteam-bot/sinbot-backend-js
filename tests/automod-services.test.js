@@ -3,9 +3,9 @@
  */
 
 const assert = require('node:assert');
-const { SpamDetector } = require('../src/modules/feature_automod/services/spam-detector.service.js');
-const { BadWords } = require('../src/modules/feature_automod/services/bad-words.service.js');
-const { parseDuration } = require('../src/modules/feature_automod/services/sanctions.service.js');
+const { SpamDetector } = require('../src/modules/security_automod/services/spam-detector.service.js');
+const { BadWords } = require('../src/modules/security_automod/services/bad-words.service.js');
+const { parseDuration } = require('../src/modules/security_automod/services/sanctions.service.js');
 
 describe('SpamDetector', () => {
     test('détecte un rate de messages', () => {
