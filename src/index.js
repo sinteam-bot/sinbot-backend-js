@@ -360,6 +360,35 @@ client.on('error', error => {
 });
 
 // ============================================
+// Initialisation des data dir par guilde (Phase 5 du plan migrate-to-c12)
+// ============================================
+
+const { initGuildDataDir } = require('./config/c12-loader.js');
+
+client.on('guildCreate', async (guild) => {
+    try {
+        console.log(`📥 [GuildCreate] Nouveau serveur détecté : ${guild.name} (${guild.id})`);
+        const result = await initGuildDataDir(guild.id);
+        if (result.created > 0) {
+            console.log(`📁 [c12-loader] data/${guild.id}/ : ${result.created} fichier(s) initialisé(s)`);
+        }
+    } catch (err) {
+        console.error(`❌ [GuildCreate] Erreur init data dir pour ${guild.id}:`, err.message);
+    }
+});
+
+// Au démarrage, initialiser aussi le data dir pour toutes les guildes déjà connues
+client.once('clientReady', async () => {
+    try {
+        for (const [, guild] of client.guilds.cache) {
+            await initGuildDataDir(guild.id);
+        }
+    } catch (err) {
+        console.warn('[c12-loader] Erreur init data dirs au boot:', err.message);
+    }
+});
+
+// ============================================
 // CONNEXION DU BOT
 // ============================================
 

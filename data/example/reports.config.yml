@@ -1,0 +1,27 @@
+# data/example/reports.config.yml
+#
+# Template de configuration pour la feature "reports".
+# Généré automatiquement depuis src/modules/feature_reports/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/reports.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/reports.config.yml  (override par guilde, gitignore).
+enabled: false
+allowed_roles: []
+report_channel_id: null
+log_channel_id: null
+cooldown_seconds: 300
+max_open_per_user: 5
+dm_on_resolve: true
+categories:
+  - id: spam
+    label: 📧 Spam / Pub
+  - id: harassment
+    label: ⚠️ Harcèlement
+  - id: inappropriate
+    label: 🔞 Contenu inapproprié
+  - id: misinformation
+    label: ❌ Désinformation
+  - id: other
+    label: ❓ Autre

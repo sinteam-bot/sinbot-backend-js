@@ -15,7 +15,7 @@
 
 const sharedAudit = require('./shared/audit.js');
 const sharedCache = require('./shared/cache.js');
-const sharedFeatureFlags = require('./shared/feature-flags.js');
+const sharedGuildSettings = require('./shared/guild-settings.js');
 const sharedBotInfo = require('./shared/bot-info.js');
 const sharedOpenai = require('./shared/openai.js');
 
@@ -41,7 +41,7 @@ module.exports = {
     // Tables transverses (shared)
     ...sharedAudit,
     ...sharedCache,
-    ...sharedFeatureFlags,
+    ...sharedGuildSettings,
     ...sharedBotInfo,
     ...sharedOpenai,
 

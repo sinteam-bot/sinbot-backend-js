@@ -1,0 +1,14 @@
+# data/example/reaction_roles.config.yml
+#
+# Template de configuration pour la feature "reaction_roles".
+# Généré automatiquement depuis src/modules/feature_reaction-roles/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/reaction_roles.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/reaction_roles.config.yml  (override par guilde, gitignore).
+enabled: false
+allowed_roles: []
+max_per_message: 25
+unique_per_user: false
+self_assignable: true

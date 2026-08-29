@@ -1,0 +1,13 @@
+# data/example/info.config.yml
+#
+# Template de configuration pour la feature "info".
+# Généré automatiquement depuis src/modules/feature_info/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/info.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/info.config.yml  (override par guilde, gitignore).
+enabled: true
+color: "#5865F2"
+footer: Bot — Information
+show_id: true

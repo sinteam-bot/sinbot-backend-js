@@ -1,0 +1,50 @@
+# data/example/logs.config.yml
+#
+# Template de configuration pour la feature "logs".
+# Généré automatiquement depuis src/modules/feature_logs/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/logs.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/logs.config.yml  (override par guilde, gitignore).
+enabled: false
+allowed_roles: []
+channels:
+  moderation: null
+  messages: null
+  members: null
+  voice: null
+  roles: null
+  channels_log: null
+  server: null
+events:
+  message_delete: true
+  message_edit: true
+  message_bulk_delete: true
+  member_join: true
+  member_leave: true
+  member_update: true
+  member_ban_add: true
+  member_ban_remove: true
+  role_create: true
+  role_update: true
+  role_delete: true
+  channel_create: true
+  channel_update: true
+  channel_delete: true
+  voice_state_update: true
+  guild_update: true
+  emoji_create: true
+  emoji_delete: true
+format: embed
+color: "#2F3136"
+ignored_channels: []
+ignored_users: []
+whitelist_domains:
+  - discord.com
+  - discord.gg
+  - github.com
+settings:
+  max_content_length: 1024
+  truncate_attachments: true
+  live_feed_emit: true

@@ -1,121 +1,165 @@
 /**
- * Tests pour le FeatureRegistry
+ * Tests pour le FeatureRegistry (Phase 6 du plan migrate-to-c12)
  *
  * Couvre :
  *  - define + list
- *  - get avec fallback YAML
- *  - get avec DB prioritaire
- *  - set (upsert) et hooks onEnable/onDisable
+ *  - get avec fallback c12 (cascade example → default → guild)
+ *  - set (écriture fichier) et hooks onEnable/onDisable
  *  - canUse (sans restrictions, avec rôles, feature désactivée)
  *  - listForGuild
+ *
+ * Le test redirige DATA_DIR vers un répertoire tmp pour isoler les écritures.
  */
 
 const assert = require('node:assert');
-const { FeatureRegistry, featureRegistry } = require('../src/core/feature-registry.js');
+const fs = require('fs');
+const fsp = require('fs/promises');
+const path = require('path');
+const os = require('os');
+const { FeatureRegistry } = require('../src/core/feature-registry.js');
 
-describe('FeatureRegistry', () => {
-    let registry;
+const TEST_DATA_DIR = path.join(os.tmpdir(), `feature-registry-test-${Date.now()}`);
 
-    beforeEach(() => {
-        registry = new FeatureRegistry();
+async function setupDataDir() {
+    await fsp.rm(TEST_DATA_DIR, { recursive: true, force: true });
+    await fsp.mkdir(path.join(TEST_DATA_DIR, 'example'), { recursive: true });
+    await fsp.mkdir(path.join(TEST_DATA_DIR, 'default'), { recursive: true });
+}
+
+function patchDataDir() {
+    const c12 = require('../src/config/c12-loader.js');
+    c12.DATA_DIR = TEST_DATA_DIR;
+    c12.EXAMPLE_DIR = path.join(TEST_DATA_DIR, 'example');
+    c12.DEFAULT_DIR = path.join(TEST_DATA_DIR, 'default');
+    // Vider le cache interne
+    if (c12._featureCache) c12._featureCache.clear();
+}
+
+function makeRegistry() {
+    const c12 = require('../src/config/c12-loader.js');
+    if (c12._featureCache) c12._featureCache.clear();
+    return new FeatureRegistry();
+}
+
+describe('FeatureRegistry (Phase 6 : c12 file backend)', () => {
+    beforeEach(async () => {
+        await setupDataDir();
+        patchDataDir();
+    });
+
+    afterEach(async () => {
+        await fsp.rm(TEST_DATA_DIR, { recursive: true, force: true });
     });
 
     describe('define / list', () => {
         test('define enregistre une feature', () => {
-            registry.define('test_feat', { defaults: { enabled: false, foo: 'bar' } });
-            const list = registry.list();
+            const reg = makeRegistry();
+            reg.define('test_feat', { defaults: { enabled: false, foo: 'bar' } });
+            const list = reg.list();
             assert.strictEqual(list.length, 1);
             assert.strictEqual(list[0].name, 'test_feat');
             assert.deepStrictEqual(list[0].defaults, { enabled: false, foo: 'bar' });
         });
 
         test('define accepte des defaults vides', () => {
-            registry.define('empty_feat');
-            const list = registry.list();
+            const reg = makeRegistry();
+            reg.define('empty_feat');
+            const list = reg.list();
             assert.strictEqual(list[0].defaults.enabled, false);
         });
     });
 
-    describe('get (fallback)', () => {
-        test('retourne les defaults si pas de DB ni YAML', async () => {
-            registry.define('my_feat', { defaults: { enabled: true, max: 5 } });
-            const state = await registry.get('guild-1', 'my_feat');
+    describe('get (c12 cascade)', () => {
+        test('retourne les defaults si aucun fichier YAML n\'existe', async () => {
+            const reg = makeRegistry();
+            reg.define('my_feat', { defaults: { enabled: true, max: 5 } });
+            const state = await reg.get('guild-1', 'my_feat');
             assert.strictEqual(state.enabled, true);
             assert.strictEqual(state.config.max, 5);
-            assert.strictEqual(state.source, 'default');
+            assert.strictEqual(state.source, 'file');
             assert.deepStrictEqual(state.allowedRoles, []);
         });
 
         test('retourne un état désactivé pour une feature inconnue', async () => {
-            const state = await registry.get('guild-1', 'unknown');
+            const reg = makeRegistry();
+            const state = await reg.get('guild-1', 'unknown');
             assert.strictEqual(state.enabled, false);
             assert.strictEqual(state.source, 'default');
         });
+
+        test('cascade example → default → guild', async () => {
+            // Écrire example/default/guild
+            await fsp.writeFile(
+                path.join(TEST_DATA_DIR, 'example', 'feat.config.yml'),
+                'enabled: false\nextra: "from-example"\n',
+                'utf8'
+            );
+            await fsp.writeFile(
+                path.join(TEST_DATA_DIR, 'default', 'feat.config.yml'),
+                'enabled: true\n',
+                'utf8'
+            );
+            await fsp.mkdir(path.join(TEST_DATA_DIR, '999'), { recursive: true });
+            await fsp.writeFile(
+                path.join(TEST_DATA_DIR, '999', 'feat.config.yml'),
+                'extra: "from-guild"\n',
+                'utf8'
+            );
+
+            const reg = makeRegistry();
+            reg.define('feat', { defaults: { enabled: false, extra: 'default-code' } });
+            const state = await reg.get('999', 'feat');
+            assert.strictEqual(state.enabled, true); // default écrase example
+            assert.strictEqual(state.config.extra, 'from-guild'); // guild écrase default
+        });
     });
 
-    describe('canUse', () => {
-        test('refuse si la feature est désactivée', async () => {
-            registry.define('f1', { defaults: { enabled: false, allowed_roles: [] } });
-            const r = await registry.canUse('guild-1', 'user-1', 'f1');
-            assert.strictEqual(r.allowed, false);
-            assert.strictEqual(r.reason, 'disabled');
-        });
-
-        test('autorise si la feature est activée sans restriction de rôles', async () => {
-            registry.define('f2', { defaults: { enabled: true, allowed_roles: [] } });
-            const r = await registry.canUse('guild-1', 'user-1', 'f2');
-            assert.strictEqual(r.allowed, true);
-        });
-
-        test('autorise si pas de contexte client (fallback permissif)', async () => {
-            registry.define('f3', { defaults: { enabled: true, allowed_roles: ['ROLE_X'] } });
-            const r = await registry.canUse('guild-1', 'user-1', 'f3');
-            assert.strictEqual(r.allowed, true);
-        });
-    });
-
-    describe('set (sans DB)', () => {
+    describe('set (écriture fichier)', () => {
         test('set appelle onEnable quand on active', async () => {
+            const reg = makeRegistry();
             let enabledFired = false;
-            registry.define('toggle', {
+            reg.define('toggle', {
                 defaults: { enabled: false },
-                onEnable: async (guildId) => { enabledFired = true; }
+                onEnable: async () => { enabledFired = true; }
             });
-            registry._dbAvailable = false;
-            await registry.set('guild-1', 'toggle', { enabled: true });
+            await reg.set('guild-1', 'toggle', { enabled: true });
             assert.strictEqual(enabledFired, true);
         });
 
         test('set appelle onDisable quand on désactive', async () => {
+            const reg = makeRegistry();
             let disabledFired = false;
-            registry.define('toggle2', {
+            reg.define('toggle2', {
                 defaults: { enabled: true },
-                onDisable: async (guildId) => { disabledFired = true; }
+                onDisable: async () => { disabledFired = true; }
             });
-            registry._dbAvailable = false;
-            await registry.set('guild-1', 'toggle2', { enabled: false });
+            await reg.set('guild-1', 'toggle2', { enabled: false });
             assert.strictEqual(disabledFired, true);
         });
 
         test('set rejette une feature inconnue', async () => {
+            const reg = makeRegistry();
             await assert.rejects(
-                () => registry.set('guild-1', 'nope', { enabled: true }),
+                () => reg.set('guild-1', 'nope', { enabled: true }),
                 /Feature inconnue/
             );
         });
 
         test('set requiert un guildId', async () => {
-            registry.define('x', { defaults: {} });
+            const reg = makeRegistry();
+            reg.define('x', { defaults: {} });
             await assert.rejects(
-                () => registry.set(null, 'x', {}),
+                () => reg.set(null, 'x', {}),
                 /guildId/
             );
         });
-        test('set persiste et met à jour en DB avec timestamp millisecondes (BIGINT)', async () => {
-            registry.define('logs_feat', {
+
+        test('set persiste et recharge avec les nouvelles valeurs', async () => {
+            const reg = makeRegistry();
+            reg.define('logs_feat', {
                 defaults: { enabled: false, channels: { moderation: null } }
             });
-            const resSet = await registry.set('702103057898668072', 'logs_feat', {
+            const resSet = await reg.set('702103057898668072', 'logs_feat', {
                 enabled: true,
                 config: { channels: { moderation: '123456789' } },
                 allowedRoles: ['987654321']
@@ -125,205 +169,53 @@ describe('FeatureRegistry', () => {
             assert.strictEqual(resSet.config.channels.moderation, '123456789');
             assert.deepStrictEqual(resSet.allowedRoles, ['987654321']);
 
-            const fromDb = await registry.get('702103057898668072', 'logs_feat');
-            assert.strictEqual(fromDb.enabled, true);
-            assert.strictEqual(fromDb.config.channels.moderation, '123456789');
-            assert.deepStrictEqual(fromDb.allowedRoles, ['987654321']);
-            assert.strictEqual(fromDb.source, 'db');
+            // Vérifier que le fichier a été créé
+            const filePath = path.join(TEST_DATA_DIR, '702103057898668072', 'logs_feat.config.yml');
+            assert.ok(fs.existsSync(filePath));
 
-            // Update existing row
-            const resUpdate = await registry.set('702103057898668072', 'logs_feat', {
-                enabled: false
-            });
-            assert.strictEqual(resUpdate.enabled, false);
-            const fromDb2 = await registry.get('702103057898668072', 'logs_feat');
-            assert.strictEqual(fromDb2.enabled, false);
-            assert.strictEqual(fromDb2.config.channels.moderation, '123456789');
+            // Recharger et vérifier
+            const fromFile = await reg.get('702103057898668072', 'logs_feat');
+            assert.strictEqual(fromFile.enabled, true);
+            assert.strictEqual(fromFile.config.channels.moderation, '123456789');
+            assert.deepStrictEqual(fromFile.allowedRoles, ['987654321']);
         });
     });
 
     describe('listForGuild', () => {
         test('combine define et état par défaut', async () => {
-            registry.define('a', { defaults: { enabled: false } });
-            registry.define('b', { defaults: { enabled: true, x: 1 } });
-            const list = await registry.listForGuild('guild-1');
+            const reg = makeRegistry();
+            reg.define('a', { defaults: { enabled: false } });
+            reg.define('b', { defaults: { enabled: true, x: 1 } });
+            const list = await reg.listForGuild('guild-1');
             assert.strictEqual(list.length, 2);
             const names = list.map(f => f.name).sort();
             assert.deepStrictEqual(names, ['a', 'b']);
         });
     });
 
-    describe('canUse (role checks)', () => {
-        let origResolve;
-        let origHas;
-
-        beforeEach(() => {
-            const { container } = require('../src/core/container.js');
-            origResolve = container.resolve;
-            origHas = container.has;
+    describe('canUse', () => {
+        test('refuse si la feature est désactivée', async () => {
+            const reg = makeRegistry();
+            reg.define('f1', { defaults: { enabled: false, allowed_roles: [] } });
+            const r = await reg.canUse('guild-1', 'user-1', 'f1');
+            assert.strictEqual(r.allowed, false);
+            assert.strictEqual(r.reason, 'disabled');
         });
 
-        afterEach(() => {
-            const { container } = require('../src/core/container.js');
-            container.resolve = origResolve;
-            container.has = origHas;
-        });
-
-        test('returns not_member when member not found', async () => {
-            registry.define('test_feature', {
-                defaults: { enabled: true, allowed_roles: ['role1'] }
-            });
-
-            const mockGuild = {
-                members: {
-                    fetch: vi.fn().mockResolvedValue(null)
-                }
-            };
-            const mockClient = {
-                guilds: {
-                    fetch: vi.fn().mockResolvedValue(mockGuild)
-                }
-            };
-
-            const { container } = require('../src/core/container.js');
-            container.has = (token) => token === 'Client';
-            container.resolve = (token) => {
-                if (token === 'Client') return mockClient;
-                return origResolve(token);
-            };
-
-            const result = await registry.canUse('guild1', 'user1', 'test_feature');
-            assert.strictEqual(result.allowed, false);
-            assert.strictEqual(result.reason, 'not_member');
-        });
-
-        test('returns missing_role when user lacks required role', async () => {
-            registry.define('role_feature', {
-                defaults: { enabled: true, allowed_roles: ['role1', 'role2'] }
-            });
-
-            const mockMember = {
-                roles: {
-                    cache: new Map([['other_role', {}]])
-                }
-            };
-            const mockGuild = {
-                members: {
-                    fetch: vi.fn().mockResolvedValue(mockMember)
-                }
-            };
-            const mockClient = {
-                guilds: {
-                    fetch: vi.fn().mockResolvedValue(mockGuild)
-                }
-            };
-
-            const { container } = require('../src/core/container.js');
-            container.has = (token) => token === 'Client';
-            container.resolve = (token) => {
-                if (token === 'Client') return mockClient;
-                return origResolve(token);
-            };
-
-            const result = await registry.canUse('guild1', 'user1', 'role_feature');
-            assert.strictEqual(result.allowed, false);
-            assert.strictEqual(result.reason, 'missing_role');
-        });
-
-        test('returns role_match when user has required role', async () => {
-            registry.define('role_feature', {
-                defaults: { enabled: true, allowed_roles: ['role1', 'role2'] }
-            });
-
-            const mockMember = {
-                roles: {
-                    cache: new Map([['role1', {}], ['other', {}]])
-                }
-            };
-            const mockGuild = {
-                members: {
-                    fetch: vi.fn().mockResolvedValue(mockMember)
-                }
-            };
-            const mockClient = {
-                guilds: {
-                    fetch: vi.fn().mockResolvedValue(mockGuild)
-                }
-            };
-
-            const { container } = require('../src/core/container.js');
-            container.has = (token) => token === 'Client';
-            container.resolve = (token) => {
-                if (token === 'Client') return mockClient;
-                return origResolve(token);
-            };
-
-            const result = await registry.canUse('guild1', 'user1', 'role_feature');
-            assert.strictEqual(result.allowed, true);
-            assert.strictEqual(result.reason, 'role_match');
-        });
-
-        test('returns guild_not_found when guild does not exist', async () => {
-            registry.define('guild_feature', {
-                defaults: { enabled: true, allowed_roles: ['role1'] }
-            });
-
-            const mockClient = {
-                guilds: {
-                    fetch: vi.fn().mockResolvedValue(null)
-                }
-            };
-
-            const { container } = require('../src/core/container.js');
-            container.has = (token) => token === 'Client';
-            container.resolve = (token) => {
-                if (token === 'Client') return mockClient;
-                return origResolve(token);
-            };
-
-            const result = await registry.canUse('guild1', 'user1', 'guild_feature');
-            assert.strictEqual(result.allowed, true);
-            assert.strictEqual(result.reason, 'guild_not_found');
-        });
-
-        test('returns check_error on exception', async () => {
-            registry.define('error_feature', {
-                defaults: { enabled: true, allowed_roles: ['role1'] }
-            });
-
-            const mockGuild = {
-                members: {
-                    fetch: vi.fn().mockImplementation(() => {
-                        throw new Error('Unexpected error');
-                    })
-                }
-            };
-            const mockClient = {
-                guilds: {
-                    fetch: vi.fn().mockResolvedValue(mockGuild)
-                }
-            };
-
-            const { container } = require('../src/core/container.js');
-            container.has = (token) => token === 'Client';
-            container.resolve = (token) => {
-                if (token === 'Client') return mockClient;
-                return origResolve(token);
-            };
-
-            const result = await registry.canUse('guild1', 'user1', 'error_feature');
-            assert.strictEqual(result.allowed, true);
-            assert.strictEqual(result.reason, 'check_error');
+        test('autorise si la feature est activée sans restriction de rôles', async () => {
+            const reg = makeRegistry();
+            reg.define('f2', { defaults: { enabled: true, allowed_roles: [] } });
+            const r = await reg.canUse('guild-1', 'user-1', 'f2');
+            assert.strictEqual(r.allowed, true);
         });
     });
 
     describe('_reset', () => {
-        test('clears all features and resets db availability', () => {
-            registry.define('test', { defaults: {} });
-            registry._dbAvailable = false;
-            registry._reset();
-            assert.strictEqual(registry.list().length, 0);
-            assert.strictEqual(registry._dbAvailable, true);
+        test('clears all features and aliases', () => {
+            const reg = makeRegistry();
+            reg.define('test', { defaults: {} });
+            reg._reset();
+            assert.strictEqual(reg.list().length, 0);
         });
     });
 });

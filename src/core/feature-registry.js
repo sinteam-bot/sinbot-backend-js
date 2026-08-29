@@ -2,8 +2,11 @@
  * FeatureRegistry — registre central de features
  *
  * Permet d'activer / désactiver des features par guild, avec config et permissions
- * dédiés, en s'appuyant sur la table `feature_flags` (priorité haute) puis
- * sur la config YAML (fallback) puis sur les defaults du code.
+ * dédiés, en s'appuyant sur c12 (https://github.com/unjs/c12) pour la persistance
+ * fichier (data/{guildId}/<feature>.config.yml) avec hot reload.
+ *
+ * Plus de table DB `feature_flags` : tout est en fichiers YAML versionnés/gitignorés
+ * selon les conventions définies dans docs/plan/migrate-to-c12.md.
  *
  * Usage :
  *   const { featureRegistry } = require('../core/feature-registry');
@@ -23,34 +26,25 @@
  *
  *   // Vérifier l'accès d'un utilisateur
  *   const access = await featureRegistry.canUse(guildId, userId, 'automod');
+ *
+ * Phase 6 du plan migrate-to-c12.md.
  */
 
-const { db, schema } = require('../db/index.js');
-const { and, eq } = require('drizzle-orm');
-const { getConfig } = require('../config/index.js');
+const { getFeatureConfig, setFeatureConfig, watchFeatureConfig, unwatchFeatureConfig } =
+    require('../config/c12-loader.js');
 const { eventBus } = require('./event-bus.js');
+const { getConfig } = require('../config/index.js');
 
 class FeatureRegistry {
     constructor() {
         this.features = new Map();
-        this._dbAvailable = true;
         // Aliases : noms acceptés vers le nom canonique déclaré.
-        // Utile pour les features dont le nom de dossier historique
-        // (ex. `security_question`) ne correspond pas au nom de feature
-        // canonique (ex. `captcha`).
         this._aliases = new Map();
     }
 
     /**
-     * Déclare une feature dans le registre
-     * @param {string} name
-     * @param {{
-     *   defaults?: object,
-     *   configSchema?: object,
-     *   onEnable?: (guildId: string) => Promise<void>,
-     *   onDisable?: (guildId: string) => Promise<void>,
-     *   aliases?: string[]
-     * }} definition
+     * Déclare une feature dans le registre (en mémoire seulement).
+     * La persistance est gérée par c12 (fichiers).
      */
     define(name, definition = {}) {
         this.features.set(name, {
@@ -78,7 +72,7 @@ class FeatureRegistry {
     }
 
     /**
-     * Liste toutes les features déclarées
+     * Liste toutes les features déclarées.
      */
     list() {
         return Array.from(this.features.entries()).map(([name, def]) => ({
@@ -89,74 +83,54 @@ class FeatureRegistry {
 
     /**
      * Récupère l'état complet d'une feature pour un guild.
-     * Ordre de priorité : DB > YAML (features.*) > YAML legacy > defaults
+     * Source unique : c12 (cascade example → default → guild).
      */
     async get(guildId, name) {
         name = this._resolveName(name);
         const def = this.features.get(name);
         const defaults = def?.defaults || { enabled: false };
 
+        // Si la feature n'est même pas déclarée, on retourne direct les
+        // defaults (pas d'appel c12, car aucun fichier n'existera pour elle).
+        if (!def) {
+            return {
+                enabled: !!defaults.enabled,
+                config: { ...defaults },
+                allowedRoles: defaults.allowed_roles || [],
+                source: 'default'
+            };
+        }
+
         if (!guildId) {
-            return { ...defaults, allowedRoles: [], source: 'default' };
-        }
-
-        if (this._dbAvailable) {
-            try {
-                const rows = await db.select()
-                    .from(schema.featureFlags)
-                    .where(and(
-                        eq(schema.featureFlags.guildId, guildId),
-                        eq(schema.featureFlags.featureName, name)
-                    ))
-                    .limit(1);
-
-                if (rows[0]) {
-                    let config = {};
-                    let allowedRoles = [];
-                    try { config = JSON.parse(rows[0].configJson || '{}'); } catch { config = {}; }
-                    try { allowedRoles = JSON.parse(rows[0].allowedRoles || '[]'); } catch { allowedRoles = []; }
-                    return {
-                        enabled: !!rows[0].enabled,
-                        config: { ...defaults, ...config },
-                        allowedRoles,
-                        source: 'db'
-                    };
-                }
-            } catch (err) {
-                console.warn(`⚠️ [FeatureRegistry] Erreur lecture DB, fallback YAML pour "${name}": ${err.message}`);
-            }
-        }
-
-        const yamlConfig = getConfig();
-        const featuresSection = yamlConfig.features || {};
-        if (featuresSection[name] !== undefined) {
             return {
-                enabled: !!featuresSection[name].enabled,
-                config: { ...defaults, ...featuresSection[name] },
-                allowedRoles: featuresSection[name].allowed_roles || [],
-                source: 'yaml:features'
+                enabled: !!defaults.enabled,
+                config: { ...defaults },
+                allowedRoles: defaults.allowed_roles || [],
+                source: 'default'
             };
         }
 
-        if (yamlConfig[name] !== undefined) {
+        try {
+            const merged = await getFeatureConfig(guildId, name);
             return {
-                enabled: !!yamlConfig[name].enabled,
-                config: { ...defaults, ...yamlConfig[name] },
-                allowedRoles: yamlConfig[name].allowed_roles || [],
-                source: 'yaml:legacy'
+                enabled: merged.enabled !== undefined ? !!merged.enabled : !!defaults.enabled,
+                config: { ...defaults, ...merged },
+                allowedRoles: merged.allowed_roles || defaults.allowed_roles || [],
+                source: 'file'
+            };
+        } catch (err) {
+            console.warn(`⚠️ [FeatureRegistry] Erreur lecture c12 pour "${name}" (guild ${guildId}): ${err.message}`);
+            return {
+                enabled: !!defaults.enabled,
+                config: { ...defaults },
+                allowedRoles: defaults.allowed_roles || [],
+                source: 'default'
             };
         }
-
-        return {
-            enabled: !!defaults.enabled,
-            config: { ...defaults },
-            allowedRoles: defaults.allowed_roles || [],
-            source: 'default'
-        };
     }
 
     /**
-     * Met à jour l'état d'une feature (upsert en DB)
+     * Met à jour l'état d'une feature (écrit dans le YAML via c12).
      */
     async set(guildId, name, { enabled, config, allowedRoles, updatedBy } = {}) {
         name = this._resolveName(name);
@@ -165,62 +139,48 @@ class FeatureRegistry {
             throw new Error(`Feature inconnue: "${name}"`);
         }
 
-        const def = this.features.get(name);
         const existing = await this.get(guildId, name);
         const newEnabled = enabled !== undefined ? !!enabled : !!existing.enabled;
-        const newConfig = config !== undefined ? config : existing.config;
+        // On retire 'enabled' du config existant pour éviter de l'écraser
+        // avec la valeur stale lors du spread ci-dessous.
+        const existingConfigNoEnabled = { ...existing.config };
+        delete existingConfigNoEnabled.enabled;
+        const newConfig = config !== undefined
+            ? { ...existingConfigNoEnabled, ...config }
+            : existing.config;
         const newAllowedRoles = allowedRoles !== undefined ? allowedRoles : existing.allowedRoles;
-        const now = Date.now();
 
-        if (this._dbAvailable) {
-            try {
-                const existingRow = await db.select()
-                    .from(schema.featureFlags)
-                    .where(and(
-                        eq(schema.featureFlags.guildId, guildId),
-                        eq(schema.featureFlags.featureName, name)
-                    ))
-                    .limit(1);
+        // Patch à appliquer (c12 merge)
+        const patch = {
+            enabled: newEnabled,
+            ...newConfig,
+            allowed_roles: newAllowedRoles
+        };
 
-                if (existingRow[0]) {
-                    await db.update(schema.featureFlags)
-                        .set({
-                            enabled: newEnabled ? 1 : 0,
-                            configJson: JSON.stringify(newConfig),
-                            allowedRoles: JSON.stringify(newAllowedRoles),
-                            updatedBy: updatedBy || null,
-                            updatedAt: now
-                        })
-                        .where(and(
-                            eq(schema.featureFlags.guildId, guildId),
-                            eq(schema.featureFlags.featureName, name)
-                        ));
-                } else {
-                    await db.insert(schema.featureFlags)
-                        .values({
-                            guildId,
-                            featureName: name,
-                            enabled: newEnabled ? 1 : 0,
-                            configJson: JSON.stringify(newConfig),
-                            allowedRoles: JSON.stringify(newAllowedRoles),
-                            updatedBy: updatedBy || null,
-                            updatedAt: now
-                        });
-                }
-            } catch (err) {
-                throw new Error(`Impossible d'écrire en DB: ${err.message}`);
+        // c12 écrit dans data/{guildId}/{name}.config.yml
+        try {
+            await setFeatureConfig(guildId, name, patch);
+        } catch (err) {
+            throw new Error(`Impossible d'écrire le fichier config: ${err.message}`);
+        }
+
+        // Hooks onEnable / onDisable
+        const def = this.features.get(name);
+        if (newEnabled && def.onEnable) {
+            try { await def.onEnable(guildId); } catch (e) {
+                console.error(`[FeatureRegistry] onEnable(${name}) error:`, e.message);
+            }
+        }
+        if (!newEnabled && def.onDisable) {
+            try { await def.onDisable(guildId); } catch (e) {
+                console.error(`[FeatureRegistry] onDisable(${name}) error:`, e.message);
             }
         }
 
-        if (newEnabled && def.onEnable) {
-            try { await def.onEnable(guildId); } catch (e) { console.error(`[FeatureRegistry] onEnable(${name}) error:`, e.message); }
-        }
-        if (!newEnabled && def.onDisable) {
-            try { await def.onDisable(guildId); } catch (e) { console.error(`[FeatureRegistry] onDisable(${name}) error:`, e.message); }
-        }
-
+        // Émettre l'event pour les listeners (déjà fait par setFeatureConfig,
+        // mais on le ré-émet ici pour la rétrocompat)
         try {
-            eventBus.emit('feature.updated', { guildId, name, enabled: newEnabled });
+            eventBus.emit('feature.updated', { guildId, name, enabled: newEnabled, updatedBy });
         } catch (err) {
             console.warn(`[FeatureRegistry] Erreur émission event 'feature.updated':`, err.message);
         }
@@ -229,12 +189,12 @@ class FeatureRegistry {
             enabled: newEnabled,
             config: newConfig,
             allowedRoles: newAllowedRoles,
-            source: 'db'
+            source: 'file'
         };
     }
 
     /**
-     * Liste les features avec leur état pour un guild
+     * Liste les features avec leur état pour un guild.
      */
     async listForGuild(guildId) {
         const features = this.list();
@@ -246,6 +206,17 @@ class FeatureRegistry {
                 state
             };
         }));
+    }
+
+    /**
+     * Active le hot reload sur une feature (dev only, no-op en prod).
+     */
+    watchFeature(guildId, name) {
+        return watchFeatureConfig(guildId, name);
+    }
+
+    unwatchFeature(guildId, name) {
+        return unwatchFeatureConfig(guildId, name);
     }
 
     /**
@@ -262,7 +233,6 @@ class FeatureRegistry {
         }
 
         try {
-            const { getConfig } = require('../config/index.js');
             const guildIdEnv = getConfig().discord?.guild_id || process.env.GUILD_ID;
             if (!guildIdEnv) return { allowed: true, reason: 'no_guild_context' };
 
@@ -291,7 +261,7 @@ class FeatureRegistry {
      */
     _reset() {
         this.features.clear();
-        this._dbAvailable = true;
+        this._aliases.clear();
     }
 }
 

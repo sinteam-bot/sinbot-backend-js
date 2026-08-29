@@ -1,0 +1,89 @@
+# data/base.config.yml
+#
+# Configuration globale par défaut (infrastructure).
+# Ce fichier est VERSIONNÉ dans git et sert de base commune.
+# Les overrides se font dans <env>.config.yml (gitignore)
+#
+# Hiérarchie c12 :
+#   1. data/base.config.yml       (ce fichier, infra)
+#   2. data/{NODE_ENV}.config.yml   (production.config.yml, test.config.yml, etc.)
+#   3. env vars (CONFIG_*)
+#
+# ⚠️ NOTE MIGRATION : ce fichier est généré depuis config.yml (racine).
+# Les sections "features.*" ont été retirées — elles sont maintenant dans
+# data/{guildId}/<feature>.config.yml (cf. plan migrate-to-c12.md).
+
+# === Database ===
+database:
+  type: postgres
+  url: votre_bdd
+
+# === Web server ===
+web:
+  port: 3000
+  auth:
+    enabled: false
+    api_key: changez_cette_cle_secrete
+    protect_static: false
+    allowed_ips: []
+  api:
+    rate_limit:
+      window_ms: 60000
+      max_requests: 200
+    cors:
+      enabled: true
+      origins:
+        - http://localhost:3001
+  webhook:
+    enabled: false
+    port: 3001
+    auth_token: ''
+    rate_limit: 100
+
+# === Scheduler ===
+scheduler:
+  enabled: true
+  timezone: Europe/Paris
+  tasks:
+    bump_reminders:
+      enabled: false
+      cron: '* * * * *'
+    daily_preview:
+      enabled: true
+      cron: 0 21 * * *
+    daily_publish:
+      enabled: true
+      cron: 0 9 * * *
+    daily_autovalidate:
+      enabled: true
+      cron: 0 11 * * *
+
+# === OpenRouter (IA) ===
+openrouter:
+  default_model: openrouter/free
+  max_tokens: 500
+  temperature: 0.7
+  fallback_models: []
+  retry_policy: {}
+
+# === Discord ===
+discord:
+  token: ''
+  client_id: ''
+  default_color: '#000000'
+
+# === Logger ===
+logger:
+  level: info
+  format: json
+  console: true
+  file:
+    enabled: true
+    path: ./data/logs
+
+# === Features ===
+features:
+  automod: false
+  birthdays: false
+  economy: false
+  engagement: false

@@ -1,0 +1,13 @@
+# data/example/sticky_roles.config.yml
+#
+# Template de configuration pour la feature "sticky_roles".
+# Généré automatiquement depuis src/modules/feature_sticky-roles/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/sticky_roles.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/sticky_roles.config.yml  (override par guilde, gitignore).
+enabled: false
+allowed_roles: []
+max_per_user: 10
+restore_delay_ms: 2000

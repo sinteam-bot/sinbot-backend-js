@@ -1,0 +1,17 @@
+# data/example/temp_voice.config.yml
+#
+# Template de configuration pour la feature "temp_voice".
+# Généré automatiquement depuis src/modules/feature_temp-voice/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/temp_voice.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/temp_voice.config.yml  (override par guilde, gitignore).
+enabled: false
+allowed_roles: []
+join_channels: []
+category_id: null
+format: "{user}'s game"
+delete_delay_seconds: 5
+max_per_guild: 0
+locked_role_id: null

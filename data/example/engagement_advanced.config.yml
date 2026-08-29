@@ -1,0 +1,20 @@
+# data/example/engagement_advanced.config.yml
+#
+# Template de configuration pour la feature "engagement_advanced".
+# Généré automatiquement depuis src/modules/feature_engagement-advanced/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/engagement_advanced.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/engagement_advanced.config.yml  (override par guilde, gitignore).
+enabled: false
+allowed_roles: []
+reminders:
+  default_cooldown_seconds: 5
+  max_per_user: 20
+word_triggers:
+  default_cooldown_seconds: 10
+  default_match_type: exact
+custom_commands:
+  default_cooldown_seconds: 5
+  prefix: "!"

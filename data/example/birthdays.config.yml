@@ -1,0 +1,30 @@
+# data/example/birthdays.config.yml
+#
+# Template de configuration pour la feature "birthdays".
+# Généré automatiquement depuis src/modules/feature_birthdays/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/birthdays.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/birthdays.config.yml  (override par guilde, gitignore).
+enabled: false
+allowed_roles: []
+mode: public
+default_visibility: true
+announce:
+  channel_id: null
+  hour: 9
+  timezone: Europe/Paris
+  ping_role_id: null
+  message_template: 🎂 Joyeux anniversaire {user} ! {% if age %} Tu fêtes tes **{age} ans** aujourd'hui ! {% endif %} 🎉
+temp_role:
+  enabled: true
+  role_id: null
+gifts:
+  max_per_user: 2
+  xp_per_birthday: 500
+cooldown:
+  first_change_days: 1
+  second_change_days: 2
+  third_change_days: 180
+  default_change_days: 365

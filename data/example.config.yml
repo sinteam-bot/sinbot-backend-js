@@ -1,0 +1,8 @@
+# data/example.config.yml
+#
+# Ce fichier Overrides data/base.config.yml
+# Utilisé uniquement en développement (NODE_ENV !== 'production').
+#
+# Exemple :
+# logger.level: debug
+# database_url: postgresql://dev:dev@localhost:5432/devdb

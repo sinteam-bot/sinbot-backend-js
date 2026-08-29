@@ -4,7 +4,12 @@ node_modules/
 *.log
 pm2-logs/
 src/.env
-data/
+data/**/
+!data/example/
+data/*.config.yml
+!data/base.config.yml
+!data/example.config.yml
+
 logs/
 .deno_lsp/
 .kilo/

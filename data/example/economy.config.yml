@@ -1,0 +1,26 @@
+# data/example/economy.config.yml
+#
+# Template de configuration pour la feature "economy".
+# Généré automatiquement depuis src/modules/feature_economy/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/economy.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/economy.config.yml  (override par guilde, gitignore).
+enabled: false
+allowed_roles: []
+daily_reward: 100
+cooldown_hours: 22
+starting_balance: 0
+tax_percent: 0
+max_balance: 999999999
+shop:
+  max_items: 100
+inventory:
+  max_per_user: 200
+  max_quantity_per_item: 999
+drops:
+  default_duration_min: 2
+  max_duration_min: 10
+  require_button: true
+history_retention_days: 90
