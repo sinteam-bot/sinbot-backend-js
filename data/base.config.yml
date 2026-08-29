@@ -87,3 +87,8 @@ features:
   birthdays: false
   economy: false
   engagement: false
+  giveaways: false
+  polls: false
+  reminders: false
+  word_triggers: false
+  custom_commands: false
