@@ -1,3 +1,5 @@
+const { PollService } = require('../services/poll.service.js');
+
 class PollsController {
     static inject = [PollService];
 

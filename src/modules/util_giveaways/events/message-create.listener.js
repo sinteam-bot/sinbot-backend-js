@@ -21,18 +21,19 @@ class GiveawayInteractionListener {
         if (!interaction.isButton()) return;
         const customId = interaction.customId || '';
 
-        if (customId.startsWith('handlegiveawayenter(interaction, customid) {:')) {
-            return this.__handleGiveawayEnter(interaction, customId);
+        if (customId.startsWith('giveaway:enter:')) {
+            return this._handleEnter(interaction, customId);
         }
     }
 
+    async _handleEnter(interaction, customId) {
         const id = customId.split(':')[2];
-        const state = await featureRegistry.get(interaction.guild.id, 'engagement');
-        if (!state.enabled) {
+        const state = await featureRegistry.get(interaction.guild.id, 'giveaways');
+        if (!state || !state.enabled) {
             return interaction.reply({ content: '❌ Giveaways désactivés', ephemeral: true });
         }
 
-        const r = await this.giveaway.enter(id, interaction.user.id);
+        const r = await this.service.enter(id, interaction.user.id);
         if (!r.ok) {
             const msg = {
                 not_found: '❌ Giveaway introuvable',
@@ -44,16 +45,15 @@ class GiveawayInteractionListener {
             return interaction.reply({ content: msg, ephemeral: true });
         }
 
-        // Met à jour le compteur dans l'embed
         try {
-            const g = await this.giveaway.get(id);
-            const count = await this.giveaway.countEntries(id);
-            const updatedEmbed = await this.giveaway.buildUpdatedEmbed(g, count);
+            const g = await this.service.get(id);
+            const count = await this.service.countEntries(id);
+            const updatedEmbed = await this.service.buildUpdatedEmbed(g, count);
             await interaction.message.edit({ embeds: [updatedEmbed] }).catch(err => {
-                console.warn('[EngagementListener] Échec edit message giveaway:', err.message);
+                console.warn('[GiveawayListener] Échec edit message giveaway:', err.message);
             });
         } catch (err) {
-            console.warn('[EngagementListener] Erreur refresh compteur giveaway:', err.message);
+            console.warn('[GiveawayListener] Erreur refresh compteur giveaway:', err.message);
         }
 
         return interaction.reply({ content: '🎉 Tu participes au giveaway !', ephemeral: true });

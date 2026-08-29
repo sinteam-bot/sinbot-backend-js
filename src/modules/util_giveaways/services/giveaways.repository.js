@@ -2,6 +2,12 @@
  * giveaways.repository.js
  */
 const { db } = require('../../../db/index.js');
+
+function safeParse(str, fallback) {
+    if (!str) return fallback;
+    try { return JSON.parse(str); } catch { return fallback; }
+}
+
 class GiveawaysRepository {
     // =================== GIVEAWAYS ===================
 
@@ -18,58 +24,55 @@ class GiveawaysRepository {
         const allowed = ['message_id', 'status', 'winners_json', 'updated_at'];
         const setSql = [];
         const params = [];
-        for (const [k, v] of Object.entries(fields)) {
-            const col = k.replace(/[A-Z]/g, c => '_' + c.toLowerCase());
-            if (allowed.includes(col)) {
-                params.push(v);
-                setSql.push(`${col} = $${params.length}`);
+        let i = 1;
+        for (const key of allowed) {
+            if (fields[key === 'message_id' ? 'messageId' : key === 'status' ? 'status' : key === 'winners_json' ? 'winnersJson' : 'updatedAt'] !== undefined) {
+                const val = key === 'winners_json' ? JSON.stringify(fields.winnersJson) :
+                            key === 'updated_at' ? Date.now() :
+                            fields[key === 'message_id' ? 'messageId' : 'status'];
+                setSql.push(`${key} = $${i++}`);
+                params.push(val);
             }
         }
-        if (setSql.length === 0) return;
+        if (setSql.length === 0) return null;
         params.push(id);
         await db.pool.query(
-            `UPDATE giveaways SET ${setSql.join(', ')} WHERE id = $${params.length}`,
+            `UPDATE giveaways SET ${setSql.join(', ')} WHERE id = $${i}`,
             params
         );
+        return this.getGiveaway(id);
     }
 
-    async findGiveawayById(id) {
+    async getGiveaway(id) {
         const res = await db.pool.query(`SELECT * FROM giveaways WHERE id = $1 LIMIT 1`, [id]);
         return res.rows?.[0] ? this._mapGiveaway(res.rows[0]) : null;
     }
 
-    async findGiveawayByMessageId(messageId) {
+    async getGiveawayByMessageId(messageId) {
         const res = await db.pool.query(`SELECT * FROM giveaways WHERE message_id = $1 LIMIT 1`, [messageId]);
         return res.rows?.[0] ? this._mapGiveaway(res.rows[0]) : null;
     }
 
-    async findGiveawayByChannelId(channelId, status = null) {
-        const where = ['channel_id = $1'];
-        const params = [channelId];
-        if (status) { params.push(status); where.push(`status = $${params.length}`); }
+    async listGiveawaysByChannel(channelId) {
         const res = await db.pool.query(
-            `SELECT * FROM giveaways WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT 1`,
-            params
-        );
-        return res.rows?.[0] ? this._mapGiveaway(res.rows[0]) : null;
-    }
-
-    async listGiveaways({ guildId, status, limit = 50, offset = 0 } = {}) {
-        const where = [];
-        const args = [];
-        if (guildId) { args.push(guildId); where.push(`guild_id = $${args.length}`); }
-        if (status) { args.push(status); where.push(`status = $${args.length}`); }
-        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-        args.push(limit, offset);
-        const res = await db.pool.query(
-            `SELECT * FROM giveaways ${whereSql} ORDER BY created_at DESC LIMIT $${args.length - 1} OFFSET $${args.length}`,
-            args
+            `SELECT * FROM giveaways WHERE channel_id = $1 AND status = 'active' ORDER BY ends_at ASC`,
+            [channelId]
         );
         return (res.rows || []).map(r => this._mapGiveaway(r));
     }
 
-    async findDueGiveaways(limit = 50) {
-        const now = Date.now();
+    async listGiveaways(guildId, status = null) {
+        const params = [guildId];
+        let where = `guild_id = $1`;
+        if (status) { where += ` AND status = $2`; params.push(status); }
+        const res = await db.pool.query(
+            `SELECT * FROM giveaways WHERE ${where} ORDER BY ends_at ASC`,
+            params
+        );
+        return (res.rows || []).map(r => this._mapGiveaway(r));
+    }
+
+    async findDueGiveaways(now, limit = 20) {
         const res = await db.pool.query(
             `SELECT * FROM giveaways WHERE status = 'active' AND ends_at <= $1 ORDER BY ends_at ASC LIMIT $2`,
             [now, limit]
@@ -77,33 +80,29 @@ class GiveawaysRepository {
         return (res.rows || []).map(r => this._mapGiveaway(r));
     }
 
-    async addEntry(giveawayId, userId) {
-        const now = Date.now();
-        try {
-            await db.pool.query(
-                `INSERT INTO giveaway_entries (giveaway_id, user_id, entered_at) VALUES ($1, $2, $3)`,
-                [giveawayId, userId, now]
-            );
-            return true;
-        } catch (err) {
-            return false; // duplicate PK
-        }
+    // =================== ENTRIES ===================
+
+    async insertEntry(giveawayId, userId) {
+        await db.pool.query(
+            `INSERT INTO giveaway_entries (giveaway_id, user_id, entered_at) VALUES ($1, $2, $3)
+             ON CONFLICT (giveaway_id, user_id) DO NOTHING`,
+            [giveawayId, userId, Date.now()]
+        );
     }
 
-    async removeEntry(giveawayId, userId) {
-        const res = await db.pool.query(
+    async deleteEntry(giveawayId, userId) {
+        await db.pool.query(
             `DELETE FROM giveaway_entries WHERE giveaway_id = $1 AND user_id = $2`,
             [giveawayId, userId]
         );
-        return res.rowCount || 0;
     }
 
-    async listEntries(giveawayId) {
+    async hasEntry(giveawayId, userId) {
         const res = await db.pool.query(
-            `SELECT * FROM giveaway_entries WHERE giveaway_id = $1 ORDER BY entered_at ASC`,
-            [giveawayId]
+            `SELECT 1 FROM giveaway_entries WHERE giveaway_id = $1 AND user_id = $2 LIMIT 1`,
+            [giveawayId, userId]
         );
-        return res.rows || [];
+        return res.rows?.length > 0;
     }
 
     async countEntries(giveawayId) {
@@ -135,6 +134,5 @@ class GiveawaysRepository {
         };
     }
 }
-function safeParse(str, fallback) {
-    try { return JSON.parse(str); } catch { return fallback; }
+
 module.exports = { GiveawaysRepository };

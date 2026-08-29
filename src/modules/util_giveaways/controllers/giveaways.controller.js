@@ -19,7 +19,7 @@
 
 const { Controller, Get, Post } = require('../../../core/index.js');
 const { GiveawayService } = require('../services/giveaway.service.js');
-const { PollService } = require('../services/poll.service.js');
+const { PollService } = require('../../util_polls/services/poll.service.js');
 
 class GiveawaysController {
     static inject = [GiveawayService];

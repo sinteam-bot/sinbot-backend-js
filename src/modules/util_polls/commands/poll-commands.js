@@ -6,9 +6,15 @@
  * Issue du split de game_engagement/ (Phase 9.2 du plan migrate-to-c12).
  */
 
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { Command } = require('../../../core/index.js');
 const { PollService } = require('../services/poll.service.js');
+
+function requireMod(interaction) {
+    const member = interaction.member;
+    if (!member) return false;
+    return member.permissions?.has?.(PermissionFlagsBits.ManageMessages) || false;
+}
 
 class PollCommands {
     static inject = [PollService];
@@ -19,42 +25,39 @@ class PollCommands {
             return interaction.reply({ content: '❌ Réservé aux modérateurs', ephemeral: true });
         }
         const question = interaction.options.getString('question');
+        const optionsStr = interaction.options.getString('options');
         const duration = interaction.options.getString('duration');
         const multiChoice = interaction.options.getBoolean('multi_choice') || false;
-        const optsStr = interaction.options.getString('options');
 
-        const options = optsStr.split('|').map(s => s.trim()).filter(Boolean);
+        const options = optionsStr.split('|').map(s => s.trim()).filter(Boolean);
         if (options.length < 2 || options.length > 10) {
-            return interaction.reply({ content: '❌ 2 à 10 options attendues (séparées par |)', ephemeral: true });
+            return interaction.reply({ content: '❌ Il faut entre 2 et 10 options', ephemeral: true });
         }
-        const durationMs = duration === 'never' ? null : this._parseDuration(duration);
-        if (duration !== 'never' && !durationMs) {
-            return interaction.reply({ content: '❌ Durée invalide', ephemeral: true });
+
+        const endsAt = duration === 'never' ? null : this._parseDuration(duration);
+        if (duration !== 'never' && !endsAt) {
+            return interaction.reply({ content: '❌ Durée invalide (ex: 1h, 1d, never)', ephemeral: true });
         }
 
         try {
-            const p = await this.poll.create({
+            const p = await this.service.create({
                 guildId: interaction.guild.id,
                 channelId: interaction.channel.id,
                 question,
                 options,
                 multiChoice,
-                anonymous: false,
-                durationMs,
+                endsAt,
                 createdBy: interaction.user.id
             });
-            const embed = await this.poll.buildEmbed(p);
-            const row = new ActionRowBuilder();
-            for (let i = 0; i < options.length; i++) {
-                row.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`poll:vote:${p.id}:${i}`)
-                        .setLabel(`${i + 1}. ${options[i].slice(0, 30)}`)
-                        .setStyle(ButtonStyle.Secondary)
-                );
-            }
+            const embed = this.service.buildEmbed(p);
+            const row = new ActionRowBuilder().addComponents(
+                options.map((opt, i) => new ButtonBuilder()
+                    .setCustomId(`poll:vote:${p.id}:${i}`)
+                    .setLabel(opt)
+                    .setStyle(ButtonStyle.Primary))
+            );
             const sent = await interaction.reply({ embeds: [embed], components: [row], fetchReply: true });
-            await this.poll.setMessageId(p.id, sent.id);
+            await this.service.setMessageId(p.id, sent.id);
             return { id: p.id };
         } catch (err) {
             return interaction.editReply({ content: `❌ ${err.message}` });
@@ -66,19 +69,17 @@ class PollCommands {
             return interaction.reply({ content: '❌ Réservé aux modérateurs', ephemeral: true });
         }
         const id = interaction.options.getString('id');
-        const p = await this.poll.end(id);
+        const p = await this.service.end(id);
         if (!p) return interaction.reply({ content: '❌ Sondage introuvable', ephemeral: true });
-        const tally = await this.poll.tally(id);
-        const lines = tally.perOption.map(o => `**${o.index + 1}.** ${o.label}: ${o.count}`);
-        return interaction.reply({ content: `📊 Sondage terminé\n\n${lines.join('\n')}` });
+        return interaction.reply({ content: '✅ Sondage fermé' });
     }
 
     async executePollList(interaction) {
-        const list = await this.poll.list({ guildId: interaction.guild.id, status: 'active', limit: 25 });
+        const list = await this.service.list({ guildId: interaction.guild.id, status: 'active', limit: 25 });
         if (list.length === 0) {
             return interaction.reply({ content: 'ℹ️ Aucun sondage actif', ephemeral: true });
         }
-        const lines = list.map(p => `• **${p.question}** — ${p.options.length} options${p.endsAt ? ` — finit <t:${Math.floor(p.endsAt / 1000)}:R>` : ''}`);
+        const lines = list.map(p => `• **${p.question}** — ${(p.options || []).length} options`);
         return interaction.reply({ content: lines.join('\n'), ephemeral: true });
     }
 
@@ -87,12 +88,21 @@ class PollCommands {
             return interaction.reply({ content: '❌ Réservé aux modérateurs', ephemeral: true });
         }
         const id = interaction.options.getString('id');
-        const p = await this.poll.get(id);
+        const p = await this.service.get(id);
         if (!p) return interaction.reply({ content: '❌ Sondage introuvable', ephemeral: true });
-        await this.poll.end(id);
+        await this.service.end(id);
         return interaction.reply({ content: '✅ Sondage fermé' });
     }
 
+    _parseDuration(str) {
+        const m = String(str || '').match(/^(\d+)\s*([smhd])$/i);
+        if (!m) return null;
+        const n = parseInt(m[1], 10);
+        const unit = m[2].toLowerCase();
+        const mult = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[unit];
+        return Date.now() + n * mult;
+    }
+}
 
 const pollCreateBuilder = new SlashCommandBuilder()
     .setName('poll-create')
@@ -119,16 +129,9 @@ const pollDeleteBuilder = new SlashCommandBuilder()
     .addStringOption(o => o.setName('id').setDescription('ID du sondage').setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
 
-Command({ name: 'poll-create', builder: pollCreateBuilder })(EngagementCommands.prototype, 'executePollCreate');
-Command({ name: 'poll-end', builder: pollEndBuilder })(EngagementCommands.prototype, 'executePollEnd');
-Command({ name: 'poll-list', builder: pollListBuilder })(EngagementCommands.prototype, 'executePollList');
-Command({ name: 'poll-delete', builder: pollDeleteBuilder })(EngagementCommands.prototype, 'executePollDelete');
+Command({ name: 'poll-create', builder: pollCreateBuilder })(PollCommands.prototype, 'executePollCreate');
+Command({ name: 'poll-end', builder: pollEndBuilder })(PollCommands.prototype, 'executePollEnd');
+Command({ name: 'poll-list', builder: pollListBuilder })(PollCommands.prototype, 'executePollList');
+Command({ name: 'poll-delete', builder: pollDeleteBuilder })(PollCommands.prototype, 'executePollDelete');
 
-module.exports = { EngagementCommands };
-
-
-Command({ name: 'poll-create', builder: pollCreateBuilder })(EngagementCommands.prototype, 'executePollCreate');
-Command({ name: 'poll-end', builder: pollEndBuilder })(EngagementCommands.prototype, 'executePollEnd');
-Command({ name: 'poll-list', builder: pollListBuilder })(EngagementCommands.prototype, 'executePollList');
-Command({ name: 'poll-delete', builder: pollDeleteBuilder })(EngagementCommands.prototype, 'executePollDelete');
 module.exports = { PollCommands };

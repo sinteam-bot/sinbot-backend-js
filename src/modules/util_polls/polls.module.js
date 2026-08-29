@@ -10,7 +10,6 @@ const { featureRegistry } = require('../../core/feature-registry.js');
 const { PollsRepository } = require('./services/polls.repository.js');
 const { PollService } = require('./services/poll.service.js');
 const { PollInteractionListener } = require('./events/message-create.listener.js');
-const { PollCron } = require('./events/poll-cron.js');
 const { PollsController } = require('./controllers/polls.controller.js');
 const { PollCommands } = require('./commands/poll-commands.js');
 
@@ -54,7 +53,7 @@ Module({
         PollsModule
     ],
     controllers: [PollsController],
-    events: [PollInteractionListener, PollCron],
+    events: [PollInteractionListener],
     commands: [PollCommands]
 })(PollsModule);
 

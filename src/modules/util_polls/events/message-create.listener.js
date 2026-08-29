@@ -21,42 +21,41 @@ class PollInteractionListener {
         if (!interaction.isButton()) return;
         const customId = interaction.customId || '';
 
-        if (customId.startsWith('handlepollvote(interaction, customid) {:')) {
-            return this.__handlePollVote(interaction, customId);
+        if (customId.startsWith('poll:vote:')) {
+            return this._handleVote(interaction, customId);
         }
     }
 
+    async _handleVote(interaction, customId) {
         const [, , pollId, optionIndexStr] = customId.split(':');
         const optionIndex = parseInt(optionIndexStr, 10);
-        const state = await featureRegistry.get(interaction.guild.id, 'engagement');
-        if (!state.enabled) {
+        const state = await featureRegistry.get(interaction.guild.id, 'polls');
+        if (!state || !state.enabled) {
             return interaction.reply({ content: '❌ Sondages désactivés', ephemeral: true });
         }
 
-        const r = await this.poll.vote(pollId, interaction.user.id, optionIndex);
+        const r = await this.service.vote(pollId, interaction.user.id, optionIndex);
         if (!r.ok) {
             const msg = {
                 not_found: '❌ Sondage introuvable',
                 not_active: '❌ Sondage terminé',
-                ended: '❌ Sondage expiré',
-                invalid_option: '❌ Option invalide'
-            }[r.reason] || '❌ Vote impossible';
+                already_voted: 'ℹ️ Tu as déjà voté'
+            }[r.reason] || '❌ Action impossible';
             return interaction.reply({ content: msg, ephemeral: true });
         }
 
-        // Régénère l'embed avec les nouveaux résultats
         try {
-            const p = await this.poll.get(pollId);
-            const showResults = state.config?.polls?.show_results_after_vote !== false;
-            const embed = await this.poll.buildEmbed(p, { showResults, voter: interaction.user.id });
-            await interaction.message.edit({ embeds: [embed] }).catch(err => {
-                console.warn('[EngagementListener] Échec edit message sondage:', err.message);
+            const p = await this.service.get(pollId);
+            const tally = await this.service.tally(pollId);
+            const updatedEmbed = await this.service.buildEmbed(p, tally);
+            await interaction.message.edit({ embeds: [updatedEmbed] }).catch(err => {
+                console.warn('[PollListener] Échec edit message poll:', err.message);
             });
         } catch (err) {
-            console.warn('[EngagementListener] Erreur refresh sondage:', err.message);
+            console.warn('[PollListener] Erreur refresh tally poll:', err.message);
         }
 
-        return interaction.reply({ content: '✅ Vote enregistré', ephemeral: true });
+        return interaction.reply({ content: '✅ Vote pris en compte', ephemeral: true });
     }
 }
 

@@ -6,9 +6,15 @@
  * Issue du split de game_engagement/ (Phase 9.2 du plan migrate-to-c12).
  */
 
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { Command } = require('../../../core/index.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Command, getConfig } = require('../../../core/index.js');
 const { GiveawayService } = require('../services/giveaway.service.js');
+
+function requireMod(interaction) {
+    const member = interaction.member;
+    if (!member) return false;
+    return member.permissions?.has?.(PermissionFlagsBits.ManageMessages) || false;
+}
 
 class GiveawayCommands {
     static inject = [GiveawayService];
@@ -28,7 +34,7 @@ class GiveawayCommands {
             return interaction.reply({ content: '❌ Durée invalide (ex: 1h, 30m, 1d)', ephemeral: true });
         }
 
-        const cfg = getConfig().features?.engagement?.giveaways || {};
+        const cfg = getConfig().features?.giveaways || {};
         if (durationMs > (cfg.max_duration_days || 30) * 86_400_000) {
             return interaction.reply({ content: `❌ Durée max : ${cfg.max_duration_days || 30} jours`, ephemeral: true });
         }
@@ -37,7 +43,7 @@ class GiveawayCommands {
         }
 
         try {
-            const g = await this.giveaway.create({
+            const g = await this.service.create({
                 guildId: interaction.guild.id,
                 channelId: interaction.channel.id,
                 hostId: interaction.user.id,
@@ -47,7 +53,7 @@ class GiveawayCommands {
                 durationMs,
                 color: color || cfg.default_color || '#5865F2'
             });
-            const embed = this.giveaway.buildEmbed(g);
+            const embed = this.service.buildEmbed(g);
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId(`giveaway:enter:${g.id}`)
@@ -56,7 +62,7 @@ class GiveawayCommands {
                     .setStyle(ButtonStyle.Primary)
             );
             const sent = await interaction.reply({ embeds: [embed], components: [row], fetchReply: true });
-            await this.giveaway.setMessageId(g.id, sent.id);
+            await this.service.setMessageId(g.id, sent.id);
             return { id: g.id };
         } catch (err) {
             return interaction.editReply({ content: `❌ ${err.message}` });
@@ -68,7 +74,7 @@ class GiveawayCommands {
             return interaction.reply({ content: '❌ Réservé aux modérateurs', ephemeral: true });
         }
         const id = interaction.options.getString('id');
-        const g = await this.giveaway.end(id);
+        const g = await this.service.end(id);
         if (!g) return interaction.reply({ content: '❌ Giveaway introuvable', ephemeral: true });
         const winners = (g.winners || []).map(id => `<@${id}>`).join(', ') || '_(aucun)_';
         return interaction.reply({ content: `🎉 Giveaway terminé. Gagnants : ${winners}` });
@@ -79,22 +85,22 @@ class GiveawayCommands {
             return interaction.reply({ content: '❌ Réservé aux modérateurs', ephemeral: true });
         }
         const id = interaction.options.getString('id');
-        const g = await this.giveaway.get(id);
+        const g = await this.service.get(id);
         if (!g) return interaction.reply({ content: '❌ Giveaway introuvable', ephemeral: true });
         if (g.status !== 'ended') {
             return interaction.reply({ content: '❌ Le giveaway n\'est pas encore terminé', ephemeral: true });
         }
-        const { winners, pool } = await this.giveaway.draw(id);
+        const { winners } = await this.service.draw(id);
         if (winners.length === 0) {
             return interaction.reply({ content: '❌ Aucun participant à retirer', ephemeral: true });
         }
-        await this.giveaway.repo.updateGiveaway(id, { winners, updatedAt: Date.now() });
+        await this.service.updateGiveaway(id, { winners });
         const winnersText = winners.map(w => `<@${w}>`).join(', ');
         return interaction.reply({ content: `🎉 Nouveau tirage : ${winnersText}` });
     }
 
     async executeGiveawayList(interaction) {
-        const list = await this.giveaway.list({ guildId: interaction.guild.id, status: 'active', limit: 25 });
+        const list = await this.service.list({ guildId: interaction.guild.id, status: 'active', limit: 25 });
         if (list.length === 0) {
             return interaction.reply({ content: 'ℹ️ Aucun giveaway actif', ephemeral: true });
         }
@@ -107,11 +113,20 @@ class GiveawayCommands {
             return interaction.reply({ content: '❌ Réservé aux modérateurs', ephemeral: true });
         }
         const id = interaction.options.getString('id');
-        const g = await this.giveaway.cancel(id);
+        const g = await this.service.cancel(id);
         if (!g) return interaction.reply({ content: '❌ Giveaway introuvable', ephemeral: true });
         return interaction.reply({ content: '✅ Giveaway annulé' });
     }
 
+    _parseDuration(str) {
+        const m = String(str || '').match(/^(\d+)\s*([smhd])$/i);
+        if (!m) return null;
+        const n = parseInt(m[1], 10);
+        const unit = m[2].toLowerCase();
+        const mult = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[unit];
+        return n * mult;
+    }
+}
 
 const giveawayStartBuilder = new SlashCommandBuilder()
     .setName('giveaway-start')
@@ -144,15 +159,10 @@ const giveawayCancelBuilder = new SlashCommandBuilder()
     .addStringOption(o => o.setName('id').setDescription('ID du giveaway').setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
 
-Command({ name: 'giveaway-start', builder: giveawayStartBuilder })(EngagementCommands.prototype, 'executeGiveawayStart');
-Command({ name: 'giveaway-end', builder: giveawayEndBuilder })(EngagementCommands.prototype, 'executeGiveawayEnd');
-Command({ name: 'giveaway-reroll', builder: giveawayRerollBuilder })(EngagementCommands.prototype, 'executeGiveawayReroll');
-Command({ name: 'giveaway-list', builder: giveawayListBuilder })(EngagementCommands.prototype, 'executeGiveawayList');
-Command({ name: 'giveaway-cancel', builder: giveawayCancelBuilder })(EngagementCommands.prototype, 'executeGiveawayCancel');
+Command({ name: 'giveaway-start', builder: giveawayStartBuilder })(GiveawayCommands.prototype, 'executeGiveawayStart');
+Command({ name: 'giveaway-end', builder: giveawayEndBuilder })(GiveawayCommands.prototype, 'executeGiveawayEnd');
+Command({ name: 'giveaway-reroll', builder: giveawayRerollBuilder })(GiveawayCommands.prototype, 'executeGiveawayReroll');
+Command({ name: 'giveaway-list', builder: giveawayListBuilder })(GiveawayCommands.prototype, 'executeGiveawayList');
+Command({ name: 'giveaway-cancel', builder: giveawayCancelBuilder })(GiveawayCommands.prototype, 'executeGiveawayCancel');
 
-Command({ name: 'giveaway-start', builder: giveawayStartBuilder })(EngagementCommands.prototype, 'executeGiveawayStart');
-Command({ name: 'giveaway-end', builder: giveawayEndBuilder })(EngagementCommands.prototype, 'executeGiveawayEnd');
-Command({ name: 'giveaway-reroll', builder: giveawayRerollBuilder })(EngagementCommands.prototype, 'executeGiveawayReroll');
-Command({ name: 'giveaway-list', builder: giveawayListBuilder })(EngagementCommands.prototype, 'executeGiveawayList');
-Command({ name: 'giveaway-cancel', builder: giveawayCancelBuilder })(EngagementCommands.prototype, 'executeGiveawayCancel');
 module.exports = { GiveawayCommands };

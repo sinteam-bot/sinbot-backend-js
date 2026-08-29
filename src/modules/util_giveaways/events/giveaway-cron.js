@@ -6,15 +6,16 @@
  * pour programmer ces handlers avec node-cron.
  */
 
-const { Cron, getConfig } = require('../../../core/index.js');
+const { Cron } = require('../../../core/index.js');
 const { GiveawayService } = require('../services/giveaway.service.js');
-const { PollService } = require('../services/poll.service.js');
+const { PollService } = require('../../util_polls/services/poll.service.js');
 
 class GiveawayCron {
-    static inject = [GiveawayService];
+    static inject = [GiveawayService, PollService];
 
-    constructor(service) {
-        this.service = service;
+    constructor(giveawayService, pollService) {
+        this.giveawayService = giveawayService;
+        this.pollService = pollService;
         this.client = null;
     }
 
@@ -26,22 +27,21 @@ class GiveawayCron {
         this.client = client;
     }
 
+    async tick() {
+        await this._processGiveaways();
+        await this._processPolls();
     }
 
     async _processGiveaways() {
-        const due = await this.service.findDue(50);
+        const due = await this.giveawayService.findDue(50);
         for (const g of due) {
             try {
-                const ended = await this.service.end(g.id);
+                const ended = await this.giveawayService.end(g.id);
                 if (ended) {
                     await this._announceGiveawayEnd(ended);
                 }
             } catch (err) {
                 console.error(`[GiveawayCron] end giveaway ${g.id} failed: ${err.message}`);
-            }
-        }
-    }
-
             }
         }
     }
@@ -64,7 +64,7 @@ class GiveawayCron {
                 try {
                     const original = await channel.messages.fetch(g.messageId).catch(() => null);
                     if (original) {
-                        const updatedEmbed = await this.service.buildUpdatedEmbed(g, await this.service.countEntries(g.id));
+                        const updatedEmbed = await this.giveawayService.buildUpdatedEmbed(g, await this.giveawayService.countEntries(g.id));
                         await original.edit({ embeds: [updatedEmbed] }).catch(err => {
                             console.warn('[GiveawayCron] Échec mise à jour embed giveaway:', err.message);
                         });
@@ -78,7 +78,36 @@ class GiveawayCron {
         }
     }
 
+    async _processPolls() {
+        const due = await this.pollService.findDue(50);
+        for (const p of due) {
+            try {
+                const closed = await this.pollService.end(p.id);
+                if (closed) {
+                    await this._announcePollEnd(closed);
+                }
+            } catch (err) {
+                console.error(`[GiveawayCron] end poll ${p.id} failed: ${err.message}`);
             }
+        }
+    }
+
+    async _announcePollEnd(p) {
+        if (!this.client) return;
+        try {
+            const guild = await this.client.guilds.fetch(p.guildId).catch(() => null);
+            if (!guild) return;
+            const channel = await guild.channels.fetch(p.channelId).catch(() => null);
+            if (!channel || !channel.isTextBased()) return;
+            const tally = await this.pollService.tally(p.id);
+            const lines = (p.options || []).map((opt, i) => {
+                const count = tally[i] || 0;
+                return `${i + 1}. ${opt} — **${count}** vote(s)`;
+            });
+            const msg = `📊 Sondage terminé : **${p.question}**\n${lines.join('\n')}`;
+            await channel.send({ content: msg }).catch(err => {
+                console.warn('[GiveawayCron] Échec envoi message fin poll:', err.message);
+            });
         } catch (err) {
             console.error(`[GiveawayCron] announce poll ${p.id} failed: ${err.message}`);
         }
