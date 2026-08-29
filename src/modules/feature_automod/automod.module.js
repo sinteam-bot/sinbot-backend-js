@@ -13,10 +13,7 @@ const { AutomodEngine } = require('./services/automod-engine.service.js');
 const { Sanctions } = require('./services/sanctions.service.js');
 const { ModLog } = require('./services/mod-log.service.js');
 const { AutomodMessageCreateListener } = require('./events/message-create.listener.js');
-const {
-    ModWarnCommand, ModMuteCommand, ModKickCommand, ModBanCommand,
-    ModUnbanCommand, ModHistoryCommand, ModClearCommand
-} = require('./commands/mod-commands.js');
+const { ModCommands } = require('./commands/mod-commands.js');
 const { AutomodController } = require('./controllers/automod.controller.js');
 
 featureRegistry.define('automod', {
@@ -35,10 +32,7 @@ Module({
     providers: [AutomodEngine, Sanctions, ModLog],
     controllers: [AutomodController],
     events: [AutomodMessageCreateListener],
-    commands: [
-        ModWarnCommand, ModMuteCommand, ModKickCommand,
-        ModBanCommand, ModUnbanCommand, ModHistoryCommand, ModClearCommand
-    ]
+    commands: [ModCommands]
 })(AutoModModule);
 
 module.exports = { AutoModModule };

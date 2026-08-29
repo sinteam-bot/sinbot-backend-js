@@ -222,41 +222,6 @@ const mainBuilder = new SlashCommandBuilder()
             .addStringOption(o => o.setName('value').setDescription('Nouvelle valeur').setRequired(true))
     );
 
-// Standalone Slash Commands (rétrocompatibilité)
-const setBuilder = new SlashCommandBuilder()
-    .setName('anniversaire-set')
-    .setDescription('Définir ta date d\'anniversaire')
-    .addStringOption(o => o.setName('date').setDescription('Date (JJ/MM ou YYYY-MM-DD)').setRequired(true).setMaxLength(10));
-
-const listBuilder = new SlashCommandBuilder()
-    .setName('anniversaire-list')
-    .setDescription('Lister les prochains anniversaires du serveur');
-
-const enableBuilder = new SlashCommandBuilder()
-    .setName('anniversaire-enable')
-    .setDescription('Afficher ton anniversaire sur ce serveur');
-
-const disableBuilder = new SlashCommandBuilder()
-    .setName('anniversaire-disable')
-    .setDescription('Masquer ton anniversaire sur ce serveur');
-
-const retirerBuilder = new SlashCommandBuilder()
-    .setName('anniversaire-retirer')
-    .setDescription('Supprimer ton anniversaire de la base de données');
-
-const configBuilder = new SlashCommandBuilder()
-    .setName('anniversaire-config')
-    .setDescription('Modifier la configuration (admin)')
-    .addStringOption(o => o.setName('field').setDescription('Champ (mode, announce_channel_id, ...)').setRequired(true))
-    .addStringOption(o => o.setName('value').setDescription('Valeur').setRequired(true))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
 Command({ name: 'anniversaire', builder: mainBuilder })(BirthdayCommands.prototype, 'executeMain');
-Command({ name: 'anniversaire-set', builder: setBuilder })(BirthdayCommands.prototype, 'executeSet');
-Command({ name: 'anniversaire-list', builder: listBuilder })(BirthdayCommands.prototype, 'executeList');
-Command({ name: 'anniversaire-enable', builder: enableBuilder })(BirthdayCommands.prototype, 'executeEnable');
-Command({ name: 'anniversaire-disable', builder: disableBuilder })(BirthdayCommands.prototype, 'executeDisable');
-Command({ name: 'anniversaire-retirer', builder: retirerBuilder })(BirthdayCommands.prototype, 'executeRetirer');
-Command({ name: 'anniversaire-config', builder: configBuilder })(BirthdayCommands.prototype, 'executeConfig');
 
 module.exports = { BirthdayCommands };

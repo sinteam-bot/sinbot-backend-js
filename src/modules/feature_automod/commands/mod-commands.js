@@ -1,37 +1,94 @@
 /**
- * Toutes les commandes /mod-* de la feature AutoMod
- * Regroupées dans un seul fichier pour limiter la duplication.
+ * Commandes /mod de la feature AutoMod avec sous-commandes
  *
- * Commandes exposées :
- *   /mod-warn    : avertir un utilisateur
- *   /mod-mute    : timeout un utilisateur
- *   /mod-kick    : kicker un utilisateur
- *   /mod-ban     : bannir un utilisateur
- *   /mod-unban   : débannir (par user ID)
- *   /mod-history : afficher les 20 dernières actions contre un user
- *   /mod-clear   : supprimer N messages (1-100)
+ * Commandes regroupées sous /mod :
+ *   /mod warn    : avertir un utilisateur
+ *   /mod mute    : timeout un utilisateur
+ *   /mod kick    : kicker un utilisateur
+ *   /mod ban     : bannir un utilisateur
+ *   /mod unban   : débannir (par user ID)
+ *   /mod history : afficher les 20 dernières actions contre un user
+ *   /mod clear   : supprimer N messages (1-100)
  */
 
 const { Command, getConfig } = require('../../../core/index.js');
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { Sanctions, parseDuration } = require('../services/sanctions.service.js');
 const { ModLog } = require('../services/mod-log.service.js');
 const { requireModPermission, replyError } = require('./_helpers.js');
 const { db } = require('../../../db/index.js');
 
-// =================== /mod-warn ===================
-class ModWarnCommand {
+class ModCommands {
     static __commandBuilder = new SlashCommandBuilder()
-        .setName('mod-warn')
-        .setDescription('Avertir un utilisateur')
-        .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-        .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(true).setMaxLength(512))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
+        .setName('mod')
+        .setDescription('Commandes de modération du serveur')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .addSubcommand(sub =>
+            sub.setName('warn')
+                .setDescription('Avertir un utilisateur')
+                .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+                .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(true).setMaxLength(512))
+        )
+        .addSubcommand(sub =>
+            sub.setName('mute')
+                .setDescription('Timeout un utilisateur')
+                .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+                .addStringOption(o => o.setName('duration').setDescription('Durée (ex: 1h, 30m, 1d)').setRequired(true))
+                .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(false).setMaxLength(512))
+        )
+        .addSubcommand(sub =>
+            sub.setName('kick')
+                .setDescription('Kicker un utilisateur')
+                .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+                .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(true).setMaxLength(512))
+        )
+        .addSubcommand(sub =>
+            sub.setName('ban')
+                .setDescription('Bannir un utilisateur')
+                .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+                .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(true).setMaxLength(512))
+                .addStringOption(o => o.setName('duration').setDescription('Durée (vide = permanent)').setRequired(false))
+        )
+        .addSubcommand(sub =>
+            sub.setName('unban')
+                .setDescription('Débannir un utilisateur par ID')
+                .addStringOption(o => o.setName('user_id').setDescription('ID Discord').setRequired(true))
+                .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(true).setMaxLength(512))
+        )
+        .addSubcommand(sub =>
+            sub.setName('history')
+                .setDescription('Historique de modération d\'un utilisateur')
+                .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+        )
+        .addSubcommand(sub =>
+            sub.setName('clear')
+                .setDescription('Supprimer N messages dans le salon courant')
+                .addIntegerOption(o => o.setName('amount').setDescription('Nombre (1-100)').setRequired(true).setMinValue(1).setMaxValue(100))
+                .addUserOption(o => o.setName('user').setDescription('Filtrer par utilisateur').setRequired(false))
+        );
 
     static inject = [Sanctions, ModLog];
-    constructor(s, m) { this.sanctions = s; this.modLog = m; }
+    constructor(sanctions, modLog) {
+        this.sanctions = sanctions;
+        this.modLog = modLog;
+    }
 
     async execute(interaction) {
+        const sub = interaction.options.getSubcommand();
+        switch (sub) {
+            case 'warn':    return this._warn(interaction);
+            case 'mute':    return this._mute(interaction);
+            case 'kick':    return this._kick(interaction);
+            case 'ban':     return this._ban(interaction);
+            case 'unban':   return this._unban(interaction);
+            case 'history': return this._history(interaction);
+            case 'clear':   return this._clear(interaction);
+            default:
+                return replyError(interaction, 'Sous-commande inconnue');
+        }
+    }
+
+    async _warn(interaction) {
         const cfg = getConfig().features?.automod || {};
         if (!requireModPermission(interaction, cfg.allowed_roles || []).ok) return replyError(interaction, 'Permissions insuffisantes');
         const target = interaction.options.getUser('user');
@@ -39,23 +96,8 @@ class ModWarnCommand {
         const { id } = await this.sanctions.warn(interaction.guild, target, interaction.user, reason, 'manual');
         return interaction.reply({ content: `✅ Avertissement créé pour **${target.tag}** (#${id.slice(0, 8)}).` });
     }
-}
-Command({ name: 'mod-warn' })(ModWarnCommand.prototype, 'execute');
 
-// =================== /mod-mute ===================
-class ModMuteCommand {
-    static __commandBuilder = new SlashCommandBuilder()
-        .setName('mod-mute')
-        .setDescription('Timeout un utilisateur')
-        .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-        .addStringOption(o => o.setName('duration').setDescription('Durée (ex: 1h, 30m, 1d)').setRequired(true))
-        .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(false).setMaxLength(512))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
-
-    static inject = [Sanctions];
-    constructor(s) { this.sanctions = s; }
-
-    async execute(interaction) {
+    async _mute(interaction) {
         const cfg = getConfig().features?.automod || {};
         if (!requireModPermission(interaction, cfg.allowed_roles || []).ok) return replyError(interaction, 'Permissions insuffisantes');
         const target = interaction.options.getUser('user');
@@ -69,22 +111,8 @@ class ModMuteCommand {
         const { id } = await this.sanctions.mute(interaction.guild, member, interaction.user, ms, reason);
         return interaction.reply({ content: `✅ ${target.tag} timeout pour ${duration} (#${id.slice(0, 8)}).` });
     }
-}
-Command({ name: 'mod-mute' })(ModMuteCommand.prototype, 'execute');
 
-// =================== /mod-kick ===================
-class ModKickCommand {
-    static __commandBuilder = new SlashCommandBuilder()
-        .setName('mod-kick')
-        .setDescription('Kicker un utilisateur')
-        .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-        .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(true).setMaxLength(512))
-        .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers);
-
-    static inject = [Sanctions];
-    constructor(s) { this.sanctions = s; }
-
-    async execute(interaction) {
+    async _kick(interaction) {
         const cfg = getConfig().features?.automod || {};
         if (!requireModPermission(interaction, cfg.allowed_roles || []).ok) return replyError(interaction, 'Permissions insuffisantes');
         const target = interaction.options.getUser('user');
@@ -94,23 +122,8 @@ class ModKickCommand {
         const { id } = await this.sanctions.kick(interaction.guild, member, interaction.user, reason);
         return interaction.reply({ content: `✅ ${target.tag} kické (#${id.slice(0, 8)}).` });
     }
-}
-Command({ name: 'mod-kick' })(ModKickCommand.prototype, 'execute');
 
-// =================== /mod-ban ===================
-class ModBanCommand {
-    static __commandBuilder = new SlashCommandBuilder()
-        .setName('mod-ban')
-        .setDescription('Bannir un utilisateur')
-        .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-        .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(true).setMaxLength(512))
-        .addStringOption(o => o.setName('duration').setDescription('Durée (vide = permanent)').setRequired(false))
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
-
-    static inject = [Sanctions];
-    constructor(s) { this.sanctions = s; }
-
-    async execute(interaction) {
+    async _ban(interaction) {
         const cfg = getConfig().features?.automod || {};
         if (!requireModPermission(interaction, cfg.allowed_roles || []).ok) return replyError(interaction, 'Permissions insuffisantes');
         const target = interaction.options.getUser('user');
@@ -121,22 +134,8 @@ class ModBanCommand {
         const { id } = await this.sanctions.ban(interaction.guild, target, interaction.user, reason, durationMs);
         return interaction.reply({ content: `✅ ${target.tag} banni (#${id.slice(0, 8)}).` });
     }
-}
-Command({ name: 'mod-ban' })(ModBanCommand.prototype, 'execute');
 
-// =================== /mod-unban ===================
-class ModUnbanCommand {
-    static __commandBuilder = new SlashCommandBuilder()
-        .setName('mod-unban')
-        .setDescription('Débannir un utilisateur par ID')
-        .addStringOption(o => o.setName('user_id').setDescription('ID Discord').setRequired(true))
-        .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(true).setMaxLength(512))
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
-
-    static inject = [Sanctions];
-    constructor(s) { this.sanctions = s; }
-
-    async execute(interaction) {
+    async _unban(interaction) {
         const cfg = getConfig().features?.automod || {};
         if (!requireModPermission(interaction, cfg.allowed_roles || []).ok) return replyError(interaction, 'Permissions insuffisantes');
         const userId = interaction.options.getString('user_id');
@@ -145,21 +144,8 @@ class ModUnbanCommand {
         await this.sanctions.unban(interaction.guild, userId, interaction.user, reason);
         return interaction.reply({ content: `✅ Utilisateur ${userId} débanni.` });
     }
-}
-Command({ name: 'mod-unban' })(ModUnbanCommand.prototype, 'execute');
 
-// =================== /mod-history ===================
-class ModHistoryCommand {
-    static __commandBuilder = new SlashCommandBuilder()
-        .setName('mod-history')
-        .setDescription('Historique de modération d\'un utilisateur')
-        .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
-
-    static inject = [];
-    constructor() {}
-
-    async execute(interaction) {
+    async _history(interaction) {
         const cfg = getConfig().features?.automod || {};
         if (!requireModPermission(interaction, cfg.allowed_roles || []).ok) return replyError(interaction, 'Permissions insuffisantes');
         const target = interaction.options.getUser('user');
@@ -172,7 +158,6 @@ class ModHistoryCommand {
             [interaction.guild.id, target.id]
         );
 
-        const { EmbedBuilder } = require('discord.js');
         const embed = new EmbedBuilder()
             .setTitle(`📜 Historique — ${target.tag}`)
             .setColor(0x5865f2)
@@ -198,22 +183,8 @@ class ModHistoryCommand {
         }
         return interaction.reply({ embeds: [embed], ephemeral: true });
     }
-}
-Command({ name: 'mod-history' })(ModHistoryCommand.prototype, 'execute');
 
-// =================== /mod-clear ===================
-class ModClearCommand {
-    static __commandBuilder = new SlashCommandBuilder()
-        .setName('mod-clear')
-        .setDescription('Supprimer N messages dans le salon courant')
-        .addIntegerOption(o => o.setName('amount').setDescription('Nombre (1-100)').setRequired(true).setMinValue(1).setMaxValue(100))
-        .addUserOption(o => o.setName('user').setDescription('Filtrer par utilisateur').setRequired(false))
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
-
-    static inject = [];
-    constructor() {}
-
-    async execute(interaction) {
+    async _clear(interaction) {
         const cfg = getConfig().features?.automod || {};
         if (!requireModPermission(interaction, cfg.allowed_roles || []).ok) return replyError(interaction, 'Permissions insuffisantes');
         const amount = interaction.options.getInteger('amount');
@@ -232,14 +203,9 @@ class ModClearCommand {
         }
     }
 }
-Command({ name: 'mod-clear' })(ModClearCommand.prototype, 'execute');
+
+Command({ name: 'mod', description: 'Commandes de modération' })(ModCommands.prototype, 'execute');
 
 module.exports = {
-    ModWarnCommand,
-    ModMuteCommand,
-    ModKickCommand,
-    ModBanCommand,
-    ModUnbanCommand,
-    ModHistoryCommand,
-    ModClearCommand
+    ModCommands
 };

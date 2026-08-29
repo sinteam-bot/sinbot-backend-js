@@ -15,7 +15,7 @@ const { DropCron } = require('./events/drop-cron.js');
 const { EconomyController, ShopController, InventoryController } = require('./controllers/economy.controller.js');
 const {
     EconomyCommands, ShopCommands, InventoryCommands, DropButtonHandler,
-    AdminEconomyCommands, AdminShopCommands, AdminInventaireCommands
+    AdminEconomyCommands
 } = require('./commands/economy-commands.js');
 
 featureRegistry.define('economy', {
@@ -63,7 +63,7 @@ Module({
     events: [DropReactionListener, DropCron],
     commands: [
         EconomyCommands, ShopCommands, InventoryCommands, DropButtonHandler,
-        AdminEconomyCommands, AdminShopCommands, AdminInventaireCommands
+        AdminEconomyCommands
     ]
 })(EconomyModule);
 

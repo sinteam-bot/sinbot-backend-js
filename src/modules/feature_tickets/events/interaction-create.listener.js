@@ -129,8 +129,15 @@ class TicketInteractionListener {
 
     async _handleCommand(interaction, config) {
         const cmd = interaction.commandName;
-        if (!cmd?.startsWith('ticket-')) return;
-        const action = cmd.replace('ticket-', '');
+        if (cmd !== 'ticket' && !cmd?.startsWith('ticket-')) return;
+        let action = null;
+        if (cmd === 'ticket') {
+            action = interaction.options?.getSubcommand?.(false);
+        } else {
+            action = cmd.replace('ticket-', '');
+        }
+        if (!action) return;
+
         const ticket = await this.ticketService.getByChannel(interaction.channelId);
         if (!ticket) {
             return interaction.reply({ content: '❌ Cette commande doit être exécutée dans un ticket.', ephemeral: true });

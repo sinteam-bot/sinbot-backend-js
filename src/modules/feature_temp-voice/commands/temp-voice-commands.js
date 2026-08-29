@@ -1,17 +1,65 @@
 /**
- * /tempvoice-config, /tempvoice-list
+ * /tempvoice show|set|add-channel|remove-channel|list
  * (admin : ManageGuild)
  */
 
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
-const { Command, getConfig } = require('../../../core/index.js');
+const { Command } = require('../../../core/index.js');
 const { TempVoiceService } = require('../services/temp-voice.service.js');
 
 class TempVoiceCommands {
     static inject = [TempVoiceService];
 
+    static __commandBuilder = new SlashCommandBuilder()
+        .setName('tempvoice')
+        .setDescription('Configuration des salons vocaux temporaires (Join-to-Create)')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addSubcommand(sub =>
+            sub.setName('show')
+                .setDescription('Afficher la configuration des vocaux temporaires')
+        )
+        .addSubcommand(sub =>
+            sub.setName('set')
+                .setDescription('Modifier la configuration des vocaux temporaires')
+                .addChannelOption(o => o.setName('category').setDescription('Catégorie parente').setRequired(false).addChannelTypes(ChannelType.GuildCategory))
+                .addStringOption(o => o.setName('format').setDescription('Template du nom ({user} ou {username})').setRequired(false).setMaxLength(100))
+                .addIntegerOption(o => o.setName('delay').setDescription('Délai de suppression en secondes').setRequired(false).setMinValue(0).setMaxValue(300))
+                .addIntegerOption(o => o.setName('max').setDescription('Max vocaux simultanés (0 = illimité)').setRequired(false).setMinValue(0).setMaxValue(50))
+                .addStringOption(o => o.setName('enabled').setDescription('Activer / désactiver').setRequired(false).addChoices(
+                    { name: 'activé', value: 'true' },
+                    { name: 'désactivé', value: 'false' }
+                ))
+        )
+        .addSubcommand(sub =>
+            sub.setName('add-channel')
+                .setDescription('Ajouter un salon vocal Join-to-Create')
+                .addChannelOption(o => o.setName('channel').setDescription('Salon vocal à activer').setRequired(true).addChannelTypes(ChannelType.GuildVoice))
+        )
+        .addSubcommand(sub =>
+            sub.setName('remove-channel')
+                .setDescription('Retirer un salon vocal Join-to-Create')
+                .addChannelOption(o => o.setName('channel').setDescription('Salon vocal à retirer').setRequired(true).addChannelTypes(ChannelType.GuildVoice))
+        )
+        .addSubcommand(sub =>
+            sub.setName('list')
+                .setDescription('Lister les vocaux temporaires actifs')
+        );
+
     constructor(service) {
         this.service = service;
+    }
+
+    async execute(interaction) {
+        const sub = interaction.options.getSubcommand();
+        switch (sub) {
+            case 'show':           return this.executeShow(interaction);
+            case 'set':            return this.executeSet(interaction);
+            case 'add-channel':    return this.executeAddChannel(interaction);
+            case 'remove-channel': return this.executeRemoveChannel(interaction);
+            case 'list':           return this.executeList(interaction);
+            default:
+                return interaction.reply({ content: '❌ Sous-commande inconnue', ephemeral: true });
+        }
     }
 
     async executeShow(interaction) {
@@ -54,7 +102,7 @@ class TempVoiceCommands {
         if (delay !== null) patch.deleteDelaySeconds = delay;
         if (max !== null) patch.maxPerGuild = max;
         if (enabled !== null) patch.enabled = enabled === 'true';
-        const data = await this.service.setConfig(interaction.guild.id, patch);
+        await this.service.setConfig(interaction.guild.id, patch);
         return interaction.reply({ content: `✅ Configuration mise à jour.`, ephemeral: true });
     }
 
@@ -101,45 +149,6 @@ class TempVoiceCommands {
     }
 }
 
-const showBuilder = new SlashCommandBuilder()
-    .setName('tempvoice-show')
-    .setDescription('Afficher la config des vocaux temporaires (admin)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
-
-const setBuilder = new SlashCommandBuilder()
-    .setName('tempvoice-set')
-    .setDescription('Modifier la config des vocaux temporaires (admin)')
-    .addChannelOption(o => o.setName('category').setDescription('Catégorie parente').setRequired(false).addChannelTypes(ChannelType.GuildCategory))
-    .addStringOption(o => o.setName('format').setDescription('Template du nom ({user} ou {username})').setRequired(false).setMaxLength(100))
-    .addIntegerOption(o => o.setName('delay').setDescription('Délai de suppression en secondes').setRequired(false).setMinValue(0).setMaxValue(300))
-    .addIntegerOption(o => o.setName('max').setDescription('Max vocaux simultanés (0 = illimité)').setRequired(false).setMinValue(0).setMaxValue(50))
-    .addStringOption(o => o.setName('enabled').setDescription('Activer / désactiver').setRequired(false).addChoices(
-        { name: 'activé', value: 'true' },
-        { name: 'désactivé', value: 'false' }
-    ))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
-
-const addChannelBuilder = new SlashCommandBuilder()
-    .setName('tempvoice-add-channel')
-    .setDescription('Ajouter un Join-to-Create channel (admin)')
-    .addChannelOption(o => o.setName('channel').setDescription('Salon vocal à activer').setRequired(true).addChannelTypes(ChannelType.GuildVoice))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
-
-const removeChannelBuilder = new SlashCommandBuilder()
-    .setName('tempvoice-remove-channel')
-    .setDescription('Retirer un Join-to-Create channel (admin)')
-    .addChannelOption(o => o.setName('channel').setDescription('Salon vocal à retirer').setRequired(true).addChannelTypes(ChannelType.GuildVoice))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
-
-const listBuilder = new SlashCommandBuilder()
-    .setName('tempvoice-list')
-    .setDescription('Lister les vocaux temporaires actifs (admin)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
-
-Command({ name: 'tempvoice-show', builder: showBuilder })(TempVoiceCommands.prototype, 'executeShow');
-Command({ name: 'tempvoice-set', builder: setBuilder })(TempVoiceCommands.prototype, 'executeSet');
-Command({ name: 'tempvoice-add-channel', builder: addChannelBuilder })(TempVoiceCommands.prototype, 'executeAddChannel');
-Command({ name: 'tempvoice-remove-channel', builder: removeChannelBuilder })(TempVoiceCommands.prototype, 'executeRemoveChannel');
-Command({ name: 'tempvoice-list', builder: listBuilder })(TempVoiceCommands.prototype, 'executeList');
+Command({ name: 'tempvoice', description: 'Configuration des salons vocaux temporaires' })(TempVoiceCommands.prototype, 'execute');
 
 module.exports = { TempVoiceCommands };

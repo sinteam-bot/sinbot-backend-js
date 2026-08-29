@@ -158,6 +158,19 @@ class XPLevelCommand {
         await interaction.update({ embeds: [embed], components: [row] });
     }
 
+    async executeXpMain(interaction) {
+        const sub = interaction.options.getSubcommand();
+        switch (sub) {
+            case 'rank':        return this.executeRank(interaction);
+            case 'leaderboard': return this.executeLeaderboard(interaction);
+            case 'set':         return this.executeXpSet(interaction);
+            case 'add':         return this.executeXpAdd(interaction);
+            case 'reset':       return this.executeXpReset(interaction);
+            default:
+                return this.executeRank(interaction);
+        }
+    }
+
     _buildProgressBar(percent, length = 16) {
         const filled = Math.round((percent / 100) * length);
         const empty = length - filled;
@@ -171,36 +184,39 @@ const rankBuilder = new SlashCommandBuilder()
     .setDescription('Afficher votre niveau et votre progression d\'XP')
     .addUserOption(o => o.setName('user').setDescription('Utilisateur cible').setRequired(false));
 
-const leaderboardBuilder = new SlashCommandBuilder()
-    .setName('leaderboard')
-    .setDescription('Afficher le classement des membres les plus actifs');
-
-const xpSetBuilder = new SlashCommandBuilder()
-    .setName('xp-set')
-    .setDescription('Fixe l\'XP d\'un utilisateur (admin)')
-    .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-    .addIntegerOption(o => o.setName('amount').setDescription('XP cible').setRequired(true).setMinValue(0))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
-const xpAddBuilder = new SlashCommandBuilder()
-    .setName('xp-add')
-    .setDescription('Ajoute de l\'XP à un utilisateur (admin)')
-    .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-    .addIntegerOption(o => o.setName('amount').setDescription('Quantité (peut être négatif)').setRequired(true))
-    .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(false).setMaxLength(200))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
-const xpResetBuilder = new SlashCommandBuilder()
-    .setName('xp-reset')
-    .setDescription('Remet à zéro l\'XP d\'un utilisateur (admin)')
-    .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+const xpBuilder = new SlashCommandBuilder()
+    .setName('xp')
+    .setDescription('Système d\'XP et de niveaux')
+    .addSubcommand(sub =>
+        sub.setName('rank')
+            .setDescription('Afficher votre niveau et votre progression d\'XP')
+            .addUserOption(o => o.setName('user').setDescription('Utilisateur cible').setRequired(false))
+    )
+    .addSubcommand(sub =>
+        sub.setName('leaderboard')
+            .setDescription('Afficher le classement des membres les plus actifs')
+    )
+    .addSubcommand(sub =>
+        sub.setName('set')
+            .setDescription('Fixe l\'XP d\'un utilisateur (admin)')
+            .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+            .addIntegerOption(o => o.setName('amount').setDescription('XP cible').setRequired(true).setMinValue(0))
+    )
+    .addSubcommand(sub =>
+        sub.setName('add')
+            .setDescription('Ajoute de l\'XP à un utilisateur (admin)')
+            .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+            .addIntegerOption(o => o.setName('amount').setDescription('Quantité').setRequired(true))
+            .addStringOption(o => o.setName('reason').setDescription('Raison').setRequired(false).setMaxLength(200))
+    )
+    .addSubcommand(sub =>
+        sub.setName('reset')
+            .setDescription('Remet à zéro l\'XP d\'un utilisateur (admin)')
+            .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+    );
 
 Command({ name: 'rank', builder: rankBuilder })(XPLevelCommand.prototype, 'executeRank');
-Command({ name: 'leaderboard', builder: leaderboardBuilder })(XPLevelCommand.prototype, 'executeLeaderboard');
-Command({ name: 'xp-set', builder: xpSetBuilder })(XPLevelCommand.prototype, 'executeXpSet');
-Command({ name: 'xp-add', builder: xpAddBuilder })(XPLevelCommand.prototype, 'executeXpAdd');
-Command({ name: 'xp-reset', builder: xpResetBuilder })(XPLevelCommand.prototype, 'executeXpReset');
+Command({ name: 'xp', builder: xpBuilder })(XPLevelCommand.prototype, 'executeXpMain');
 Command({ name: 'xp-lb-button' })(XPLevelCommand.prototype, 'handleLeaderboardButton');
 
 module.exports = { XPLevelCommand };

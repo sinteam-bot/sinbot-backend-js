@@ -13,11 +13,7 @@ const { TicketManagerService } = require('./services/ticket-manager.service.js')
 const { TranscriptService } = require('./services/transcript.service.js');
 const { TicketInteractionListener } = require('./events/interaction-create.listener.js');
 const { TicketMessageListener } = require('./events/message-create.listener.js');
-const {
-    TicketCloseCommand, TicketClaimCommand, TicketUnclaimCommand,
-    TicketAddCommand, TicketRemoveCommand, TicketRenameCommand,
-    TicketTranscriptCommand, TicketReopenCommand
-} = require('./commands/ticket-commands.js');
+const { TicketCommands } = require('./commands/ticket-commands.js');
 const { TicketsController } = require('./controllers/tickets.controller.js');
 
 featureRegistry.define('tickets', {
@@ -54,11 +50,7 @@ Module({
         TicketInteractionListener,
         TicketMessageListener
     ],
-    commands: [
-        TicketCloseCommand, TicketClaimCommand, TicketUnclaimCommand,
-        TicketAddCommand, TicketRemoveCommand, TicketRenameCommand,
-        TicketTranscriptCommand, TicketReopenCommand
-    ]
+    commands: [TicketCommands]
 })(TicketsModule);
 
 module.exports = { TicketsModule };

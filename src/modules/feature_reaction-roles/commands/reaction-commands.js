@@ -1,25 +1,118 @@
 /**
- * /reactionrole add|remove|list
+ * /reactionrole add|remove|list|button|select
  *
- *   /reactionrole add  channel:@salon message_id:123 emoji:🎉 role:@role [description:...]
- *   /reactionrole remove  id:uuid
- *   /reactionrole list  [channel:@salon] [message_id:123]
- *   /reactionrole sync  channel:@salon message_id:123  (re-poste l'embed)
+ * Commandes regroupées sous /reactionrole :
+ *   /reactionrole add     : ajouter un reaction-role standard
+ *   /reactionrole remove  : supprimer un reaction-role par ID
+ *   /reactionrole list    : lister les reaction-roles
+ *   /reactionrole button  : ajouter un bouton interactif
+ *   /reactionrole select  : ajouter un menu déroulant (select menu)
  */
 
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const { Command, getConfig } = require('../../../core/index.js');
+const { Command } = require('../../../core/index.js');
 const { ReactionRolesService } = require('../services/reaction-roles.service.js');
 
 function isAdmin(interaction) {
     return interaction.member?.permissions?.has?.(PermissionFlagsBits.ManageRoles);
 }
 
+/**
+ * Parse un input emoji. Accepte :
+ *   - "🎉"               (unicode direct)
+ *   - "name:id"          (custom emoji)
+ *   - ":name:id:"        (avec deux-points autour)
+ */
+function parseEmoji(input) {
+    if (!input) return null;
+    const s = String(input).trim();
+    if (s.includes(':')) {
+        const cleaned = s.replace(/^:|:$/g, '');
+        const parts = cleaned.split(':');
+        if (parts.length === 2 && parts[0] && parts[1]) {
+            return { key: `${parts[0]}:${parts[1]}`, display: s };
+        }
+    }
+    // Unicode emoji brut
+    return { key: s, display: s };
+}
+
 class ReactionRoleCommands {
     static inject = [ReactionRolesService];
 
+    static __commandBuilder = new SlashCommandBuilder()
+        .setName('reactionrole')
+        .setDescription('Gestion des rôles par réaction, bouton ou menu déroulant')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+        .addSubcommand(sub =>
+            sub.setName('add')
+                .setDescription('Ajouter un reaction-role (admin)')
+                .addChannelOption(o => o.setName('channel').setDescription('Salon du message').setRequired(true))
+                .addStringOption(o => o.setName('message_id').setDescription('ID du message').setRequired(true))
+                .addStringOption(o => o.setName('emoji').setDescription('Emoji (unicode ou nom:id)').setRequired(true))
+                .addRoleOption(o => o.setName('role').setDescription('Rôle à donner').setRequired(true))
+                .addStringOption(o => o.setName('description').setDescription('Description (optionnel)').setRequired(false).setMaxLength(200))
+        )
+        .addSubcommand(sub =>
+            sub.setName('remove')
+                .setDescription('Supprimer un reaction-role (admin)')
+                .addStringOption(o => o.setName('id').setDescription('ID du reaction-role').setRequired(true))
+        )
+        .addSubcommand(sub =>
+            sub.setName('list')
+                .setDescription('Lister les reaction-roles')
+                .addChannelOption(o => o.setName('channel').setDescription('Filtrer par salon (optionnel)').setRequired(false))
+                .addStringOption(o => o.setName('message_id').setDescription('Filtrer par message (optionnel)').setRequired(false))
+        )
+        .addSubcommand(sub =>
+            sub.setName('button')
+                .setDescription('Ajouter un bouton à un message (admin)')
+                .addChannelOption(o => o.setName('channel').setDescription('Salon du message').setRequired(true))
+                .addStringOption(o => o.setName('message_id').setDescription('ID du message').setRequired(true))
+                .addStringOption(o => o.setName('label').setDescription('Texte du bouton (max 80)').setRequired(true).setMaxLength(80))
+                .addRoleOption(o => o.setName('role').setDescription('Rôle à attribuer/retirer (sauf open_url)').setRequired(false))
+                .addStringOption(o => o.setName('action').setDescription('Action').setRequired(false).addChoices(
+                    { name: 'toggle_role (default)', value: 'toggle_role' },
+                    { name: 'give_role (ajouter si absent)', value: 'give_role' },
+                    { name: 'take_role (retirer si présent)', value: 'take_role' },
+                    { name: 'open_url (lien externe)', value: 'open_url' }
+                ))
+                .addStringOption(o => o.setName('style').setDescription('Style du bouton').setRequired(false).addChoices(
+                    { name: 'primary', value: 'primary' },
+                    { name: 'secondary', value: 'secondary' },
+                    { name: 'success', value: 'success' },
+                    { name: 'danger', value: 'danger' },
+                    { name: 'link (pour open_url)', value: 'link' }
+                ))
+                .addStringOption(o => o.setName('emoji').setDescription('Emoji du bouton (optionnel)').setRequired(false).setMaxLength(50))
+                .addStringOption(o => o.setName('url').setDescription('URL pour open_url (sinon inutile)').setRequired(false).setMaxLength(200))
+        )
+        .addSubcommand(sub =>
+            sub.setName('select')
+                .setDescription('Ajouter un select menu (max 25 options) à un message (admin)')
+                .addChannelOption(o => o.setName('channel').setDescription('Salon du message').setRequired(true))
+                .addStringOption(o => o.setName('message_id').setDescription('ID du message').setRequired(true))
+                .addStringOption(o => o.setName('options').setDescription('Options: "Label|value|roleId?" séparées par ;').setRequired(true).setMaxLength(1000))
+                .addStringOption(o => o.setName('placeholder').setDescription('Texte affiché quand rien n\'est sélectionné').setRequired(false).setMaxLength(100))
+                .addIntegerOption(o => o.setName('min_values').setDescription('Nb min d\'options (0 = optionnel, default 1)').setRequired(false).setMinValue(0).setMaxValue(25))
+                .addIntegerOption(o => o.setName('max_values').setDescription('Nb max d\'options (1 = single, default 1)').setRequired(false).setMinValue(1).setMaxValue(25))
+        );
+
     constructor(service) {
         this.service = service;
+    }
+
+    async execute(interaction) {
+        const sub = interaction.options.getSubcommand();
+        switch (sub) {
+            case 'add':    return this.executeAdd(interaction);
+            case 'remove': return this.executeRemove(interaction);
+            case 'list':   return this.executeList(interaction);
+            case 'button': return this.executeButton(interaction);
+            case 'select': return this.executeSelect(interaction);
+            default:
+                return interaction.reply({ content: '❌ Sous-commande inconnue', ephemeral: true });
+        }
     }
 
     async executeAdd(interaction) {
@@ -101,165 +194,83 @@ class ReactionRoleCommands {
             .setTimestamp();
         return interaction.reply({ embeds: [embed], ephemeral: true });
     }
-}
 
-/**
- * Parse un input emoji. Accepte :
- *   - "🎉"               (unicode direct)
- *   - "name:id"          (custom emoji)
- *   - ":name:id:"        (avec deux-points autour)
- */
-function parseEmoji(input) {
-    if (!input) return null;
-    const s = String(input).trim();
-    if (s.includes(':')) {
-        const cleaned = s.replace(/^:|:$/g, '');
-        const parts = cleaned.split(':');
-        if (parts.length === 2 && parts[0] && parts[1]) {
-            return { key: `${parts[0]}:${parts[1]}`, display: s };
+    async executeButton(interaction) {
+        if (!isAdmin(interaction)) {
+            return interaction.reply({ content: '❌ Réservé aux admins (ManageRoles)', ephemeral: true });
         }
+        const channel = interaction.options.getChannel('channel');
+        const messageId = interaction.options.getString('message_id');
+        const label = interaction.options.getString('label');
+        const style = interaction.options.getString('style') || 'primary';
+        const emoji = interaction.options.getString('emoji');
+        const action = interaction.options.getString('action') || 'toggle_role';
+        const role = interaction.options.getRole('role');
+        const url = interaction.options.getString('url');
+
+        const metadata = { label, style, emoji, action, url, customIdSuffix: messageId };
+        if (role) metadata.roleId = role.id;
+        if (action !== 'open_url' && !role) {
+            return interaction.reply({ content: '❌ role requis pour action "' + action + '"', ephemeral: true });
+        }
+        if (action === 'open_url' && !url) {
+            return interaction.reply({ content: '❌ url requis pour action open_url', ephemeral: true });
+        }
+
+        const r = await this.service.create({
+            guildId: interaction.guild.id,
+            channelId: channel.id,
+            messageId,
+            kind: 'button',
+            roleId: role ? role.id : null,
+            metadata
+        });
+        if (!r.ok) {
+            return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
+        }
+        return interaction.reply({ content: `✅ Bouton **${label}** ajouté.`, ephemeral: true });
     }
-    // Unicode emoji brut
-    return { key: s, display: s };
+
+    async executeSelect(interaction) {
+        if (!isAdmin(interaction)) {
+            return interaction.reply({ content: '❌ Réservé aux admins (ManageRoles)', ephemeral: true });
+        }
+        const channel = interaction.options.getChannel('channel');
+        const messageId = interaction.options.getString('message_id');
+        const placeholder = interaction.options.getString('placeholder');
+        const minValues = interaction.options.getInteger('min_values') ?? 1;
+        const maxValues = interaction.options.getInteger('max_values') ?? 1;
+        const optionsStr = interaction.options.getString('options');
+
+        // Parse les options : format "Label|value|roleId?;Label|value|roleId?;..."
+        const options = optionsStr.split(';').map(s => {
+            const parts = s.split('|').map(p => p.trim());
+            if (parts.length < 2) return null;
+            const opt = { label: parts[0], value: parts[1] };
+            if (parts[2]) opt.roleId = parts[2];
+            return opt;
+        }).filter(Boolean);
+
+        if (options.length === 0 || options.length > 25) {
+            return interaction.reply({ content: '❌ options invalides (1 à 25 attendues, format: Label|value|roleId? séparées par ;)', ephemeral: true });
+        }
+
+        const roleId = options.find(o => o.roleId)?.roleId;
+        const r = await this.service.create({
+            guildId: interaction.guild.id,
+            channelId: channel.id,
+            messageId,
+            kind: 'select',
+            roleId,
+            metadata: { placeholder, minValues, maxValues, options }
+        });
+        if (!r.ok) {
+            return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
+        }
+        return interaction.reply({ content: `✅ Select avec ${options.length} option(s) ajouté.`, ephemeral: true });
+    }
 }
 
-const addBuilder = new SlashCommandBuilder()
-    .setName('reactionrole-add')
-    .setDescription('Ajouter un reaction-role (admin)')
-    .addChannelOption(o => o.setName('channel').setDescription('Salon du message').setRequired(true))
-    .addStringOption(o => o.setName('message_id').setDescription('ID du message').setRequired(true))
-    .addStringOption(o => o.setName('emoji').setDescription('Emoji (unicode ou nom:id)').setRequired(true))
-    .addRoleOption(o => o.setName('role').setDescription('Rôle à donner').setRequired(true))
-    .addStringOption(o => o.setName('description').setDescription('Description (optionnel)').setRequired(false).setMaxLength(200))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles);
-
-const removeBuilder = new SlashCommandBuilder()
-    .setName('reactionrole-remove')
-    .setDescription('Supprimer un reaction-role (admin)')
-    .addStringOption(o => o.setName('id').setDescription('ID du reaction-role').setRequired(true))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles);
-
-const listBuilder = new SlashCommandBuilder()
-    .setName('reactionrole-list')
-    .setDescription('Lister les reaction-roles')
-    .addChannelOption(o => o.setName('channel').setDescription('Filtrer par salon (optionnel)').setRequired(false))
-    .addStringOption(o => o.setName('message_id').setDescription('Filtrer par message (optionnel)').setRequired(false));
-
-Command({ name: 'reactionrole-add', builder: addBuilder })(ReactionRoleCommands.prototype, 'executeAdd');
-Command({ name: 'reactionrole-remove', builder: removeBuilder })(ReactionRoleCommands.prototype, 'executeRemove');
-Command({ name: 'reactionrole-list', builder: listBuilder })(ReactionRoleCommands.prototype, 'executeList');
-
-async function executeAddButton(interaction) {
-    if (!isAdmin(interaction)) {
-        return interaction.reply({ content: '❌ Réservé aux admins (ManageRoles)', ephemeral: true });
-    }
-    const channel = interaction.options.getChannel('channel');
-    const messageId = interaction.options.getString('message_id');
-    const label = interaction.options.getString('label');
-    const style = interaction.options.getString('style') || 'primary';
-    const emoji = interaction.options.getString('emoji');
-    const action = interaction.options.getString('action') || 'toggle_role';
-    const role = interaction.options.getRole('role');
-    const url = interaction.options.getString('url');
-
-    const metadata = { label, style, emoji, action, url, customIdSuffix: messageId };
-    if (role) metadata.roleId = role.id;
-    if (action !== 'open_url' && !role) {
-        return interaction.reply({ content: '❌ role requis pour action "' + action + '"', ephemeral: true });
-    }
-    if (action === 'open_url' && !url) {
-        return interaction.reply({ content: '❌ url requis pour action open_url', ephemeral: true });
-    }
-
-    const r = await this.service.create({
-        guildId: interaction.guild.id,
-        channelId: channel.id,
-        messageId,
-        kind: 'button',
-        roleId: role ? role.id : null,
-        metadata
-    });
-    if (!r.ok) {
-        return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
-    }
-    return interaction.reply({ content: `✅ Bouton **${label}** ajouté.`, ephemeral: true });
-}
-
-const addButtonBuilder = new SlashCommandBuilder()
-    .setName('reactionrole-add-button')
-    .setDescription('Ajouter un bouton (toggle_role/give_role/take_role/open_url) à un message (admin)')
-    .addChannelOption(o => o.setName('channel').setDescription('Salon du message').setRequired(true))
-    .addStringOption(o => o.setName('message_id').setDescription('ID du message').setRequired(true))
-    .addStringOption(o => o.setName('label').setDescription('Texte du bouton (max 80)').setRequired(true).setMaxLength(80))
-    .addStringOption(o => o.setName('style').setDescription('Style du bouton').setRequired(false).addChoices(
-        { name: 'primary', value: 'primary' },
-        { name: 'secondary', value: 'secondary' },
-        { name: 'success', value: 'success' },
-        { name: 'danger', value: 'danger' },
-        { name: 'link (pour open_url)', value: 'link' }
-    ))
-    .addStringOption(o => o.setName('emoji').setDescription('Emoji du bouton (optionnel)').setRequired(false).setMaxLength(50))
-    .addStringOption(o => o.setName('action').setDescription('Action').setRequired(false).addChoices(
-        { name: 'toggle_role (default)', value: 'toggle_role' },
-        { name: 'give_role (ajouter si absent)', value: 'give_role' },
-        { name: 'take_role (retirer si présent)', value: 'take_role' },
-        { name: 'open_url (lien externe)', value: 'open_url' }
-    ))
-    .addRoleOption(o => o.setName('role').setDescription('Rôle à attribuer/retirer (sauf open_url)').setRequired(false))
-    .addStringOption(o => o.setName('url').setDescription('URL pour open_url (sinon inutile)').setRequired(false).setMaxLength(200))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles);
-
-async function executeAddSelect(interaction) {
-    if (!isAdmin(interaction)) {
-        return interaction.reply({ content: '❌ Réservé aux admins (ManageRoles)', ephemeral: true });
-    }
-    const channel = interaction.options.getChannel('channel');
-    const messageId = interaction.options.getString('message_id');
-    const placeholder = interaction.options.getString('placeholder');
-    const minValues = interaction.options.getInteger('min_values') ?? 1;
-    const maxValues = interaction.options.getInteger('max_values') ?? 1;
-    const optionsStr = interaction.options.getString('options');
-
-    // Parse les options : format "Label|value|roleId?;Label|value|roleId?;..."
-    const options = optionsStr.split(';').map(s => {
-        const parts = s.split('|').map(p => p.trim());
-        if (parts.length < 2) return null;
-        const opt = { label: parts[0], value: parts[1] };
-        if (parts[2]) opt.roleId = parts[2];
-        return opt;
-    }).filter(Boolean);
-
-    if (options.length === 0 || options.length > 25) {
-        return interaction.reply({ content: '❌ options invalides (1 à 25 attendues, format: Label|value|roleId? séparées par ;)', ephemeral: true });
-    }
-
-    const roleId = options.find(o => o.roleId)?.roleId;
-    const r = await this.service.create({
-        guildId: interaction.guild.id,
-        channelId: channel.id,
-        messageId,
-        kind: 'select',
-        roleId,
-        metadata: { placeholder, minValues, maxValues, options }
-    });
-    if (!r.ok) {
-        return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
-    }
-    return interaction.reply({ content: `✅ Select avec ${options.length} option(s) ajouté.`, ephemeral: true });
-}
-
-const addSelectBuilder = new SlashCommandBuilder()
-    .setName('reactionrole-add-select')
-    .setDescription('Ajouter un select menu (max 25 options) à un message (admin)')
-    .addChannelOption(o => o.setName('channel').setDescription('Salon du message').setRequired(true))
-    .addStringOption(o => o.setName('message_id').setDescription('ID du message').setRequired(true))
-    .addStringOption(o => o.setName('options').setDescription('Options: "Label|value|roleId?" séparées par ;').setRequired(true).setMaxLength(1000))
-    .addStringOption(o => o.setName('placeholder').setDescription('Texte affiché quand rien n\'est sélectionné').setRequired(false).setMaxLength(100))
-    .addIntegerOption(o => o.setName('min_values').setDescription('Nb min d\'options (0 = optionnel, default 1)').setRequired(false).setMinValue(0).setMaxValue(25))
-    .addIntegerOption(o => o.setName('max_values').setDescription('Nb max d\'options (1 = single, default 1)').setRequired(false).setMinValue(1).setMaxValue(25))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles);
-
-Command({ name: 'reactionrole-add-button', builder: addButtonBuilder })(ReactionRoleCommands.prototype, 'executeAddButton');
-Command({ name: 'reactionrole-add-select', builder: addSelectBuilder })(ReactionRoleCommands.prototype, 'executeAddSelect');
+Command({ name: 'reactionrole', description: 'Gestion des rôles par réaction' })(ReactionRoleCommands.prototype, 'execute');
 
 module.exports = { ReactionRoleCommands };

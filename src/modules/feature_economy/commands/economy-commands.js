@@ -1,11 +1,16 @@
 /**
- * Slash commands /balance, /daily, /pay, /leaderboard (économie)
- * /shop, /shop-buy, /inventaire, /objet-* (items)
+ * Slash commands économie avec sous-commandes et commandes directes
  *
- * /admin-economy * : add/remove/reset (admin)
- * /admin-shop * : create/list/delete (admin)
- * /admin-inventaire * : ajouter/retirer/reset (admin)
- * /dropobjet, /objet drop, /topitems
+ * Commandes directes :
+ *   /balance [user]
+ *   /daily
+ *   /pay <user> <amount>
+ *   /leaderboard
+ *
+ * Commandes avec sous-commandes :
+ *   /shop list|buy
+ *   /inventaire show|donner|vendre|drop|top
+ *   /admin-economy money-add|money-remove|shop-create|shop-delete|item-add|item-reset
  */
 
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
@@ -97,15 +102,37 @@ class EconomyCommands {
 class ShopCommands {
     static inject = [ShopService, EconomyService];
 
+    static __commandBuilder = new SlashCommandBuilder()
+        .setName('shop')
+        .setDescription('Boutique du serveur')
+        .addSubcommand(sub =>
+            sub.setName('list')
+                .setDescription('Voir les items en vente dans le shop')
+        )
+        .addSubcommand(sub =>
+            sub.setName('buy')
+                .setDescription('Acheter un item du shop')
+                .addStringOption(o => o.setName('item').setDescription('Nom de l\'item').setRequired(true))
+        );
+
     constructor(shop, economy) {
         this.shop = shop;
         this.economy = economy;
     }
 
+    async execute(interaction) {
+        const sub = interaction.options.getSubcommand();
+        switch (sub) {
+            case 'list': return this.executeShopList(interaction);
+            case 'buy':  return this.executeShopBuy(interaction);
+            default:     return this.executeShopList(interaction);
+        }
+    }
+
     async executeShopList(interaction) {
         const list = await this.shop.list(interaction.guild.id, 25, 0);
         if (list.length === 0) {
-            return interaction.reply({ content: 'ℹ️ Le shop est vide. Demande à un admin de créer des items avec `/admin-shop-create`.', ephemeral: true });
+            return interaction.reply({ content: 'ℹ️ Le shop est vide. Demande à un admin de créer des items avec `/admin-economy shop-create`.', ephemeral: true });
         }
         const lines = list.map(item => {
             const emoji = item.emoji || '🛒';
@@ -124,7 +151,7 @@ class ShopCommands {
         const name = interaction.options.getString('item');
         const item = await this.shop.getByName(interaction.guild.id, name);
         if (!item) {
-            return interaction.reply({ content: `❌ Item "${name}" introuvable. Utilise \`/shop-list\`.`, ephemeral: true });
+            return interaction.reply({ content: `❌ Item "${name}" introuvable. Utilise \`/shop list\`.`, ephemeral: true });
         }
         const r = await this.shop.buy(interaction.guild.id, interaction.user.id, item.id);
         if (!r.ok) {
@@ -142,9 +169,56 @@ class ShopCommands {
 class InventoryCommands {
     static inject = [InventoryService, ShopService];
 
+    static __commandBuilder = new SlashCommandBuilder()
+        .setName('inventaire')
+        .setDescription('Gestion de l\'inventaire et des objets')
+        .addSubcommand(sub =>
+            sub.setName('show')
+                .setDescription('Voir l\'inventaire d\'un membre')
+                .addUserOption(o => o.setName('user').setDescription('Cible (par défaut toi-même)').setRequired(false))
+        )
+        .addSubcommand(sub =>
+            sub.setName('donner')
+                .setDescription('Donner un item à un autre membre')
+                .addUserOption(o => o.setName('user').setDescription('Destinataire').setRequired(true))
+                .addStringOption(o => o.setName('item').setDescription('Nom de l\'item').setRequired(true))
+                .addIntegerOption(o => o.setName('quantity').setDescription('Quantité (défaut 1)').setRequired(false).setMinValue(1))
+        )
+        .addSubcommand(sub =>
+            sub.setName('vendre')
+                .setDescription('Vendre un item à un autre membre pour un prix donné')
+                .addUserOption(o => o.setName('user').setDescription('Acheteur').setRequired(true))
+                .addStringOption(o => o.setName('item').setDescription('Nom de l\'item').setRequired(true))
+                .addIntegerOption(o => o.setName('price').setDescription('Prix de vente').setRequired(true).setMinValue(1))
+                .addIntegerOption(o => o.setName('quantity').setDescription('Quantité (défaut 1)').setRequired(false).setMinValue(1))
+        )
+        .addSubcommand(sub =>
+            sub.setName('drop')
+                .setDescription('Lancer un drop d\'item à récupérer')
+                .addStringOption(o => o.setName('item').setDescription('Nom de l\'item').setRequired(true))
+                .addIntegerOption(o => o.setName('duration').setDescription('Durée en minutes (1-10)').setRequired(false).setMinValue(1).setMaxValue(10))
+                .addIntegerOption(o => o.setName('quantity').setDescription('Quantité (défaut 1)').setRequired(false).setMinValue(1))
+        )
+        .addSubcommand(sub =>
+            sub.setName('top')
+                .setDescription('Voir les items les plus possédés')
+        );
+
     constructor(inventory, shop) {
         this.inventory = inventory;
         this.shop = shop;
+    }
+
+    async execute(interaction) {
+        const sub = interaction.options.getSubcommand();
+        switch (sub) {
+            case 'show':   return this.executeInventaire(interaction);
+            case 'donner': return this.executeObjetDonner(interaction);
+            case 'vendre': return this.executeObjetVendre(interaction);
+            case 'drop':   return this.executeDropobjet(interaction);
+            case 'top':    return this.executeTopitems(interaction);
+            default:       return this.executeInventaire(interaction);
+        }
     }
 
     async executeInventaire(interaction) {
@@ -274,12 +348,71 @@ class DropButtonHandler {
 }
 
 class AdminEconomyCommands {
-    static inject = [EconomyService];
+    static inject = [EconomyService, ShopService, InventoryService];
 
-    constructor(economy) { this.economy = economy; }
+    static __commandBuilder = new SlashCommandBuilder()
+        .setName('admin-economy')
+        .setDescription('Administration de l\'économie, du shop et des inventaires')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addSubcommand(sub =>
+            sub.setName('money-add')
+                .setDescription('Ajouter de la monnaie à un membre')
+                .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+                .addIntegerOption(o => o.setName('amount').setDescription('Montant').setRequired(true).setMinValue(1))
+        )
+        .addSubcommand(sub =>
+            sub.setName('money-remove')
+                .setDescription('Retirer de la monnaie à un membre')
+                .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+                .addIntegerOption(o => o.setName('amount').setDescription('Montant').setRequired(true).setMinValue(1))
+        )
+        .addSubcommand(sub =>
+            sub.setName('shop-create')
+                .setDescription('Créer un item de shop')
+                .addStringOption(o => o.setName('name').setDescription('Nom de l\'item').setRequired(true).setMaxLength(50))
+                .addIntegerOption(o => o.setName('price').setDescription('Prix').setRequired(true).setMinValue(0))
+                .addStringOption(o => o.setName('description').setDescription('Description').setRequired(false).setMaxLength(200))
+                .addRoleOption(o => o.setName('role').setDescription('Rôle cadeau (optionnel)').setRequired(false))
+        )
+        .addSubcommand(sub =>
+            sub.setName('shop-delete')
+                .setDescription('Supprimer un item de shop')
+                .addStringOption(o => o.setName('name').setDescription('Nom de l\'item').setRequired(true))
+        )
+        .addSubcommand(sub =>
+            sub.setName('item-add')
+                .setDescription('Ajouter un item à l\'inventaire d\'un membre')
+                .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+                .addStringOption(o => o.setName('item').setDescription('Nom de l\'item').setRequired(true))
+                .addIntegerOption(o => o.setName('quantity').setDescription('Quantité (défaut 1)').setRequired(false).setMinValue(1))
+        )
+        .addSubcommand(sub =>
+            sub.setName('item-reset')
+                .setDescription('Vider l\'inventaire d\'un membre')
+                .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
+        );
 
-    async executeAdd(interaction) {
+    constructor(economy, shop, inventory) {
+        this.economy = economy;
+        this.shop = shop;
+        this.inventory = inventory;
+    }
+
+    async execute(interaction) {
         if (!isAdmin(interaction)) return interaction.reply({ content: '❌ Admin uniquement', ephemeral: true });
+        const sub = interaction.options.getSubcommand();
+        switch (sub) {
+            case 'money-add':    return this.executeAddMoney(interaction);
+            case 'money-remove': return this.executeRemoveMoney(interaction);
+            case 'shop-create':  return this.executeCreateShop(interaction);
+            case 'shop-delete':  return this.executeDeleteShop(interaction);
+            case 'item-add':     return this.executeAddItem(interaction);
+            case 'item-reset':   return this.executeResetItem(interaction);
+            default:             return interaction.reply({ content: '❌ Sous-commande inconnue', ephemeral: true });
+        }
+    }
+
+    async executeAddMoney(interaction) {
         const target = interaction.options.getUser('user');
         const amount = interaction.options.getInteger('amount');
         const r = await this.economy.add(interaction.guild.id, target.id, amount, { type: 'admin', reason: 'admin_grant' });
@@ -287,23 +420,15 @@ class AdminEconomyCommands {
         return interaction.reply({ content: `✅ **${amount}** 🪙 ajoutés à <@${target.id}>` });
     }
 
-    async executeRemove(interaction) {
-        if (!isAdmin(interaction)) return interaction.reply({ content: '❌ Admin uniquement', ephemeral: true });
+    async executeRemoveMoney(interaction) {
         const target = interaction.options.getUser('user');
         const amount = interaction.options.getInteger('amount');
         const r = await this.economy.remove(interaction.guild.id, target.id, amount, { type: 'admin' });
         if (!r.ok) return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
         return interaction.reply({ content: `✅ **${amount}** 🪙 retirés à <@${target.id}>` });
     }
-}
 
-class AdminShopCommands {
-    static inject = [ShopService];
-
-    constructor(shop) { this.shop = shop; }
-
-    async executeCreate(interaction) {
-        if (!isAdmin(interaction)) return interaction.reply({ content: '❌ Admin uniquement', ephemeral: true });
+    async executeCreateShop(interaction) {
         const name = interaction.options.getString('name');
         const price = interaction.options.getInteger('price');
         const description = interaction.options.getString('description');
@@ -313,32 +438,20 @@ class AdminShopCommands {
         return interaction.reply({ content: `✅ Item **${name}** créé pour **${price}** 🪙` });
     }
 
-    async executeDelete(interaction) {
-        if (!isAdmin(interaction)) return interaction.reply({ content: '❌ Admin uniquement', ephemeral: true });
+    async executeDeleteShop(interaction) {
         const name = interaction.options.getString('name');
         const item = await this.shop.getByName(interaction.guild.id, name);
         if (!item) return interaction.reply({ content: `❌ Item "${name}" introuvable`, ephemeral: true });
         await this.shop.delete(item.id);
         return interaction.reply({ content: `✅ Item **${name}** supprimé` });
     }
-}
 
-class AdminInventaireCommands {
-    static inject = [InventoryService, ShopService];
-
-    constructor(inventory, shop) {
-        this.inventory = inventory;
-        this.shop = shop;
-    }
-
-    async executeAdd(interaction) {
-        if (!isAdmin(interaction)) return interaction.reply({ content: '❌ Admin uniquement', ephemeral: true });
+    async executeAddItem(interaction) {
         const target = interaction.options.getUser('user');
         const itemName = interaction.options.getString('item');
         const qty = interaction.options.getInteger('quantity') || 1;
         const item = await this.shop.getByName(interaction.guild.id, itemName);
         if (!item) return interaction.reply({ content: `❌ Item "${itemName}" introuvable`, ephemeral: true });
-        await this.inventory.listInventory; // noop
         const { db } = require('../../../db/index.js');
         await db.pool.query(
             `INSERT INTO user_inventory (user_id, guild_id, item_id, quantity, acquired_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id, guild_id, item_id) DO UPDATE SET quantity = user_inventory.quantity + $4`,
@@ -347,17 +460,15 @@ class AdminInventaireCommands {
         return interaction.reply({ content: `✅ **${qty}x ${item.name}** ajoutés à <@${target.id}>` });
     }
 
-    async executeReset(interaction) {
-        if (!isAdmin(interaction)) return interaction.reply({ content: '❌ Admin uniquement', ephemeral: true });
+    async executeResetItem(interaction) {
         const target = interaction.options.getUser('user');
-        await this.inventory.listInventory; // touch
         const { db } = require('../../../db/index.js');
         await db.pool.query(`DELETE FROM user_inventory WHERE guild_id = $1 AND user_id = $2`, [interaction.guild.id, target.id]);
         return interaction.reply({ content: `✅ Inventaire de <@${target.id}> réinitialisé` });
     }
 }
 
-// =================== BUILDERS ===================
+// =================== DIRECT BUILDERS ===================
 
 const balanceBuilder = new SlashCommandBuilder()
     .setName('balance')
@@ -378,118 +489,19 @@ const leaderboardBuilder = new SlashCommandBuilder()
     .setName('leaderboard')
     .setDescription('Top 10 des plus riches');
 
-const shopListBuilder = new SlashCommandBuilder()
-    .setName('shop-list')
-    .setDescription('Voir les items du shop');
-
-const shopBuyBuilder = new SlashCommandBuilder()
-    .setName('shop-buy')
-    .setDescription('Acheter un item du shop')
-    .addStringOption(o => o.setName('item').setDescription('Nom de l\'item').setRequired(true));
-
-const inventaireBuilder = new SlashCommandBuilder()
-    .setName('inventaire')
-    .setDescription('Voir l\'inventaire d\'un membre')
-    .addUserOption(o => o.setName('user').setDescription('Cible (par défaut toi-même)').setRequired(false));
-
-const objetDonnerBuilder = new SlashCommandBuilder()
-    .setName('objet-donner')
-    .setDescription('Donner un item à un autre membre')
-    .addUserOption(o => o.setName('user').setDescription('Destinataire').setRequired(true))
-    .addStringOption(o => o.setName('item').setDescription('Nom de l\'item').setRequired(true))
-    .addIntegerOption(o => o.setName('quantity').setDescription('Quantité (défaut 1)').setRequired(false).setMinValue(1));
-
-const objetVendreBuilder = new SlashCommandBuilder()
-    .setName('objet-vendre')
-    .setDescription('Vendre un item à un autre membre pour un prix donné')
-    .addUserOption(o => o.setName('user').setDescription('Acheteur').setRequired(true))
-    .addStringOption(o => o.setName('item').setDescription('Nom de l\'item').setRequired(true))
-    .addIntegerOption(o => o.setName('price').setDescription('Prix de vente').setRequired(true).setMinValue(1))
-    .addIntegerOption(o => o.setName('quantity').setDescription('Quantité (défaut 1)').setRequired(false).setMinValue(1));
-
-const dropobjetBuilder = new SlashCommandBuilder()
-    .setName('dropobjet')
-    .setDescription('Lancer un drop d\'item à récupérer')
-    .addStringOption(o => o.setName('item').setDescription('Nom de l\'item').setRequired(true))
-    .addIntegerOption(o => o.setName('duration').setDescription('Durée en minutes (1-10)').setRequired(false).setMinValue(1).setMaxValue(10))
-    .addIntegerOption(o => o.setName('quantity').setDescription('Quantité (défaut 1)').setRequired(false).setMinValue(1));
-
-const topitemsBuilder = new SlashCommandBuilder()
-    .setName('topitems')
-    .setDescription('Voir les items les plus possédés');
-
-const adminAddBuilder = new SlashCommandBuilder()
-    .setName('admin-economy-add')
-    .setDescription('Ajouter de la monnaie (admin)')
-    .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-    .addIntegerOption(o => o.setName('amount').setDescription('Montant').setRequired(true).setMinValue(1))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
-const adminRemoveBuilder = new SlashCommandBuilder()
-    .setName('admin-economy-remove')
-    .setDescription('Retirer de la monnaie (admin)')
-    .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-    .addIntegerOption(o => o.setName('amount').setDescription('Montant').setRequired(true).setMinValue(1))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
-const adminShopCreateBuilder = new SlashCommandBuilder()
-    .setName('admin-shop-create')
-    .setDescription('Créer un item de shop (admin)')
-    .addStringOption(o => o.setName('name').setDescription('Nom de l\'item').setRequired(true).setMaxLength(50))
-    .addIntegerOption(o => o.setName('price').setDescription('Prix').setRequired(true).setMinValue(0))
-    .addStringOption(o => o.setName('description').setDescription('Description').setRequired(false).setMaxLength(200))
-    .addRoleOption(o => o.setName('role').setDescription('Rôle cadeau (optionnel)').setRequired(false))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
-const adminShopDeleteBuilder = new SlashCommandBuilder()
-    .setName('admin-shop-delete')
-    .setDescription('Supprimer un item de shop (admin)')
-    .addStringOption(o => o.setName('name').setDescription('Nom de l\'item').setRequired(true))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
-const adminInvAddBuilder = new SlashCommandBuilder()
-    .setName('admin-inventaire-add')
-    .setDescription('Ajouter un item à l\'inventaire d\'un membre (admin)')
-    .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-    .addStringOption(o => o.setName('item').setDescription('Nom de l\'item').setRequired(true))
-    .addIntegerOption(o => o.setName('quantity').setDescription('Quantité (défaut 1)').setRequired(false).setMinValue(1))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
-const adminInvResetBuilder = new SlashCommandBuilder()
-    .setName('admin-inventaire-reset')
-    .setDescription('Vider l\'inventaire d\'un membre (admin)')
-    .addUserOption(o => o.setName('user').setDescription('Cible').setRequired(true))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
 // =================== REGISTER ===================
 
-const cmds = [
-    [EconomyCommands, 'executeBalance', balanceBuilder, 'balance'],
-    [EconomyCommands, 'executeDaily', dailyBuilder, 'daily'],
-    [EconomyCommands, 'executePay', payBuilder, 'pay'],
-    [EconomyCommands, 'executeLeaderboard', leaderboardBuilder, 'leaderboard'],
-    [ShopCommands, 'executeShopList', shopListBuilder, 'shop-list'],
-    [ShopCommands, 'executeShopBuy', shopBuyBuilder, 'shop-buy'],
-    [InventoryCommands, 'executeInventaire', inventaireBuilder, 'inventaire'],
-    [InventoryCommands, 'executeObjetDonner', objetDonnerBuilder, 'objet-donner'],
-    [InventoryCommands, 'executeObjetVendre', objetVendreBuilder, 'objet-vendre'],
-    [InventoryCommands, 'executeDropobjet', dropobjetBuilder, 'dropobjet'],
-    [InventoryCommands, 'executeTopitems', topitemsBuilder, 'topitems'],
-    [AdminEconomyCommands, 'executeAdd', adminAddBuilder, 'admin-economy-add'],
-    [AdminEconomyCommands, 'executeRemove', adminRemoveBuilder, 'admin-economy-remove'],
-    [AdminShopCommands, 'executeCreate', adminShopCreateBuilder, 'admin-shop-create'],
-    [AdminShopCommands, 'executeDelete', adminShopDeleteBuilder, 'admin-shop-delete'],
-    [AdminInventaireCommands, 'executeAdd', adminInvAddBuilder, 'admin-inventaire-add'],
-    [AdminInventaireCommands, 'executeReset', adminInvResetBuilder, 'admin-inventaire-reset']
-];
+Command({ name: 'balance', builder: balanceBuilder })(EconomyCommands.prototype, 'executeBalance');
+Command({ name: 'daily', builder: dailyBuilder })(EconomyCommands.prototype, 'executeDaily');
+Command({ name: 'pay', builder: payBuilder })(EconomyCommands.prototype, 'executePay');
+Command({ name: 'leaderboard', builder: leaderboardBuilder })(EconomyCommands.prototype, 'executeLeaderboard');
 
-for (const [Klass, method, builder, name] of cmds) {
-    Command({ name, builder })(Klass.prototype, method);
-}
-
+Command({ name: 'shop', builder: ShopCommands.__commandBuilder })(ShopCommands.prototype, 'execute');
+Command({ name: 'inventaire', builder: InventoryCommands.__commandBuilder })(InventoryCommands.prototype, 'execute');
+Command({ name: 'admin-economy', builder: AdminEconomyCommands.__commandBuilder })(AdminEconomyCommands.prototype, 'execute');
 Command({ name: 'drop-claim-button' })(DropButtonHandler.prototype, 'execute');
 
 module.exports = {
     EconomyCommands, ShopCommands, InventoryCommands, DropButtonHandler,
-    AdminEconomyCommands, AdminShopCommands, AdminInventaireCommands
+    AdminEconomyCommands
 };
