@@ -1,23 +1,14 @@
 /**
- * Tests for the ReminderService (Phase 9.2 du split util_reminders)
-const { test, describe } = require('node:test');
+ * Couvre : createReminder, listByUser, cancel, get, tick, dispatch
 
- *
- * Couvre :
- *  - createReminder : validation, cooldown, insertion
- *  - listByUser : récupération par userId
- *  - cancel : ownership check
- *  - get : récupération par id
- *  - tick : retourne les到期 non annulés
- *  - dispatch : envoie DM ou message channel
  */
 
+const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const { ReminderService } = require('../../src/modules/util_reminders/services/reminder.service.js');
 
 function makeService({ repo } = {}) {
-    const svc = new ReminderService(repo);
-    return svc;
+    return new ReminderService(repo || makeMockRepo());
 }
 
 function makeMockRepo() {
@@ -34,8 +25,10 @@ function makeMockRepo() {
             const r = items.get(id);
             if (r) Object.assign(r, fields);
         },
-        async listByUser(userId) {
-            return [...items.values()].filter(r => r.userId === userId);
+        async listReminders({ userId, status, limit } = {}) {
+            let arr = [...items.values()].filter(r => r.userId === userId);
+            if (status) arr = arr.filter(r => r.status === status);
+            return limit ? arr.slice(0, limit) : arr;
         },
         async findDueReminders(limit = 50) {
             const now = Date.now();
@@ -71,7 +64,7 @@ describe('ReminderService', () => {
                 fireAt: Date.now() + 60000
             });
             assert.strictEqual(r.ok, true);
-            assert.ok(r.reminder.id);
+            assert.ok(r.data.id);
         });
 
         test('applique un cooldown de 5s', async () => {
@@ -83,7 +76,7 @@ describe('ReminderService', () => {
             const r2 = await svc.createReminder({
                 userId: 'u1', text: 'B', fireAt: Date.now() + 70000
             });
-            assert.strictEqual(r2.ok, false, 'cooldown empêche le 2e reminder');
+            assert.strictEqual(r2.ok, false);
             assert.strictEqual(r2.error, 'cooldown');
         });
     });
@@ -95,7 +88,6 @@ describe('ReminderService', () => {
             await svc.createReminder({ userId: 'u1', text: 'A', fireAt: Date.now() + 60000 });
             await svc.createReminder({ userId: 'u1', text: 'B', fireAt: Date.now() + 120000 });
             await svc.createReminder({ userId: 'u2', text: 'C', fireAt: Date.now() + 180000 });
-
             const list = await svc.listByUser('u1');
             assert.strictEqual(list.length, 2);
         });
@@ -108,7 +100,7 @@ describe('ReminderService', () => {
             const r = await svc.createReminder({
                 userId: 'u1', text: 'X', fireAt: Date.now() + 60000
             });
-            const res = await svc.cancel(r.reminder.id, 'u1');
+            const res = await svc.cancel(r.data.id, 'u1');
             assert.strictEqual(res.ok, true);
         });
 
@@ -118,7 +110,7 @@ describe('ReminderService', () => {
             const r = await svc.createReminder({
                 userId: 'u1', text: 'X', fireAt: Date.now() + 60000
             });
-            const res = await svc.cancel(r.reminder.id, 'u2');
+            const res = await svc.cancel(r.data.id, 'u2');
             assert.strictEqual(res.ok, false);
         });
     });
@@ -128,7 +120,7 @@ describe('ReminderService', () => {
             const repo = makeMockRepo();
             const svc = makeService({ repo });
             const r = await svc.createReminder({ userId: 'u1', text: 'X', fireAt: Date.now() + 60000 });
-            const fetched = await svc.get(r.reminder.id);
+            const fetched = await svc.get(r.data.id);
             assert.ok(fetched);
             assert.strictEqual(fetched.text, 'X');
         });
@@ -140,11 +132,9 @@ describe('ReminderService', () => {
             const svc = makeService({ repo });
             const r1 = await svc.createReminder({ userId: 'u1', text: 'A', fireAt: Date.now() - 1000 });
             const r2 = await svc.createReminder({ userId: 'u1', text: 'B', fireAt: Date.now() + 60000 });
-            await svc.cancel(r1.reminder.id, 'u1');
-            // r1 est annulé, r2 pas到期
-
+            await svc.cancel(r1.data.id, 'u1');
             const due = await svc.tick();
-            assert.strictEqual(due.length, 0, 'r1 annulé, r2 pas到期');
+            assert.strictEqual(due.length, 0);
         });
     });
 });

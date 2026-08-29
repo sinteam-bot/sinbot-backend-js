@@ -32,7 +32,18 @@ class PollService {
      * Crée un poll
      */
     async create({ guildId, channelId, question, options, multiChoice, anonymous, durationMs, createdBy }) {
-        if (!guildId || !channelId || !question || !Array.isArray(options)) {
+        if (!guildId || !channelId || !question) {
+            throw new Error('guildId, channelId, question requis');
+        }
+        // Parse les options si c'est une string JSON
+        if (typeof options === 'string') {
+            try {
+                options = JSON.parse(options);
+            } catch (err) {
+                throw new Error('options doit être un array ou une string JSON valide');
+            }
+        }
+        if (!Array.isArray(options)) {
             throw new Error('guildId, channelId, question, options requis');
         }
         if (options.length < 2) throw new Error('Au moins 2 options requises');
