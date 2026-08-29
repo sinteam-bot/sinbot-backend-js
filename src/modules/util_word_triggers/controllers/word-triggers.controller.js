@@ -2,11 +2,13 @@
  * WordTriggersController.controller.js — endpoints REST pour WordTriggersController
  */
 
-const { Controller, Get, Post, Delete } = require('../../../core/index.js');
+const { Controller } = require('../../../core/index.js');
 const { WordTriggerService } = require('../services/word-trigger.service.js');
 
 class WordTriggersController {
-    @Get('/list')
+    static inject = [WordTriggerService];
+    constructor(service) { this.service = service; }
+
     async listTriggers(req) {
         try {
             const { guildId } = req.query || {};
@@ -17,31 +19,25 @@ class WordTriggersController {
         }
     }
 
-    @Post('/create')
     async createTrigger(req) {
         try {
-            const data = req.body || {};
-            const r = await this.service.create(data);
+            const r = await this.service.create(req.body || {});
             return { success: true, data: r };
         } catch (err) {
             return { success: false, error: err.message };
         }
     }
 
-    @Delete('/:id')
     async deleteTrigger(req) {
         try {
-            await this.service.delete(req.params.id);
-            return { success: true };
+            const r = await this.service.delete(req.params.id);
+            return { success: true, data: r };
         } catch (err) {
             return { success: false, error: err.message };
         }
     }
-
-    static inject = [WordTriggerService];
-    constructor(service) { this.service = service; }
 }
 
-Controller('/api/word-triggers')(WordTriggersController);
+Controller('/api/word-triggers')(WordTriggersController.prototype, 'listTriggers', 'createTrigger', 'deleteTrigger');
 
 module.exports = { WordTriggersController };

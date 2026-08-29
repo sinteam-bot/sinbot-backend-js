@@ -3,45 +3,42 @@
  */
 
 const { Controller, Get, Post, Delete } = require('../../../core/index.js');
-const { ReminderService } = require('../services/reminders.service.js');
+const { ReminderService } = require('../services/reminder.service.js');
 
 class RemindersController {
-    @Get('/list')
+    static inject = [ReminderService];
+    constructor(service) { this.service = service; }
+
     async listReminders(req) {
         try {
             const { guildId } = req.query || {};
-            const list = await this.service.list(guildId);
+            const list = await this.service.listByUser(guildId);
             return { success: true, data: list };
         } catch (err) {
             return { success: false, error: err.message };
         }
     }
 
-    @Post('/create')
     async createReminder(req) {
         try {
             const { userId, text, fireAt, channelId } = req.body || {};
-            const r = await this.service.create({ userId, text, fireAt, channelId });
+            const r = await this.service.createReminder({ userId, text, fireAt, channelId });
             return { success: true, data: r };
         } catch (err) {
             return { success: false, error: err.message };
         }
     }
 
-    @Post('/:id/cancel')
     async cancelReminder(req) {
         try {
-            const r = await this.service.cancel(req.params.id);
+            const r = await this.service.cancel(req.params.id, req.body?.userId);
             return { success: true, data: r };
         } catch (err) {
             return { success: false, error: err.message };
         }
     }
-
-    static inject = [ReminderService];
-    constructor(service) { this.service = service; }
 }
 
-Controller('/api/reminders')(RemindersController);
+Controller('/api/reminders')(RemindersController.prototype, 'listReminders', 'createReminder', 'cancelReminder');
 
 module.exports = { RemindersController };

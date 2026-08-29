@@ -1,13 +1,15 @@
 /**
- * CustomCommandsController.controller.js — endpoints REST pour CustomCommandsController
+ * CustomCommandsController — endpoints REST pour CustomCommandsController
  */
 
-const { Controller, Get, Post, Delete } = require('../../../core/index.js');
+const { Controller } = require('../../../core/index.js');
 const { CustomCommandService } = require('../services/custom-command.service.js');
 
 class CustomCommandsController {
-    @Get('/list')
-    async listCustomCommands(req) {
+    static inject = [CustomCommandService];
+    constructor(service) { this.service = service; }
+
+    async listCommands(req) {
         try {
             const { guildId } = req.query || {};
             const list = await this.service.list(guildId);
@@ -17,31 +19,25 @@ class CustomCommandsController {
         }
     }
 
-    @Post('/create')
-    async createCustomCommand(req) {
+    async createCommand(req) {
         try {
-            const data = req.body || {};
-            const r = await this.service.create(data);
+            const r = await this.service.create(req.body || {});
             return { success: true, data: r };
         } catch (err) {
             return { success: false, error: err.message };
         }
     }
 
-    @Delete('/:id')
-    async deleteCustomCommand(req) {
+    async deleteCommand(req) {
         try {
-            await this.service.delete(req.params.id);
-            return { success: true };
+            const r = await this.service.delete(req.params.id);
+            return { success: true, data: r };
         } catch (err) {
             return { success: false, error: err.message };
         }
     }
-
-    static inject = [CustomCommandService];
-    constructor(service) { this.service = service; }
 }
 
-Controller('/api/custom-commands')(CustomCommandsController);
+Controller('/api/custom-commands')(CustomCommandsController.prototype, 'listCommands', 'createCommand', 'deleteCommand');
 
 module.exports = { CustomCommandsController };
