@@ -70,7 +70,11 @@ class FeatureRegistry {
      * Résout un nom de feature (potentiellement alias) vers le nom canonique.
      */
     _resolveName(name) {
-        return this._aliases.get(name) || name;
+        const resolved = this._aliases.get(name) || name;
+        if (resolved !== name) {
+            console.log(`🔁 [FeatureRegistry] Alias résolu: '${name}' → '${resolved}'`);
+        }
+        return resolved;
     }
 
     /**
