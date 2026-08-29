@@ -35,8 +35,10 @@ const { TempVoiceModule } = require('./util_temp-voice/temp-voice.module.js');
 const { EconomyModule } = require('./engagement_economy/economy.module.js');
 const { StickyRolesModule } = require('./community_sticky-roles/sticky-roles.module.js');
 const { InfoModule } = require('./util_info/info.module.js');
-const { EngagementAdvancedModule } = require('./game_engagement-advanced/engagement-advanced.module.js');
 const { InvitesModule } = require('./util_invites/invites.module.js');
+const { RemindersModule } = require('./util_reminders/reminders.module.js');
+const { WordTriggersModule } = require('./util_word_triggers/word-triggers.module.js');
+const { CustomCommandsModule } = require('./util_custom_commands/custom-commands.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -69,8 +71,11 @@ const MODULE_FEATURE_MAP = {
     [EconomyModule.name]: 'economy',
     [StickyRolesModule.name]: 'sticky_roles',
     [InfoModule.name]: 'info',
-    [EngagementAdvancedModule.name]: 'engagement_advanced',
-    [InvitesModule.name]: 'invites'
+    [/* removed: split into 3 modules */.name]: 'engagement_advanced',
+    [InvitesModule.name]: 'invites',
+    [RemindersModule.name]: 'reminders',
+    [WordTriggersModule.name]: 'word_triggers',
+    [CustomCommandsModule.name]: 'custom_commands'
 };
 
 const ALL_MODULES = [
@@ -92,10 +97,13 @@ const ALL_MODULES = [
     EconomyModule,
     StickyRolesModule,
     InfoModule,
-    EngagementAdvancedModule,
+    /* removed: split into 3 modules */,
     ReportsModule,
     TempVoiceModule,
-    InvitesModule
+    InvitesModule,
+    RemindersModule,
+    WordTriggersModule,
+    CustomCommandsModule
 ];
 
 /**
@@ -163,8 +171,11 @@ module.exports = {
     EconomyModule,
     StickyRolesModule,
     InfoModule,
-    EngagementAdvancedModule,
+    /* removed: split into 3 modules */,
     ReportsModule,
     TempVoiceModule,
-    InvitesModule
+    InvitesModule,
+    RemindersModule,
+    WordTriggersModule,
+    CustomCommandsModule
 };
