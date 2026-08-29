@@ -1688,7 +1688,7 @@ function createWebRouter(client) {
     router.get('/bump', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { BumpReminderService } = require('../modules/service_bump-reminder/bump-reminder.service.js');
+            const { BumpReminderService } = require('../modules/util_bump-reminder/bump-reminder.service.js');
             const service = container.resolve(BumpReminderService);
             const status = await service.getBumpStatus();
             res.json({ success: true, data: status });
@@ -1701,7 +1701,7 @@ function createWebRouter(client) {
     router.get('/bump/status', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { BumpReminderService } = require('../modules/service_bump-reminder/bump-reminder.service.js');
+            const { BumpReminderService } = require('../modules/util_bump-reminder/bump-reminder.service.js');
             const service = container.resolve(BumpReminderService);
             const status = await service.getBumpStatus();
             res.json({ success: true, data: status });
@@ -1714,7 +1714,7 @@ function createWebRouter(client) {
     router.post('/bump/config', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { BumpReminderController } = require('../modules/service_bump-reminder/bump-reminder.controller.js');
+            const { BumpReminderController } = require('../modules/util_bump-reminder/bump-reminder.controller.js');
             const controller = container.resolve(BumpReminderController);
             const result = await controller.saveConfig(req);
             res.json(result);
@@ -1727,7 +1727,7 @@ function createWebRouter(client) {
     router.post('/bump/test-reminder', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { BumpReminderController } = require('../modules/service_bump-reminder/bump-reminder.controller.js');
+            const { BumpReminderController } = require('../modules/util_bump-reminder/bump-reminder.controller.js');
             const controller = container.resolve(BumpReminderController);
             req.app = req.app || {};
             req.app.get = () => client;
@@ -1742,7 +1742,7 @@ function createWebRouter(client) {
     router.post('/bump/cleanup-tests', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { BumpReminderController } = require('../modules/service_bump-reminder/bump-reminder.controller.js');
+            const { BumpReminderController } = require('../modules/util_bump-reminder/bump-reminder.controller.js');
             const controller = container.resolve(BumpReminderController);
             const result = await controller.cleanupTests(req);
             res.json(result);
@@ -1755,7 +1755,7 @@ function createWebRouter(client) {
     router.post('/bump/delete-log', async (req, res) => {
         try {
             const { container } = require('../core/container.js');
-            const { BumpReminderController } = require('../modules/service_bump-reminder/bump-reminder.controller.js');
+            const { BumpReminderController } = require('../modules/util_bump-reminder/bump-reminder.controller.js');
             const controller = container.resolve(BumpReminderController);
             const result = await controller.deleteLog(req);
             res.json(result);

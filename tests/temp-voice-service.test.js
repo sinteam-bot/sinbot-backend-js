@@ -3,7 +3,7 @@
  */
 
 const assert = require('node:assert');
-const { TempVoiceService } = require('../src/modules/game_temp-voice/services/temp-voice.service.js');
+const { TempVoiceService } = require('../src/modules/util_temp-voice/services/temp-voice.service.js');
 
 class FakeRepo {
     constructor() {

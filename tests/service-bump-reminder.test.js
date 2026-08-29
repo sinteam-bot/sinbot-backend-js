@@ -1,8 +1,8 @@
 const assert = require('node:assert');
 const { container } = require('../src/core/container.js');
-const { BumpReminderRepository } = require('../src/modules/service_bump-reminder/bump-reminder.repository.js');
-const { BumpReminderService } = require('../src/modules/service_bump-reminder/bump-reminder.service.js');
-const { BumpReminderController } = require('../src/modules/service_bump-reminder/bump-reminder.controller.js');
+const { BumpReminderRepository } = require('../src/modules/util_bump-reminder/bump-reminder.repository.js');
+const { BumpReminderService } = require('../src/modules/util_bump-reminder/bump-reminder.service.js');
+const { BumpReminderController } = require('../src/modules/util_bump-reminder/bump-reminder.controller.js');
 
 describe('Service: Bump Reminder Module Tests', () => {
 

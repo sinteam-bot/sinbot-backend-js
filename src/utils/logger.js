@@ -100,14 +100,14 @@ class BotLogger extends EventEmitter {
         if (!relPath || typeof relPath !== 'string') return null;
         const p = relPath.replace(/\\/g, '/').toLowerCase();
 
-        if (p.includes('modules/service_bump-reminder') || p.includes('modules/bump')) return 'BUMP';
+        if (p.includes('modules/util_bump-reminder') || p.includes('modules/bump')) return 'BUMP';
         if (p.includes('modules/welcome_welcome') || p.includes('modules/welcome')) return 'WELCOME';
         if (p.includes('modules/community_daily-message') || p.includes('modules/daily')) return 'DAILY';
         if (p.includes('modules/security_captcha') || p.includes('modules/security_captcha') || p.includes('modules/captcha')) return 'CAPTCHA';
         if (p.includes('modules/engagement_xp-level') || p.includes('modules/xp')) return 'XP';
         if (p.includes('modules/game_count-down') || p.includes('modules/countdown')) return 'COUNTDOWN';
         if (p.includes('modules/game_road-to-infinite') || p.includes('modules/infinite')) return 'INFINITE';
-        if (p.includes('modules/notifier_startup') || p.includes('modules/startup')) return 'STARTUP';
+        if (p.includes('modules/util_startup') || p.includes('modules/startup')) return 'STARTUP';
         
         if (p.includes('services/imageproxyservice')) return 'API';
         if (p.includes('services/discordcacheservice')) return 'DISCORD';

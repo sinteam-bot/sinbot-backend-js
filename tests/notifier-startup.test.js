@@ -1,7 +1,7 @@
 const assert = require('node:assert');
 const { container } = require('../src/core/container.js');
-const { StartupNotifierService } = require('../src/modules/notifier_startup/startup-notifier.service.js');
-const { StartupNotifierController } = require('../src/modules/notifier_startup/startup-notifier.controller.js');
+const { StartupNotifierService } = require('../src/modules/util_startup/startup-notifier.service.js');
+const { StartupNotifierController } = require('../src/modules/util_startup/startup-notifier.controller.js');
 
 describe('Startup Notifier Module Tests', () => {
 
