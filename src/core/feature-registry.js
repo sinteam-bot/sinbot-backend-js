@@ -34,6 +34,11 @@ class FeatureRegistry {
     constructor() {
         this.features = new Map();
         this._dbAvailable = true;
+        // Aliases : noms acceptés vers le nom canonique déclaré.
+        // Utile pour les features dont le nom de dossier historique
+        // (ex. `security_question`) ne correspond pas au nom de feature
+        // canonique (ex. `captcha`).
+        this._aliases = new Map();
     }
 
     /**
@@ -44,7 +49,7 @@ class FeatureRegistry {
      *   configSchema?: object,
      *   onEnable?: (guildId: string) => Promise<void>,
      *   onDisable?: (guildId: string) => Promise<void>,
-     *   requires?: string[]
+     *   aliases?: string[]
      * }} definition
      */
     define(name, definition = {}) {
@@ -55,7 +60,17 @@ class FeatureRegistry {
             onDisable: definition.onDisable || null,
             requires: definition.requires || []
         });
+        for (const alias of (definition.aliases || [])) {
+            this._aliases.set(alias, name);
+        }
         console.log(`📌 [FeatureRegistry] Feature déclarée: ${name}`);
+    }
+
+    /**
+     * Résout un nom de feature (potentiellement alias) vers le nom canonique.
+     */
+    _resolveName(name) {
+        return this._aliases.get(name) || name;
     }
 
     /**
@@ -73,6 +88,7 @@ class FeatureRegistry {
      * Ordre de priorité : DB > YAML (features.*) > YAML legacy > defaults
      */
     async get(guildId, name) {
+        name = this._resolveName(name);
         const def = this.features.get(name);
         const defaults = def?.defaults || { enabled: false };
 
@@ -139,6 +155,7 @@ class FeatureRegistry {
      * Met à jour l'état d'une feature (upsert en DB)
      */
     async set(guildId, name, { enabled, config, allowedRoles, updatedBy } = {}) {
+        name = this._resolveName(name);
         if (!guildId) throw new Error('guildId requis');
         if (!this.features.has(name)) {
             throw new Error(`Feature inconnue: "${name}"`);
