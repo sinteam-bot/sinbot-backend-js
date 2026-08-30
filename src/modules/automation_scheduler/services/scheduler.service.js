@@ -1,7 +1,7 @@
 /**
  * src/modules/automation_scheduler/services/scheduler.service.js
  *
- * Service métier pour les messages programmés et répétitifs (Phase 8 G03).
+ * Service métier pour les messages programmés, ponctuels, récurrents et templates rotatifs (P6).
  */
 
 const { EmbedBuilder } = require('discord.js');
@@ -25,31 +25,45 @@ class SchedulerService {
         return {
             enabled: conf.enabled !== false,
             check_interval_seconds: conf.check_interval_seconds || 30,
-            max_messages_per_guild: conf.max_messages_per_guild || 25,
+            max_messages_per_guild: conf.max_messages_per_guild || 50,
             ...conf
         };
     }
 
-    computeNextRun({ cron: cronExpr, intervalMinutes, fromTimestamp = Date.now() }) {
+    computeNextRun({ cron: cronExpr, intervalMinutes, fromTimestamp = Date.now(), isOneTime = false }) {
+        if (isOneTime) return fromTimestamp;
+
         if (intervalMinutes && intervalMinutes > 0) {
             return fromTimestamp + (intervalMinutes * 60 * 1000);
         }
 
         if (cronExpr) {
-            // Utiliser intervalle de fallback ou calcul d'après expression cron
-            // Si cron valide, planification d'une heure ou intervalle standard
             return fromTimestamp + (60 * 60 * 1000);
         }
 
         return fromTimestamp + (60 * 60 * 1000);
     }
 
-    async createScheduledMessage({ guildId, name, channelId, content, embed, cron: cronExpr, intervalMinutes, createdBy }) {
+    async createScheduledMessage({
+        guildId,
+        name,
+        channelId,
+        content,
+        embed,
+        cron: cronExpr,
+        intervalMinutes,
+        timezone = 'Europe/Paris',
+        autoClean = false,
+        templateId = null,
+        isOneTime = false,
+        runAtTimestamp = null,
+        createdBy
+    }) {
         if (!guildId || !name || !channelId) {
             return { ok: false, error: 'Paramètres obligatoires manquants (guildId, name, channelId)' };
         }
-        if (!content && !embed) {
-            return { ok: false, error: 'Un contenu textuel ou un embed est requis.' };
+        if (!content && !embed && !templateId) {
+            return { ok: false, error: 'Un contenu textuel, un embed ou un modèle de template est requis.' };
         }
 
         if (cronExpr && !cron.validate(cronExpr)) {
@@ -61,11 +75,14 @@ class SchedulerService {
             return { ok: false, error: `Un message programmé avec le nom "${name}" existe déjà.` };
         }
 
-        const nextRunAt = this.computeNextRun({
-            cron: cronExpr,
-            intervalMinutes,
-            fromTimestamp: Date.now()
-        });
+        const nextRunAt = isOneTime && runAtTimestamp
+            ? runAtTimestamp
+            : this.computeNextRun({
+                cron: cronExpr,
+                intervalMinutes,
+                fromTimestamp: Date.now(),
+                isOneTime
+            });
 
         const created = await this.repo.insertScheduledMessage({
             guildId,
@@ -75,11 +92,15 @@ class SchedulerService {
             embedJson: embed,
             cronExpression: cronExpr,
             intervalMinutes,
+            timezone,
+            autoClean: Boolean(autoClean),
+            templateId,
+            isOneTime: Boolean(isOneTime),
             nextRunAt,
             createdBy
         });
 
-        logger.info(`Message programmé "${name}" créé sur la guilde ${guildId} (prochaine exécution : ${new Date(nextRunAt).toISOString()})`, 'SCHEDULER');
+        logger.info(`Message programmé "${name}" créé sur ${guildId} (prochaine exécution : ${new Date(nextRunAt).toISOString()})`, 'SCHEDULER');
         return { ok: true, data: created };
     }
 
@@ -97,7 +118,7 @@ class SchedulerService {
 
         const newEnabled = !item.enabled;
         const nextRunAt = newEnabled
-            ? this.computeNextRun({ cron: item.cronExpression, intervalMinutes: item.intervalMinutes, fromTimestamp: Date.now() })
+            ? this.computeNextRun({ cron: item.cronExpression, intervalMinutes: item.intervalMinutes, fromTimestamp: Date.now(), isOneTime: item.isOneTime })
             : item.nextRunAt;
 
         const updated = await this.repo.updateScheduledMessage(id, {
@@ -112,6 +133,36 @@ class SchedulerService {
         await this.repo.deleteScheduledMessage(id);
         return { ok: true };
     }
+
+    // =================== TEMPLATES ===================
+
+    async createTemplate({ guildId, name, items = [] }) {
+        return this.repo.createTemplate({ guildId, name, items });
+    }
+
+    async getTemplate(guildId, name) {
+        return this.repo.getTemplate(guildId, name);
+    }
+
+    async listTemplates(guildId) {
+        return this.repo.listTemplates(guildId);
+    }
+
+    async deleteTemplate(guildId, name) {
+        await this.repo.deleteTemplate(guildId, name);
+        return { ok: true };
+    }
+
+    async addTemplateItem(guildId, name, item) {
+        const tmpl = await this.repo.getTemplate(guildId, name);
+        if (!tmpl) {
+            return this.repo.createTemplate({ guildId, name, items: [item] });
+        }
+        const updatedItems = [...tmpl.items, item];
+        return this.repo.createTemplate({ guildId, name, items: updatedItems });
+    }
+
+    // =================== EXECUTION & AUTO-CLEAN ===================
 
     async checkAndRunDueMessages(client) {
         try {
@@ -128,9 +179,21 @@ class SchedulerService {
 
     async executeScheduledMessage(item, client, now = Date.now()) {
         try {
+            let sentMessageId = null;
+
             if (client && client.channels) {
                 const channel = client.channels.cache.get(item.channelId) || await client.channels.fetch(item.channelId).catch(() => null);
                 if (channel && channel.isTextBased()) {
+                    // 1. Auto-Clean : supprimer le message précédent si activé
+                    if (item.autoClean && item.lastMessageId) {
+                        try {
+                            const oldMsg = await channel.messages.fetch(item.lastMessageId).catch(() => null);
+                            if (oldMsg && typeof oldMsg.delete === 'function') {
+                                await oldMsg.delete().catch(() => {});
+                            }
+                        } catch (_) {}
+                    }
+
                     const context = {
                         guild: channel.guild,
                         channel,
@@ -139,31 +202,50 @@ class SchedulerService {
 
                     const payload = {};
 
-                    if (item.content) {
+                    // 2. Vérifier s'il s'agit d'un template rotatif
+                    if (item.templateId) {
+                        const tmpl = await this.repo.getTemplate(item.guildId, item.templateId) || await this.repo.getTemplateById(item.templateId);
+                        if (tmpl && tmpl.items && tmpl.items.length > 0) {
+                            const currentItem = tmpl.items[tmpl.currentIndex % tmpl.items.length];
+                            if (typeof currentItem === 'string') {
+                                const parsed = await parseCommandTags(currentItem, context, { executeActions: false });
+                                payload.content = parsed.text;
+                            } else if (typeof currentItem === 'object') {
+                                payload.embeds = [this._buildEmbed(currentItem, context)];
+                            }
+
+                            // Avancer l'index rotatif
+                            await this.repo.updateTemplateIndex(tmpl.id, (tmpl.currentIndex + 1) % tmpl.items.length);
+                        }
+                    }
+
+                    // 3. Contenu textuel standard
+                    if (!payload.content && item.content) {
                         const parsed = await parseCommandTags(item.content, context, { executeActions: false });
                         if (parsed.text) payload.content = parsed.text;
                     }
 
-                    if (item.embed) {
-                        const embedData = typeof item.embed === 'string' ? JSON.parse(item.embed) : item.embed;
-                        const embed = new EmbedBuilder();
-                        if (embedData.title) {
-                            const parsedTitle = await parseCommandTags(embedData.title, context, { executeActions: false });
-                            embed.setTitle(parsedTitle.text);
-                        }
-                        if (embedData.description) {
-                            const parsedDesc = await parseCommandTags(embedData.description, context, { executeActions: false });
-                            embed.setDescription(parsedDesc.text);
-                        }
-                        if (embedData.color) embed.setColor(embedData.color);
-                        payload.embeds = [embed];
+                    // 4. Embed standard
+                    if (!payload.embeds && item.embed) {
+                        payload.embeds = [this._buildEmbed(item.embed, context)];
                     }
 
                     if (payload.content || payload.embeds?.length) {
-                        await channel.send(payload);
+                        const sent = await channel.send(payload);
+                        if (sent && sent.id) sentMessageId = sent.id;
                         logger.info(`Message programmé "${item.name}" envoyé sur #${channel.name}`, 'SCHEDULER');
                     }
                 }
+            }
+
+            // Si message ponctuel (One-time), désactiver
+            if (item.isOneTime) {
+                await this.repo.updateScheduledMessage(item.id, {
+                    last_run_at: now,
+                    last_message_id: sentMessageId || item.lastMessageId,
+                    enabled: 0
+                });
+                return;
             }
 
             // Calculer la prochaine occurrence
@@ -175,11 +257,24 @@ class SchedulerService {
 
             await this.repo.updateScheduledMessage(item.id, {
                 last_run_at: now,
+                last_message_id: sentMessageId || item.lastMessageId,
                 next_run_at: nextRunAt
             });
         } catch (err) {
             logger.warn(`Erreur exécution message programmé ${item.id} (${item.name}): ${err.message}`, 'SCHEDULER');
         }
+    }
+
+    _buildEmbed(embedData, context) {
+        const data = typeof embedData === 'string' ? JSON.parse(embedData) : embedData;
+        const embed = new EmbedBuilder();
+        if (data.title) embed.setTitle(data.title);
+        if (data.description) embed.setDescription(data.description);
+        if (data.color) embed.setColor(data.color);
+        if (data.footer) embed.setFooter(typeof data.footer === 'object' ? data.footer : { text: data.footer });
+        if (data.image) embed.setImage(data.image);
+        if (data.thumbnail) embed.setThumbnail(data.thumbnail);
+        return embed;
     }
 
     start(client) {

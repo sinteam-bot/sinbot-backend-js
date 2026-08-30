@@ -1,7 +1,7 @@
 /**
  * src/modules/automation_scheduler/services/scheduler.repository.js
  *
- * Couche d'accès aux données pour les messages programmés.
+ * Couche d'accès aux données pour les messages programmés et templates rotatifs (P6).
  */
 
 const { db } = require('../../../db/index.js');
@@ -21,8 +21,8 @@ class SchedulerRepository {
 
         await db.pool.query(
             `INSERT INTO scheduled_messages 
-             (id, guild_id, channel_id, name, content, embed_json, cron_expression, interval_minutes, next_run_at, last_run_at, enabled, created_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
+             (id, guild_id, channel_id, name, content, embed_json, cron_expression, interval_minutes, timezone, auto_clean, last_message_id, template_id, is_one_time, next_run_at, last_run_at, enabled, created_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $18)`,
             [
                 id,
                 data.guildId,
@@ -32,6 +32,11 @@ class SchedulerRepository {
                 data.embedJson ? (typeof data.embedJson === 'string' ? data.embedJson : JSON.stringify(data.embedJson)) : null,
                 data.cronExpression || null,
                 data.intervalMinutes || null,
+                data.timezone || 'UTC',
+                data.autoClean ? 1 : 0,
+                data.lastMessageId || null,
+                data.templateId || null,
+                data.isOneTime ? 1 : 0,
                 data.nextRunAt,
                 data.lastRunAt || null,
                 data.enabled === false ? 0 : 1,
@@ -73,7 +78,7 @@ class SchedulerRepository {
     }
 
     async updateScheduledMessage(id, fields) {
-        const allowed = ['channel_id', 'name', 'content', 'embed_json', 'cron_expression', 'interval_minutes', 'next_run_at', 'last_run_at', 'enabled'];
+        const allowed = ['channel_id', 'name', 'content', 'embed_json', 'cron_expression', 'interval_minutes', 'timezone', 'auto_clean', 'last_message_id', 'template_id', 'is_one_time', 'next_run_at', 'last_run_at', 'enabled'];
         const setSql = [];
         const params = [];
         for (const [k, v] of Object.entries(fields)) {
@@ -98,6 +103,61 @@ class SchedulerRepository {
         await db.pool.query(`DELETE FROM scheduled_messages WHERE id = $1`, [id]);
     }
 
+    // =================== TEMPLATES ===================
+
+    async createTemplate({ guildId, name, items = [] }) {
+        const id = newId();
+        const now = Date.now();
+        const cleanName = name.toLowerCase().trim();
+
+        await db.pool.query(
+            `INSERT INTO scheduler_templates (id, guild_id, name, items, current_index, created_at)
+             VALUES ($1, $2, $3, $4, 0, $5)
+             ON CONFLICT (guild_id, name) DO UPDATE SET items = EXCLUDED.items`,
+            [id, guildId, cleanName, JSON.stringify(items), now]
+        );
+
+        return this.getTemplate(guildId, cleanName);
+    }
+
+    async getTemplate(guildId, name) {
+        const res = await db.pool.query(
+            `SELECT * FROM scheduler_templates WHERE guild_id = $1 AND name = $2 LIMIT 1`,
+            [guildId, name.toLowerCase().trim()]
+        );
+        return res.rows?.[0] ? this._mapTemplate(res.rows[0]) : null;
+    }
+
+    async getTemplateById(id) {
+        const res = await db.pool.query(
+            `SELECT * FROM scheduler_templates WHERE id = $1 LIMIT 1`,
+            [id]
+        );
+        return res.rows?.[0] ? this._mapTemplate(res.rows[0]) : null;
+    }
+
+    async listTemplates(guildId) {
+        const res = await db.pool.query(
+            `SELECT * FROM scheduler_templates WHERE guild_id = $1 ORDER BY name ASC`,
+            [guildId]
+        );
+        return (res.rows || []).map(r => this._mapTemplate(r));
+    }
+
+    async updateTemplateIndex(id, newIndex) {
+        await db.pool.query(
+            `UPDATE scheduler_templates SET current_index = $1 WHERE id = $2`,
+            [newIndex, id]
+        );
+    }
+
+    async deleteTemplate(guildId, name) {
+        await db.pool.query(
+            `DELETE FROM scheduler_templates WHERE guild_id = $1 AND name = $2`,
+            [guildId, name.toLowerCase().trim()]
+        );
+    }
+
     _mapMessage(row) {
         return {
             id: row.id,
@@ -109,12 +169,28 @@ class SchedulerRepository {
             embedJson: row.embed_json,
             cronExpression: row.cron_expression,
             intervalMinutes: row.interval_minutes ? Number(row.interval_minutes) : null,
+            timezone: row.timezone || 'UTC',
+            autoClean: Number(row.auto_clean) === 1,
+            lastMessageId: row.last_message_id,
+            templateId: row.template_id,
+            isOneTime: Number(row.is_one_time) === 1,
             nextRunAt: Number(row.next_run_at || 0),
             lastRunAt: row.last_run_at ? Number(row.last_run_at) : null,
             enabled: Number(row.enabled) === 1,
             createdBy: row.created_by,
             createdAt: Number(row.created_at || 0),
             updatedAt: Number(row.updated_at || 0)
+        };
+    }
+
+    _mapTemplate(row) {
+        return {
+            id: row.id,
+            guildId: row.guild_id,
+            name: row.name,
+            items: typeof row.items === 'string' ? JSON.parse(row.items) : (row.items || []),
+            currentIndex: Number(row.current_index || 0),
+            createdAt: Number(row.created_at || 0)
         };
     }
 }
