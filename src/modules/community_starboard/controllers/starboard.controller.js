@@ -7,7 +7,7 @@
 const { Controller, Get, Post } = require('../../../core/index.js');
 const { StarboardService } = require('../services/starboard.service.js');
 const { StarboardRepository } = require('../services/starboard.repository.js');
-const { configService } = require('../../../config/index.js');
+const { setFeatureConfig } = require('../../../config/c12-loader.js');
 const logger = require('../../../utils/logger.js');
 
 class StarboardController {
@@ -34,13 +34,12 @@ class StarboardController {
     async saveConfig(req) {
         try {
             const body = req.body || {};
-            if (configService && typeof configService.saveModuleConfig === 'function') {
-                await configService.saveModuleConfig('starboard', body);
-            }
+            const guildId = req.params?.guildId || req.query?.guild_id || req.body?.guild_id || process.env.GUILD_ID || '1543570824542298122';
+            const updated = await setFeatureConfig(guildId, 'starboard', body);
             return {
                 success: true,
                 message: 'Configuration du Starboard mise à jour avec succès',
-                data: body
+                data: updated
             };
         } catch (error) {
             logger.error(`Erreur saveConfig Starboard: ${error.message}`, 'STARBOARD');

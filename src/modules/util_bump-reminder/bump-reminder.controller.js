@@ -1,6 +1,7 @@
 const { Controller, Get, Post } = require('../../core/index.js');
 const { BumpReminderService } = require('./bump-reminder.service.js');
-const { saveModuleConfig, getConfig } = require('../../config/index.js');
+const { setFeatureConfig, getFeatureConfig } = require('../../config/c12-loader.js');
+const { getConfig } = require('../../config/index.js');
 
 class BumpReminderController {
     static inject = [BumpReminderService];
@@ -18,8 +19,8 @@ class BumpReminderController {
     async saveConfig(req) {
         try {
             const body = req.body || {};
-            const currentFull = getConfig();
-            const currentBump = currentFull.bump_reminder || currentFull.bump_reminders || {};
+            const guildId = req.params?.guildId || req.query?.guild_id || req.body?.guild_id || process.env.GUILD_ID || '1543570824542298122';
+            const currentBump = await getFeatureConfig(guildId, 'bump_reminder');
 
             const updatedBump = {
                 ...currentBump,
@@ -42,11 +43,11 @@ class BumpReminderController {
                 }
             };
 
-            // Mettre à jour la section bump_reminder et bump_reminders
-            saveModuleConfig('bump_reminder', updatedBump);
-            currentFull.bump_reminders = updatedBump;
+            // Sauvegarder dans le dossier de la guilde via c12
+            await setFeatureConfig(guildId, 'bump_reminder', updatedBump);
 
-            // Mettre à jour aussi scheduler.tasks.bump_reminders pour cohérence
+            // Mettre à jour aussi scheduler.tasks.bump_reminders si présent dans global
+            const currentFull = getConfig();
             if (currentFull.scheduler?.tasks?.bump_reminders) {
                 currentFull.scheduler.tasks.bump_reminders.enabled = updatedBump.enabled;
                 currentFull.scheduler.tasks.bump_reminders.channel_id = updatedBump.channel_id;

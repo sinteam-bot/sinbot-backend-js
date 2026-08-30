@@ -76,18 +76,26 @@ function createConfigRouter() {
         }
 
         try {
-            const { getConfig, saveModuleConfig } = require('../../config/index.js');
+            const { getConfig, saveModuleConfig, GLOBAL_CONFIG_SECTIONS } = require('../../config/index.js');
+            const { setFeatureConfig } = require('../../config/c12-loader.js');
+            const normalized = normalizeFeature(module);
+
             if (module === 'commands') {
                 const conf = getConfig();
                 conf.discord = conf.discord || {};
                 conf.discord.commands = moduleConfig;
                 saveModuleConfig('discord', conf.discord);
-            } else {
+                logger.info(`Configuration des commandes mise à jour avec succès dans discord.commands`, 'CONFIG');
+            } else if (GLOBAL_CONFIG_SECTIONS.includes(module)) {
                 saveModuleConfig(module, moduleConfig);
+                logger.info(`Configuration de l'infrastructure globale ${module} mise à jour avec succès`, 'CONFIG');
+            } else {
+                const guildId = req.body.guild_id || req.query.guild_id || process.env.GUILD_ID || '1543570824542298122';
+                await setFeatureConfig(guildId, normalized, moduleConfig);
+                logger.info(`Configuration de la feature ${normalized} mise à jour avec succès dans data/${guildId}/${normalized}.config.yml`, 'CONFIG');
             }
-            logger.info(`Configuration du module ${module} mise à jour avec succès dans config.yml`, 'CONFIG');
 
-            res.json({ success: true, message: `Configuration du module ${module} sauvegardée avec succès dans config.yml !` });
+            res.json({ success: true, message: `Configuration du module ${module} sauvegardée avec succès !` });
         } catch (error) {
             logger.error(`Erreur POST /api/config (${module}): ${error.message}`, 'CONFIG');
             res.status(500).json({ success: false, error: error.message });

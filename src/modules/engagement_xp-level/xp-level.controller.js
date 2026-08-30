@@ -1,6 +1,6 @@
 const { Controller, Get, Post, Put } = require('../../core/index.js');
 const { XPLevelService } = require('./xp-level.service.js');
-const { getConfig, saveModuleConfig } = require('../../config/index.js');
+const { setFeatureConfig } = require('../../config/c12-loader.js');
 
 class XPLevelController {
     static inject = [XPLevelService];
@@ -42,17 +42,17 @@ class XPLevelController {
     }
 
     async getConfig(req) {
-        const cfg = this.service.getConfig();
+        const guildId = req.params?.guildId || req.query?.guild_id || process.env.GUILD_ID || '1543570824542298122';
+        const cfg = this.service.getConfig(guildId);
         return { success: true, data: cfg };
     }
 
     async updateConfig(req) {
         try {
             const patch = req.body || {};
-            const current = this.service.getConfig();
-            const merged = this._deepMerge(current, patch);
-            saveModuleConfig('xp', merged);
-            return { success: true, data: merged };
+            const guildId = req.params?.guildId || req.query?.guild_id || req.body?.guild_id || process.env.GUILD_ID || '1543570824542298122';
+            const updated = await setFeatureConfig(guildId, 'xp', patch);
+            return { success: true, data: updated };
         } catch (err) {
             return { success: false, error: err.message };
         }

@@ -108,11 +108,11 @@ class BirthdayService {
 
         await this.repo.upsertSettings(toSave);
 
-        // Synchroniser également dans config.yml
+        // Synchroniser également dans data/{guildId}/birthdays.config.yml
         try {
-            const { saveModuleConfig, getConfig } = require('../../../config/index.js');
-            const conf = getConfig().birthdays || {};
-            saveModuleConfig('birthdays', {
+            const { setFeatureConfig, getFeatureConfig } = require('../../../config/c12-loader.js');
+            const conf = await getFeatureConfig(guildId, 'birthdays');
+            await setFeatureConfig(guildId, 'birthdays', {
                 ...conf,
                 enabled,
                 mode,
@@ -133,7 +133,7 @@ class BirthdayService {
                 cooldown
             });
         } catch (e) {
-            console.warn(`[BirthdayService] Synchro config.yml: ${e.message}`);
+            console.warn('[BirthdayService] Impossible de mettre à jour le fichier YAML de config:', e.message);
         }
 
         return this.getSettings(guildId);

@@ -168,8 +168,10 @@ function parseEnvValue(val) {
 function applyEnvironmentOverrides(config) {
     if (!config || typeof config !== 'object') return config;
 
-    // Assurer la présence des structures de base
+    // Assurer la présence des structures d'infrastructure globale
     config.database = config.database || {};
+    config.database.type = config.database.type || 'postgres';
+
     config.web = config.web || {};
     config.web.auth = config.web.auth || { enabled: false, api_key: "changez_cette_cle_secrete", protect_static: false, allowed_ips: [] };
     config.web.auth.allowed_ips = config.web.auth.allowed_ips || [];
@@ -189,52 +191,29 @@ function applyEnvironmentOverrides(config) {
     config.discord.commands.permissions = config.discord.commands.permissions || {};
 
     config.openrouter = config.openrouter || {};
-    config.startup_notifier = config.startup_notifier || {};
-    config.startup_notifier.github = config.startup_notifier.github || {};
-    config.daily_message = config.daily_message || {};
-    config.daily_message.ai_config = config.daily_message.ai_config || {};
-    config.captcha = config.captcha || {};
-    config.welcome = config.welcome || {};
-    config.xp = config.xp || {};
+    config.logger = config.logger || { level: 'info', format: 'json', console: true, file: { enabled: true, path: './data/logs' } };
     config.features = config.features || {};
-
-    config.counter = config.counter || {};
-    config.counter.emojis = config.counter.emojis || {};
-    config.counter.messages = config.counter.messages || {};
-
-    config.countdown = config.countdown || {};
-    config.countdown.emojis = config.countdown.emojis || {};
-    config.countdown.messages = config.countdown.messages || {};
-
-    config.bump_reminder = config.bump_reminder || config.bump_reminders || {};
-    config.bump_reminders = config.bump_reminder;
-    config.bump_reminder.messages = config.bump_reminder.messages || {};
 
     const env = process.env;
 
-    // 1. Mappages explicites directs
-    if (env.DB_PATH) config.db_path = env.DB_PATH;
+    // 1. Database
     if (env.DATABASE_URL && env.DATABASE_URL !== 'votre_bdd') {
         config.database.url = env.DATABASE_URL;
-        config.database_url = env.DATABASE_URL;
     } else if (env.DB_URL && env.DB_URL !== 'votre_bdd') {
         config.database.url = env.DB_URL;
-        config.database_url = env.DB_URL;
-    } else if (config.database?.url) {
-        config.database_url = config.database.url;
-    }
-    if (config.database_url && !config.database.url) {
-        config.database.url = config.database_url;
+    } else if (env.DB_PATH) {
+        config.database.url = env.DB_PATH;
     }
 
-    if (config.web?.port) {
-        config.port = config.web.port;
-    } else if (env.PORT) {
-        config.port = parseInt(env.PORT, 10) || 3000;
-        config.web.port = config.port;
+    // 2. Web & Server
+    if (!config.web?.port) {
+        if (env.PORT) {
+            config.web.port = parseInt(env.PORT, 10) || 3000;
+        } else {
+            config.web.port = 3000;
+        }
     }
     if (env.NODE_ENV) {
-        config.node_env = env.NODE_ENV;
         config.web.node_env = env.NODE_ENV;
     }
 
@@ -259,44 +238,13 @@ function applyEnvironmentOverrides(config) {
     if (env.DAILY_PUBLISH_CRON) config.scheduler.tasks.daily_publish.cron = env.DAILY_PUBLISH_CRON;
     if (env.DAILY_AUTOVALIDATE_CRON) config.scheduler.tasks.daily_autovalidate.cron = env.DAILY_AUTOVALIDATE_CRON;
 
-    // Counter & Countdown
-    if (env.COUNTER_CHANNEL_ID) config.counter.channel_id = env.COUNTER_CHANNEL_ID;
-    if (env.COUNTDOWN_CHANNEL_ID) config.countdown.channel_id = env.COUNTDOWN_CHANNEL_ID;
-
     // OpenRouter
     if (env.OPENROUTER_API_KEY) config.openrouter.api_key = env.OPENROUTER_API_KEY;
     if (env.OPENROUTER_MODEL) config.openrouter.default_model = env.OPENROUTER_MODEL;
     if (env.OPENROUTER_MAX_TOKENS) config.openrouter.max_tokens = parseInt(env.OPENROUTER_MAX_TOKENS, 10);
     if (env.OPENROUTER_TEMPERATURE) config.openrouter.temperature = parseFloat(env.OPENROUTER_TEMPERATURE);
 
-    // Notifications & GitHub
-    if (env.LOG_CHANNEL_ID || env.NOTIFICATION_CHANNEL_ID) {
-        config.startup_notifier.channel_id = env.LOG_CHANNEL_ID || env.NOTIFICATION_CHANNEL_ID;
-    }
-    if (env.GIT_COMMIT_SHA) config.startup_notifier.last_commit_sha = env.GIT_COMMIT_SHA;
-    if (env.GITHUB_REPO) config.startup_notifier.github.repo = env.GITHUB_REPO;
-    if (env.GITHUB_TOKEN) config.startup_notifier.github.token = env.GITHUB_TOKEN;
-
-    // Daily Message
-    if (env.DAILY_MESSAGE_CHANNEL_ID) config.daily_message.channel_id = env.DAILY_MESSAGE_CHANNEL_ID;
-    if (env.DAILY_MESSAGE_PREVIEW_CHANNEL_ID) config.daily_message.preview_channel_id = env.DAILY_MESSAGE_PREVIEW_CHANNEL_ID;
-
-    // Captcha
-    if (env.CAPTCHA_ENABLED !== undefined) config.captcha.enabled = parseEnvValue(env.CAPTCHA_ENABLED);
-    if (env.CAPTCHA_CHANNEL_ID) config.captcha.channel_id = env.CAPTCHA_CHANNEL_ID;
-    if (env.VERIFIED_ROLE_ID) config.captcha.verified_role_id = env.VERIFIED_ROLE_ID;
-
-    // Welcome
-    if (env.WELCOME_ENABLED !== undefined) config.welcome.enabled = parseEnvValue(env.WELCOME_ENABLED);
-    if (env.WELCOME_CHANNEL_ID) config.welcome.channel_id = env.WELCOME_CHANNEL_ID;
-
-    // Bump Reminder
-    if (env.BUMP_REMINDER_ENABLED !== undefined) config.bump_reminder.enabled = parseEnvValue(env.BUMP_REMINDER_ENABLED);
-    if (env.BUMP_REMINDER_CHANNEL_ID) config.bump_reminder.channel_id = env.BUMP_REMINDER_CHANNEL_ID;
-    if (env.BUMP_REMINDER_ROLE_ID) config.bump_reminder.role_id = env.BUMP_REMINDER_ROLE_ID;
-    if (env.BUMP_REMINDER_COOLDOWN_HOURS) config.bump_reminder.reminder_cooldown_hours = Number(env.BUMP_REMINDER_COOLDOWN_HOURS);
-
-    // 2. Surcharges dynamiques via double underscore (ex: DISCORD__TOKEN, DAILY_MESSAGE__CHANNEL_ID, etc.)
+    // Surcharges dynamiques via double underscore (ex: DISCORD__TOKEN, etc.)
     for (const [rawKey, rawVal] of Object.entries(env)) {
         if (!rawVal) continue;
         if (rawKey.includes('__')) {
@@ -305,7 +253,35 @@ function applyEnvironmentOverrides(config) {
         }
     }
 
-    // 3. Rétro-alimentation de process.env pour garantir la compatibilité de toutes les librairies existantes
+    // Compatibilité descendante sans pollution YAML (getters non-énumérables)
+    if (!Object.getOwnPropertyDescriptor(config, 'database_url')) {
+        Object.defineProperty(config, 'database_url', {
+            get() { return this.database?.url; },
+            set(val) { if (this.database) this.database.url = val; },
+            enumerable: false,
+            configurable: true
+        });
+    }
+
+    if (!Object.getOwnPropertyDescriptor(config, 'port')) {
+        Object.defineProperty(config, 'port', {
+            get() { return this.web?.port || 3000; },
+            set(val) { if (this.web) this.web.port = val; },
+            enumerable: false,
+            configurable: true
+        });
+    }
+
+    if (!Object.getOwnPropertyDescriptor(config, 'node_env')) {
+        Object.defineProperty(config, 'node_env', {
+            get() { return this.web?.node_env || process.env.NODE_ENV || 'development'; },
+            set(val) { if (this.web) this.web.node_env = val; },
+            enumerable: false,
+            configurable: true
+        });
+    }
+
+    // Rétro-alimentation de process.env pour garantir la compatibilité des bibliothèques
     if (config.discord?.token) {
         if (!process.env.DISCORD_TOKEN) process.env.DISCORD_TOKEN = config.discord.token;
         if (!process.env.BOT_TOKEN) process.env.BOT_TOKEN = config.discord.token;
@@ -321,16 +297,6 @@ function applyEnvironmentOverrides(config) {
 
     if (config.openrouter?.api_key && !process.env.OPENROUTER_API_KEY) process.env.OPENROUTER_API_KEY = config.openrouter.api_key;
     if (config.openrouter?.default_model && !process.env.OPENROUTER_MODEL) process.env.OPENROUTER_MODEL = config.openrouter.default_model;
-
-    if (config.startup_notifier?.channel_id) {
-        if (!process.env.LOG_CHANNEL_ID) process.env.LOG_CHANNEL_ID = config.startup_notifier.channel_id;
-        if (!process.env.NOTIFICATION_CHANNEL_ID) process.env.NOTIFICATION_CHANNEL_ID = config.startup_notifier.channel_id;
-    }
-    if (config.daily_message?.channel_id && !process.env.DAILY_MESSAGE_CHANNEL_ID) {
-        process.env.DAILY_MESSAGE_CHANNEL_ID = config.daily_message.channel_id;
-    }
-    if (config.db_path && !process.env.DB_PATH) process.env.DB_PATH = config.db_path;
-    if (config.port && !process.env.PORT) process.env.PORT = String(config.port);
 
     return config;
 }
@@ -419,6 +385,27 @@ function initConfig() {
 }
 
 /**
+ * Sections globales autorisées dans les fichiers de configuration globale (base / env / local)
+ */
+const GLOBAL_CONFIG_SECTIONS = ['database', 'web', 'openrouter', 'discord', 'logger', 'features', 'scheduler'];
+
+/**
+ * Nettoie un objet de configuration globale pour ne conserver que les blocs d'infrastructure valides
+ * @param {object} rawConfig
+ * @returns {object}
+ */
+function cleanGlobalConfigObject(rawConfig) {
+    if (!rawConfig || typeof rawConfig !== 'object') return {};
+    const clean = {};
+    for (const key of GLOBAL_CONFIG_SECTIONS) {
+        if (rawConfig[key] !== undefined) {
+            clean[key] = rawConfig[key];
+        }
+    }
+    return clean;
+}
+
+/**
  * Obtient la configuration courante (la charge si non encore chargée)
  * @returns {object}
  */
@@ -430,7 +417,7 @@ function getConfig() {
 }
 
 /**
- * Sauvegarde la configuration entière dans le fichier YAML actif
+ * Sauvegarde la configuration globale dans le fichier YAML actif (sans polluer avec les modules features)
  * @param {object} newConfig
  */
 function saveConfig(newConfig) {
@@ -438,18 +425,20 @@ function saveConfig(newConfig) {
     const targetFile = activeConfigPath || resolveConfigPath();
     const tmpFile = `${targetFile}.tmp.${process.pid}.${Date.now()}`;
 
+    const sanitizedConfig = cleanGlobalConfigObject(newConfig);
+
     try {
         if (yaml && typeof yaml.stringify === 'function') {
-            fs.writeFileSync(tmpFile, yaml.stringify(newConfig), 'utf-8');
+            fs.writeFileSync(tmpFile, yaml.stringify(sanitizedConfig), 'utf-8');
         } else if (yaml && typeof yaml.dump === 'function') {
-            const yamlStr = yaml.dump(newConfig, {
+            const yamlStr = yaml.dump(sanitizedConfig, {
                 indent: 2,
                 lineWidth: -1,
                 noRefs: true
             });
             fs.writeFileSync(tmpFile, yamlStr, 'utf-8');
         } else {
-            fs.writeFileSync(tmpFile, JSON.stringify(newConfig, null, 2), 'utf-8');
+            fs.writeFileSync(tmpFile, JSON.stringify(sanitizedConfig, null, 2), 'utf-8');
         }
         fs.renameSync(tmpFile, targetFile);
         console.log(`💾 [Config] Configuration sauvegardée avec succès dans ${targetFile}`);
@@ -462,15 +451,34 @@ function saveConfig(newConfig) {
 }
 
 /**
- * Sauvegarde un module spécifique dans la configuration
- * @param {string} moduleName - 'welcome', 'captcha', 'xp', 'daily_message', etc.
- * @param {object} moduleData - Les nouvelles données du module
+ * Sauvegarde un module spécifique.
+ * Si c'est une section globale (web, discord, features, etc.), met à jour la config globale.
+ * Si c'est une feature (welcome, captcha, xp, daily_message, etc.), sauvegarde dans le dossier guilde via c12.
+ * @param {string} moduleName
+ * @param {object} moduleData
+ * @param {string} [guildId]
  */
-function saveModuleConfig(moduleName, moduleData) {
-    const config = getConfig();
-    config[moduleName] = moduleData;
-    saveConfig(config);
-    return config;
+function saveModuleConfig(moduleName, moduleData, guildId = null) {
+    if (!moduleName) return;
+
+    if (GLOBAL_CONFIG_SECTIONS.includes(moduleName)) {
+        const config = getConfig();
+        config[moduleName] = moduleData;
+        saveConfig(config);
+        return config;
+    }
+
+    // C'est un module / feature : enregistrer dans data/{guildId}/{moduleName}.config.yml
+    const targetGuildId = guildId || process.env.GUILD_ID || '1543570824542298122';
+    try {
+        const { setFeatureConfig } = require('./c12-loader.js');
+        setFeatureConfig(targetGuildId, moduleName, moduleData).catch(err => {
+            console.warn(`[Config] Erreur setFeatureConfig(${targetGuildId}, ${moduleName}):`, err.message);
+        });
+    } catch (err) {
+        console.warn(`[Config] Impossible de charger c12-loader pour ${moduleName}:`, err.message);
+    }
+    return moduleData;
 }
 
 // Initialisation immédiate au chargement du module
@@ -483,6 +491,8 @@ module.exports = {
     saveModuleConfig,
     resolveConfigPath,
     applyEnvironmentOverrides,
+    cleanGlobalConfigObject,
+    GLOBAL_CONFIG_SECTIONS,
     _deepMerge,
     get config() {
         return getConfig();

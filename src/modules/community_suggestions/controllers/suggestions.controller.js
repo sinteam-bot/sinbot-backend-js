@@ -7,7 +7,7 @@
 const { Controller, Get, Post, Patch } = require('../../../core/index.js');
 const { SuggestionsService } = require('../services/suggestions.service.js');
 const { SuggestionsRepository } = require('../services/suggestions.repository.js');
-const { configService } = require('../../../config/index.js');
+const { setFeatureConfig } = require('../../../config/c12-loader.js');
 const logger = require('../../../utils/logger.js');
 
 class SuggestionsController {
@@ -20,23 +20,20 @@ class SuggestionsController {
 
     async getStatus(req) {
         const guildId = req.query?.guild_id || process.env.GUILD_ID || 'default';
-        const conf = this.service.getConfig(guildId);
         const total = await this.repo.countSuggestions(guildId);
         const pending = await this.repo.countSuggestions(guildId, 'pending');
         const approved = await this.repo.countSuggestions(guildId, 'approved');
         const rejected = await this.repo.countSuggestions(guildId, 'rejected');
-        const implemented = await this.repo.countSuggestions(guildId, 'implemented');
 
         return {
             success: true,
             data: {
-                config: conf,
+                guildId,
                 stats: {
                     total,
                     pending,
                     approved,
-                    rejected,
-                    implemented
+                    rejected
                 }
             }
         };
@@ -45,13 +42,12 @@ class SuggestionsController {
     async saveConfig(req) {
         try {
             const body = req.body || {};
-            if (configService && typeof configService.saveModuleConfig === 'function') {
-                await configService.saveModuleConfig('suggestions', body);
-            }
+            const guildId = req.params?.guildId || req.query?.guild_id || req.body?.guild_id || process.env.GUILD_ID || '1543570824542298122';
+            const updated = await setFeatureConfig(guildId, 'suggestions', body);
             return {
                 success: true,
                 message: 'Configuration des suggestions mise à jour avec succès',
-                data: body
+                data: updated
             };
         } catch (error) {
             logger.error(`Erreur saveConfig Suggestions: ${error.message}`, 'SUGGESTIONS');
