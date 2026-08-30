@@ -90,3 +90,20 @@ features:
   xp: false
   word_triggers: false
   welcome: false
+
+scheduler:
+  enabled: true
+  timezone: Europe/Paris
+  tasks:
+    bump_reminders:
+      enabled: true
+      cron: "* * * * *"
+    daily_preview:
+      enabled: true
+      cron: 0 21 * * *
+    daily_publish:
+      enabled: true
+      cron: 0 9 * * *
+    daily_autovalidate:
+      enabled: true
+      cron: 0 11 * * *
