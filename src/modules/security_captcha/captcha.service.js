@@ -431,6 +431,76 @@ class CaptchaService {
     async getChannelHistory(channelId, userId = null, guildId = null) {
         return await this.repo.getCaptchaChannelDetails(channelId, userId);
     }
+
+    // =================== BORDERWALL & ANTI-RAID ===================
+
+    _getJoinHistory(guildId) {
+        if (!this._joinHistories) this._joinHistories = new Map();
+        if (!this._joinHistories.has(guildId)) this._joinHistories.set(guildId, []);
+        return this._joinHistories.get(guildId);
+    }
+
+    recordJoinAndCheckRaid(guildId, threshold = 5, windowSeconds = 10) {
+        const now = Date.now();
+        const history = this._getJoinHistory(guildId);
+        history.push(now);
+
+        const cutoff = now - (windowSeconds * 1000);
+        const validJoins = history.filter(t => t >= cutoff);
+        this._joinHistories.set(guildId, validJoins);
+
+        return validJoins.length >= threshold;
+    }
+
+    async getBorderwallConfig(guildId) {
+        const { db } = require('../../db/index.js');
+        try {
+            const res = await db.pool.query(
+                `SELECT * FROM borderwall_configs WHERE guild_id = $1 LIMIT 1`,
+                [guildId]
+            );
+            return res.rows?.[0] ? {
+                enabled: res.rows[0].enabled === 1,
+                raidThreshold: Number(res.rows[0].raid_threshold || 5),
+                raidWindowSeconds: Number(res.rows[0].raid_window_seconds || 10),
+                quarantineRoleId: res.rows[0].quarantine_role_id,
+                logChannelId: res.rows[0].log_channel_id,
+                timeoutMinutes: Number(res.rows[0].timeout_minutes || 10)
+            } : {
+                enabled: false,
+                raidThreshold: 5,
+                raidWindowSeconds: 10,
+                quarantineRoleId: null,
+                logChannelId: null,
+                timeoutMinutes: 10
+            };
+        } catch {
+            return { enabled: false, raidThreshold: 5, raidWindowSeconds: 10, quarantineRoleId: null, timeoutMinutes: 10 };
+        }
+    }
+
+    async setBorderwallConfig(guildId, { enabled, raidThreshold = 5, raidWindowSeconds = 10, quarantineRoleId = null, logChannelId = null, timeoutMinutes = 10 }) {
+        const { db } = require('../../db/index.js');
+        const crypto = require('crypto');
+        const id = crypto.randomUUID();
+        const now = Date.now();
+
+        await db.pool.query(
+            `INSERT INTO borderwall_configs (id, guild_id, enabled, raid_threshold, raid_window_seconds, quarantine_role_id, log_channel_id, timeout_minutes, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+             ON CONFLICT (guild_id) DO UPDATE SET
+                enabled = EXCLUDED.enabled,
+                raid_threshold = EXCLUDED.raid_threshold,
+                raid_window_seconds = EXCLUDED.raid_window_seconds,
+                quarantine_role_id = EXCLUDED.quarantine_role_id,
+                log_channel_id = EXCLUDED.log_channel_id,
+                timeout_minutes = EXCLUDED.timeout_minutes,
+                updated_at = EXCLUDED.updated_at`,
+            [id, guildId, enabled ? 1 : 0, raidThreshold, raidWindowSeconds, quarantineRoleId, logChannelId, timeoutMinutes, now]
+        );
+
+        return this.getBorderwallConfig(guildId);
+    }
 }
 
 Injectable()(CaptchaService);

@@ -171,17 +171,25 @@ ${content}
         // ============== WELCOME ==============
         this.registerTemplate('welcome', (p, { width, height }) => {
             const title = p.title || 'Bienvenue !';
-            const subtitle = p.subtitle || `${p.username || 'Nouveau membre'} rejoint ${p.server || 'le serveur'}`;
+            const subtitle = p.customSubtitle || p.subtitle || `${p.username || 'Nouveau membre'} rejoint ${p.server || 'le serveur'}`;
             const memberNumber = p.memberCount || '';
+            const c1 = p.primaryColor || '#5865f2';
+            const c2 = p.accentColor || '#f2c7ce';
+            const textCol = p.textColor || '#ffffff';
+
+            const bgImage = p.backgroundUrl
+                ? `<image href="${this._escapeXml(p.backgroundUrl)}" x="0" y="0" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"/><rect width="100%" height="100%" fill="rgba(0,0,0,0.5)"/>`
+                : `<rect width="100%" height="100%" fill="url(#bg)"/>`;
+
             return this._wrap(`
-${this._gradientBackground('#5865f2', '#f2c7ce')}
+${this._gradientBackground(c1, c2)}
 ${this._defs()}
-<rect width="100%" height="100%" fill="url(#bg)"/>
+${bgImage}
 ${this._avatarCircle({ url: p.avatarUrl, radius: 90 })}
-${this._text({ x: width / 2, y: 340, content: title, size: 48, color: '#ffffff', anchor: 'middle', weight: 'bold' })}
-${this._text({ x: width / 2, y: 400, content: subtitle, size: 24, color: 'rgba(255,255,255,0.85)', anchor: 'middle' })}
-${memberNumber ? this._text({ x: width / 2, y: 450, content: `Membre #${memberNumber}`, size: 18, color: 'rgba(255,255,255,0.7)', anchor: 'middle' }) : ''}
-<rect x="${width / 2 - 40}" y="470" width="80" height="3" fill="#ffffff" opacity="0.5"/>
+${this._text({ x: width / 2, y: 340, content: title, size: 48, color: textCol, anchor: 'middle', weight: 'bold' })}
+${this._text({ x: width / 2, y: 400, content: subtitle, size: 24, color: textCol, anchor: 'middle' })}
+${memberNumber ? this._text({ x: width / 2, y: 450, content: `Membre #${memberNumber}`, size: 18, color: textCol, anchor: 'middle' }) : ''}
+<rect x="${width / 2 - 40}" y="470" width="80" height="3" fill="${textCol}" opacity="0.5"/>
 `, { width, height, bg: false });
         });
 
