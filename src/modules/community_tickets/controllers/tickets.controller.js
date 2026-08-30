@@ -1,15 +1,23 @@
 /**
- * TicketsController — endpoints REST pour les tickets
+ * TicketsController — endpoints REST pour les tickets, panels, ratings et tags
  *
  *   GET    /api/tickets              : liste paginée, filtres status/userId/category
  *   GET    /api/tickets/:id          : détail d'un ticket
  *   GET    /api/tickets/:id/messages : transcript brut (messages)
- *   POST   /api/tickets              : ouverture programmatique (webhook)
- *   PATCH  /api/tickets/:id         : update status/claim (admin via dashboard)
+ *   PUT    /api/tickets/:id          : update status/claim (admin via dashboard)
  *   POST   /api/tickets/:id/close    : close + transcript
+ *   GET    /api/tickets/:id/transcript : export HTML
+ *   GET    /api/tickets/panels       : liste des multi-panneaux
+ *   POST   /api/tickets/panels       : créer/modifier un panneau
+ *   DELETE /api/tickets/panels/:name : supprimer un panneau
+ *   GET    /api/tickets/ratings      : statistiques et avis
+ *   POST   /api/tickets/ratings      : soumettre un avis
+ *   GET    /api/tickets/tags         : liste des canned tags
+ *   POST   /api/tickets/tags         : ajouter un tag
+ *   DELETE /api/tickets/tags/:name   : supprimer un tag
  */
 
-const { Controller, Get, Post, Put } = require('../../../core/index.js');
+const { Controller, Get, Post, Put, Delete } = require('../../../core/index.js');
 const { TicketService } = require('../services/ticket.service.js');
 const { TranscriptService } = require('../services/transcript.service.js');
 
@@ -32,25 +40,13 @@ class TicketsController {
             const limit = Math.min(Math.max(parseInt(req.query.limit) || 25, 1), 100);
             const offset = (page - 1) * limit;
 
-            const where = [];
-            const args = [guildId];
-            if (guildId) { where.push('guild_id = $1'); }
-            if (status) { args.push(status); where.push(`status = $${args.length}`); }
-            if (userId) { args.push(userId); where.push(`user_id = $${args.length}`); }
-            if (category) { args.push(category); where.push(`category = $${args.length}`); }
-            const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-
-            const { db } = require('../../../db/index.js');
-            args.push(limit, offset);
-            const sql = `SELECT * FROM tickets ${whereSql} ORDER BY created_at DESC LIMIT $${args.length - 1} OFFSET $${args.length}`;
-            const result = await db.pool.query({ text: sql, values: args });
-            const countRes = await db.pool.query({ text: `SELECT COUNT(*)::int AS total FROM tickets ${whereSql}`, values: args.slice(0, args.length - 2) });
-            const total = countRes.rows?.[0]?.total || 0;
+            const result = await this.ticketService.list({ guildId, status, userId, limit, offset });
+            const total = await this.ticketService.count({ guildId, status, userId });
 
             return {
                 success: true,
                 data: {
-                    tickets: result.rows || [],
+                    tickets: result || [],
                     total,
                     page,
                     limit,
@@ -88,7 +84,7 @@ class TicketsController {
         try {
             const id = req.params.id;
             const patch = req.body || {};
-            const allowed = ['status', 'claimed_by', 'closed_by', 'closed_at', 'subject'];
+            const allowed = ['status', 'claimed_by', 'closed_by', 'closed_at', 'subject', 'panel_id', 'rating_score'];
             const fields = {};
             if (patch.status) fields.status = patch.status;
             if (patch.claimedBy !== undefined) fields.claimedBy = patch.claimedBy;
@@ -123,14 +119,120 @@ class TicketsController {
             return { success: false, error: err.message };
         }
     }
+
+    // =================== PANELS ===================
+
+    async listPanels(req) {
+        try {
+            const guildId = req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const list = await this.ticketService.listPanels(guildId);
+            return { success: true, data: list };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    async setPanel(req) {
+        try {
+            const guildId = req.body?.guild_id || process.env.GUILD_ID || 'default';
+            const res = await this.ticketService.createPanel({ ...req.body, guildId });
+            return { success: true, data: res };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    async deletePanel(req) {
+        try {
+            const guildId = req.body?.guild_id || req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const name = req.params?.name;
+            await this.ticketService.deletePanel(guildId, name);
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    // =================== RATINGS ===================
+
+    async getRatings(req) {
+        try {
+            const guildId = req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const stats = await this.ticketService.getRatingStats(guildId);
+            const list = await this.ticketService.listRatings(guildId);
+            return { success: true, data: { stats, ratings: list } };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    async addRating(req) {
+        try {
+            const guildId = req.body?.guild_id || process.env.GUILD_ID || 'default';
+            const { ticket_id, user_id, staff_id, rating, feedback } = req.body || {};
+            const res = await this.ticketService.addRating({
+                ticketId: ticket_id,
+                guildId,
+                userId: user_id,
+                staffId: staff_id,
+                rating,
+                feedback
+            });
+            return { success: true, data: res };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    // =================== TAGS ===================
+
+    async listTags(req) {
+        try {
+            const guildId = req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const list = await this.ticketService.listTags(guildId);
+            return { success: true, data: list };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    async setTag(req) {
+        try {
+            const guildId = req.body?.guild_id || process.env.GUILD_ID || 'default';
+            const { name, content, created_by } = req.body || {};
+            const tag = await this.ticketService.setTag({ guildId, name, content, createdBy: created_by || 'admin' });
+            return { success: true, data: tag };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    async deleteTag(req) {
+        try {
+            const guildId = req.body?.guild_id || req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const name = req.params?.name;
+            await this.ticketService.deleteTag(guildId, name);
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }
 }
 
 Controller('/api/tickets')(TicketsController);
-Get('/')(TicketsController.prototype, 'list');
-Get('/:id')(TicketsController.prototype, 'detail');
+Get('/panels')(TicketsController.prototype, 'listPanels');
+Post('/panels')(TicketsController.prototype, 'setPanel');
+Delete('/panels/:name')(TicketsController.prototype, 'deletePanel');
+Get('/ratings')(TicketsController.prototype, 'getRatings');
+Post('/ratings')(TicketsController.prototype, 'addRating');
+Get('/tags')(TicketsController.prototype, 'listTags');
+Post('/tags')(TicketsController.prototype, 'setTag');
+Delete('/tags/:name')(TicketsController.prototype, 'deleteTag');
 Get('/:id/messages')(TicketsController.prototype, 'messages');
-Put('/:id')(TicketsController.prototype, 'update');
-Post('/:id/close')(TicketsController.prototype, 'close');
 Get('/:id/transcript')(TicketsController.prototype, 'transcript');
+Post('/:id/close')(TicketsController.prototype, 'close');
+Get('/:id')(TicketsController.prototype, 'detail');
+Put('/:id')(TicketsController.prototype, 'update');
+Get('')(TicketsController.prototype, 'list');
 
 module.exports = { TicketsController };

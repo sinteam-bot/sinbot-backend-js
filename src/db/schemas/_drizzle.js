@@ -24,5 +24,7 @@ module.exports = {
     primaryKey: pgCore.primaryKey,
     index: pgCore.index,
     uniqueIndex: pgCore.uniqueIndex,
-    unique: pgCore.unique
+    unique: pgCore.unique,
+    jsonb: pgCore.jsonb,
+    json: pgCore.json
 };

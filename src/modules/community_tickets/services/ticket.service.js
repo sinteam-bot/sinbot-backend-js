@@ -1,12 +1,10 @@
 /**
- * ticket.service.js — CRUD et state machine des tickets
- *
- * Pas de dépendance sur discord.js dans le service (sauf pour les
- * types en JSDoc) afin de rester testable en isolation.
+ * ticket.service.js — CRUD, state machine, multi-panels, ratings et tags des tickets (P4)
  */
 
 const crypto = require('crypto');
 const { Injectable } = require('../../../core/index.js');
+const logger = require('../../../utils/logger.js');
 
 function newId() {
     return crypto.randomUUID();
@@ -32,7 +30,7 @@ class TicketService {
     /**
      * Crée un ticket en BDD
      */
-    async create({ guildId, channelId, userId, category, subject }) {
+    async create({ guildId, channelId, userId, category, subject, panelId = null }) {
         if (!guildId || !channelId || !userId) {
             throw new Error('guildId, channelId et userId requis');
         }
@@ -43,10 +41,11 @@ class TicketService {
             category: category || 'support',
             subject: subject || null,
             status: STATUS.OPEN,
+            panelId,
             createdAt: now,
             updatedAt: now
         });
-        return { id, status: STATUS.OPEN };
+        return { id, status: STATUS.OPEN, panelId };
     }
 
     async get(id) {
@@ -127,6 +126,103 @@ class TicketService {
             ...r,
             attachments: r.attachments ? safeParse(r.attachments, []) : []
         }));
+    }
+
+    // =================== RATINGS ===================
+
+    async addRating({ ticketId, guildId, userId, staffId = null, rating, feedback = null }) {
+        const score = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
+        return this.repo.addRating({
+            ticketId,
+            guildId,
+            userId,
+            staffId,
+            rating: score,
+            feedback
+        });
+    }
+
+    async getRatingStats(guildId) {
+        return this.repo.getRatingStats(guildId);
+    }
+
+    async listRatings(guildId, limit = 50) {
+        return this.repo.listRatings(guildId, limit);
+    }
+
+    // =================== PANELS ===================
+
+    async createPanel(data) {
+        return this.repo.createPanel(data);
+    }
+
+    async getPanel(guildId, name) {
+        return this.repo.getPanel(guildId, name);
+    }
+
+    async getPanelById(id) {
+        return this.repo.getPanelById(id);
+    }
+
+    async listPanels(guildId) {
+        return this.repo.listPanels(guildId);
+    }
+
+    async deletePanel(guildId, name) {
+        await this.repo.deletePanel(guildId, name);
+        return { ok: true };
+    }
+
+    // =================== TAGS ===================
+
+    async setTag(data) {
+        return this.repo.setTag(data);
+    }
+
+    async getTag(guildId, name) {
+        return this.repo.getTag(guildId, name);
+    }
+
+    async listTags(guildId) {
+        return this.repo.listTags(guildId);
+    }
+
+    async deleteTag(guildId, name) {
+        await this.repo.deleteTag(guildId, name);
+        return { ok: true };
+    }
+
+    // =================== AUTO-CLOSE ===================
+
+    async processAutoClose(client, config = {}) {
+        const autoCloseHours = config.auto_close_hours || 0;
+        if (autoCloseHours <= 0 || !client) return 0;
+
+        const maxAgeMs = autoCloseHours * 3600 * 1000;
+        const now = Date.now();
+        let closedCount = 0;
+
+        const openTickets = await this.repo.list({ status: STATUS.OPEN, limit: 100 });
+        for (const t of openTickets) {
+            const messages = await this.repo.findMessages(t.id, 1);
+            const lastMsg = messages[messages.length - 1];
+            const lastActive = lastMsg ? Number(lastMsg.created_at) : t.updatedAt;
+
+            if (now - lastActive > maxAgeMs) {
+                await this.close(t.id, 'Auto-Close System');
+
+                const chan = client.channels.cache.get(t.channelId);
+                if (chan && chan.send) {
+                    await chan.send(`⏳ Ce ticket a été fermé automatiquement pour inactivité (${autoCloseHours}h sans réponse).`).catch(() => {});
+                }
+                closedCount++;
+            }
+        }
+
+        if (closedCount > 0) {
+            logger.info(`${closedCount} ticket(s) fermé(s) automatiquement pour inactivité`, 'TICKETS');
+        }
+        return closedCount;
     }
 }
 
