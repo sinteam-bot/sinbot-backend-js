@@ -1,9 +1,70 @@
 /**
- * challenges/math.js — Générateur de challenges arithmétiques (texte).
+ * challenges/math.js — Générateur de challenges arithmétiques.
  *
- * Réutilise la logique de captcha.service.generateMathQuestion pour
- * produire { question, answer }.
+ * Modes de représentation configurables par champ :
+ *   - num1_mode / num2_mode :
+ *       'text'   → nombre en toutes lettres (ex: "douze")
+ *       'digit'  → chiffre brut (ex: "12")
+ *       'random' → le bot choisit aléatoirement à chaque génération
+ *   - operator_mode :
+ *       'text'   → mot français (ex: "plus")
+ *       'symbol' → symbole mathématique (ex: "+")
+ *       'random' → le bot choisit aléatoirement à chaque génération
+ *
+ * Si un mode est invalide ou absent, fallback sur les valeurs par
+ * défaut historiques :
+ *   num1/num2 → text (rétrocompatibilité)
+ *   operator  → symbol (rétrocompatibilité)
  */
+
+const { numberToFrench: numberToFrenchExt } = require('./tts.js');
+
+const VALID_MODES = {
+    num: ['text', 'digit', 'random'],
+    op: ['text', 'symbol', 'random']
+};
+
+function _resolveNumMode(mode) {
+    return VALID_MODES.num.includes(mode) ? mode : 'text';
+}
+
+function _resolveOpMode(mode) {
+    return VALID_MODES.op.includes(mode) ? mode : 'symbol';
+}
+
+function _pickMode(resolved, fallback) {
+    // Mode invalide → fallback par défaut (text/digit/symbol)
+    if (resolved === 'text' || resolved === 'digit' || resolved === 'symbol') {
+        if (resolved === 'symbol' && fallback !== 'symbol') {
+            // operator_mode utilise 'symbol' comme valeur valide
+            return resolved;
+        }
+        if (resolved === 'symbol' && fallback === 'symbol') return resolved;
+        if (resolved === 'text' || resolved === 'digit') return resolved;
+    }
+    // 'random' : 50/50 entre fallback (text) et l'autre (digit/symbol)
+    if (resolved === 'random') {
+        const alternative = fallback === 'text' ? 'digit' : 'symbol';
+        return Math.random() < 0.5 ? fallback : alternative;
+    }
+    // Mode inconnu → fallback
+    return fallback;
+}
+
+const SIMPLE_NUMBER_TO_FRENCH = {
+    1: 'un', 2: 'deux', 3: 'trois', 4: 'quatre', 5: 'cinq',
+    6: 'six', 7: 'sept', 8: 'huit', 9: 'neuf', 10: 'dix',
+    11: 'onze', 12: 'douze', 13: 'treize', 14: 'quatorze', 15: 'quinze',
+    16: 'seize', 17: 'dix-sept', 18: 'dix-huit', 19: 'dix-neuf', 20: 'vingt'
+};
+
+function _toFrench(n) {
+    // Utilise la version étendue de tts si dispo, sinon le mapping simple
+    if (numberToFrenchExt) {
+        return numberToFrenchExt(n);
+    }
+    return SIMPLE_NUMBER_TO_FRENCH[n] || n.toString();
+}
 
 function generateMathQuestion(captchaConfig = {}) {
     const math = captchaConfig.math_questions || {};
@@ -15,8 +76,8 @@ function generateMathQuestion(captchaConfig = {}) {
 
     const weightedOperations = [];
     for (const op of operations) {
-        const count = Math.floor((weights[op] ?? 0.3) * 100);
-        for (let i = 0; i < count; i++) weightedOperations.push(op);
+        const c = Math.floor((weights[op] ?? 0.3) * 100);
+        for (let i = 0; i < c; i++) weightedOperations.push(op);
     }
     const operator = weightedOperations[Math.floor(Math.random() * weightedOperations.length)] || '+';
 
@@ -38,22 +99,18 @@ function generateMathQuestion(captchaConfig = {}) {
             answer = num1 * num2;
             break;
         default:
-            num1 = Math.floor(Math.random() * (maxNum - minNum + 1)) + minNum;
-            num2 = Math.floor(Math.random() * (maxNum - minNum + 1)) + minNum;
-            answer = num1 + num2;
+            num1 = 1; num2 = 1; answer = 2;
     }
 
-    const numberToFrench = (n) => {
-        const map = { 1:'un',2:'deux',3:'trois',4:'quatre',5:'cinq',6:'six',7:'sept',8:'huit',9:'neuf',10:'dix',
-            11:'onze',12:'douze',13:'treize',14:'quatorze',15:'quinze',16:'seize',17:'dix-sept',18:'dix-huit',
-            19:'dix-neuf',20:'vingt' };
-        return map[n] || n.toString();
-    };
+    // === Modes configurables ===
+    const num1ModeResolved = _resolveNumMode(math.num1_mode ?? captchaConfig.num1_mode);
+    const num2ModeResolved = _resolveNumMode(math.num2_mode ?? captchaConfig.num2_mode);
+    const operatorModeResolved = _resolveOpMode(math.operator_mode ?? captchaConfig.operator_mode);
 
-    const num1Str = numberToFrench(num1);
-    const num2Str = numberToFrench(num2);
+    const num1Mode = _pickMode(num1ModeResolved, 'text');
+    const num2Mode = _pickMode(num2ModeResolved, 'text');
+    const operatorMode = _pickMode(operatorModeResolved, 'symbol');
 
-    const useWordOperators = math.use_word_operators ?? captchaConfig.use_word_operators ?? false;
     const wordOperatorsMap = {
         '+': 'plus',
         '-': 'moins',
@@ -62,7 +119,10 @@ function generateMathQuestion(captchaConfig = {}) {
         ...(captchaConfig.word_operators || {})
     };
 
-    const displayOperator = useWordOperators ? (wordOperatorsMap[operator] || operator) : operator;
+    // Représentation effective
+    const num1Str = num1Mode === 'text' ? _toFrench(num1) : num1.toString();
+    const num2Str = num2Mode === 'text' ? _toFrench(num2) : num2.toString();
+    const displayOperator = operatorMode === 'text' ? (wordOperatorsMap[operator] || operator) : operator;
 
     const template = captchaConfig.messages?.captcha_question
         || captchaConfig.messages?.CAPTCHA_QUESTION
@@ -79,8 +139,15 @@ function generateMathQuestion(captchaConfig = {}) {
         num2: num2Str,
         operator,
         displayOperator,
-        useWordOperators,
-        // Valeurs numériques brutes pour accessibilité TTS (math.js)
+        // Modes effectivement utilisés (après résolution du 'random')
+        num1Mode,
+        num2Mode,
+        operatorMode,
+        // Modes configurés (avant résolution random)
+        num1ModeConfigured: num1ModeResolved,
+        num2ModeConfigured: num2ModeResolved,
+        operatorModeConfigured: operatorModeResolved,
+        // Valeurs numériques brutes pour TTS accessibilité
         num1Value: num1,
         num2Value: num2
     };
@@ -88,7 +155,9 @@ function generateMathQuestion(captchaConfig = {}) {
 
 module.exports = {
     type: 'math',
-    label: 'Calcul arithmétique (texte)',
+    label: 'Calcul arithmétique',
+    VALID_MODES,
+    generateMathQuestion,
     async generate({ captchaConfig }) {
         const q = generateMathQuestion(captchaConfig);
         return {
@@ -100,7 +169,10 @@ module.exports = {
                 num2: q.num2,
                 operator: q.operator,
                 num1Value: q.num1Value,
-                num2Value: q.num2Value
+                num2Value: q.num2Value,
+                num1Mode: q.num1Mode,
+                num2Mode: q.num2Mode,
+                operatorMode: q.operatorMode
             }
         };
     },

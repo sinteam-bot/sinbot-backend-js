@@ -1,0 +1,13 @@
+# data/example/startup_notifier.config.yml
+#
+# Template d'exemple de configuration pour le module Startup Notifier.
+# Override possible par guilde dans data/{guildId}/startup_notifier.config.yml
+
+enabled: true
+channel_id: null
+notify_on_update_only: false
+include_git_history: true
+embed_color: "#f2c7ce"
+github:
+  repo: "sinteam-bot/chienne-bot"
+  token: null

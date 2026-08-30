@@ -7,7 +7,21 @@ const { getBotState, setBotState } = require('../../db/schemas/shared/bot-state.
 class StartupNotifierService {
     constructor() {}
 
-    getConfig() {
+    async getConfig(guildId) {
+        if (guildId) {
+            try {
+                const { getFeatureConfig } = require('../../config/c12-loader.js');
+                const cfg = await getFeatureConfig(guildId, 'startup_notifier');
+                if (cfg && Object.keys(cfg).length > 0) return cfg;
+            } catch (e) {
+                console.warn(`[StartupNotifier] Erreur chargement config guild ${guildId}:`, e.message);
+            }
+        }
+        try {
+            const { getFeatureConfig } = require('../../config/c12-loader.js');
+            const globalCfg = await getFeatureConfig(null, 'startup_notifier');
+            if (globalCfg && Object.keys(globalCfg).length > 0) return globalCfg;
+        } catch {}
         const currentConfig = getConfig ? getConfig() : config;
         return currentConfig.startup_notifier || {};
     }
@@ -139,8 +153,21 @@ class StartupNotifierService {
     /**
      * Envoie la notification de démarrage ou de mise à jour sur le salon Discord
      */
-    async sendStartupNotification(client, force = false) {
-        const notifierConfig = this.getConfig();
+    async sendStartupNotification(client, force = false, guildId = null) {
+        let notifierConfig = await this.getConfig(guildId);
+
+        // Si aucun salon n'est configuré et qu'aucune guilde n'est spécifiée, on cherche si une guilde a un salon configuré
+        if (!notifierConfig.channel_id && !guildId && client?.guilds?.cache) {
+            for (const [gId] of client.guilds.cache) {
+                const gConfig = await this.getConfig(gId);
+                if (gConfig.enabled !== false && gConfig.channel_id) {
+                    notifierConfig = gConfig;
+                    guildId = gId;
+                    break;
+                }
+            }
+        }
+
         if (notifierConfig.enabled === false && !force) {
             console.log('ℹ️ [StartupNotifier] Notifications de démarrage désactivées dans la configuration.');
             return { sent: false, reason: 'disabled' };
@@ -158,7 +185,7 @@ class StartupNotifierService {
         console.log('🔄 [StartupNotifier] Vérification des modifications et version de démarrage...');
 
         try {
-            const channel = await client.channels.fetch(channelId);
+            const channel = await client.channels.fetch(channelId).catch(() => null);
             if (!channel || !channel.isTextBased()) {
                 console.warn(`⚠️ [StartupNotifier] Salon introuvable ou non textuel (${channelId})`);
                 return { sent: false, reason: 'invalid_channel' };
@@ -207,14 +234,21 @@ class StartupNotifierService {
                 }
             }
 
+            // Si l'option "notify_on_update_only" est activée et qu'il ne s'agit pas d'une mise à jour ni d'un envoi forcé
+            if (notifierConfig.notify_on_update_only && !isUpdate && !force) {
+                console.log('ℹ️ [StartupNotifier] Pas de nouvelle mise à jour détectée (notify_on_update_only = true). Notification ignorée.');
+                return { sent: false, reason: 'skipped_no_update' };
+            }
+
             // 3. Construction de l'embed
+            const embedColor = notifierConfig.embed_color || '#f2c7ce';
             const embed = new EmbedBuilder().setTimestamp();
             const shortSha = effectiveSha ? effectiveSha.substring(0, 7) : 'inconnu';
             const commitUrl = effectiveSha ? `${repoUrl}/commit/${effectiveSha}` : repoUrl;
             const isDocker = Boolean(process.env.BUILD_DATE || process.env.GIT_COMMIT_SHA || currentCommit.source === 'docker-env');
 
             if (isUpdate) {
-                embed.setColor('#f2c7ce')
+                embed.setColor(embedColor)
                     .setTitle('🚀 Mise à jour déployée - Bot')
                     .setDescription(
                         `Le bot a redémarré avec de nouveaux changements !\n\n` +
@@ -229,7 +263,7 @@ class StartupNotifierService {
                     commitsToShow = latestCommits.slice(0, 5);
                 }
 
-                if (commitsToShow.length > 0) {
+                if (commitsToShow.length > 0 && notifierConfig.include_git_history !== false) {
                     const commitLines = commitsToShow.map(c => {
                         const cSha = (c.sha || '').substring(0, 7);
                         const cUrl = c.html_url || `${repoUrl}/commit/${c.sha}`;
@@ -251,7 +285,7 @@ class StartupNotifierService {
                     });
                 }
             } else {
-                embed.setColor('#f2c7ce')
+                embed.setColor(embedColor)
                     .setTitle('🤖 Démarrage du bot')
                     .setDescription(
                         `Le bot est en ligne et opérationnel.\n\n` +
@@ -259,7 +293,7 @@ class StartupNotifierService {
                         `📦 **Version active :** [\`${shortSha}\`](${commitUrl})`
                     );
 
-                if (latestCommits.length > 0) {
+                if (latestCommits.length > 0 && notifierConfig.include_git_history !== false) {
                     const commitLines = latestCommits.slice(0, 3).map(c => {
                         const cSha = (c.sha || '').substring(0, 7);
                         const cUrl = c.html_url || `${repoUrl}/commit/${c.sha}`;
@@ -305,7 +339,7 @@ class StartupNotifierService {
             }
             await setBotState('last_startup_at', new Date().toISOString());
 
-            return { sent: true, isUpdate, version: shortSha };
+            return { sent: true, isUpdate, version: shortSha, channelId };
 
         } catch (error) {
             console.error('❌ [StartupNotifier] Erreur lors de la notification:', error);
@@ -313,19 +347,48 @@ class StartupNotifierService {
         }
     }
 
-    async getStatus() {
+    async getStatus(guildId = null) {
         const commitInfo = this.getCurrentCommitInfo();
         const lastNotified = await getBotState('last_notified_commit');
         const lastStartup = await getBotState('last_startup_at');
-        const conf = this.getConfig();
+        const conf = await this.getConfig(guildId);
+
+        let latestCommits = [];
+        const githubCommits = await this.fetchGithubApi('/commits?per_page=5');
+        if (Array.isArray(githubCommits) && githubCommits.length > 0) {
+            latestCommits = githubCommits.map(c => ({
+                sha: (c.sha || '').substring(0, 7),
+                fullSha: c.sha,
+                author: c.author?.login || c.commit?.author?.name || 'Inconnu',
+                message: this.cleanCommitMessage(c.commit?.message),
+                date: c.commit?.author?.date || null,
+                url: c.html_url
+            }));
+        } else {
+            const local = this.getLocalGitCommits(5);
+            latestCommits = local.map(c => ({
+                sha: (c.sha || '').substring(0, 7),
+                fullSha: c.sha,
+                author: c.author?.login || c.commit?.author?.name || 'Inconnu',
+                message: this.cleanCommitMessage(c.commit?.message),
+                date: c.commit?.author?.date || null,
+                url: c.html_url
+            }));
+        }
 
         return {
             enabled: conf.enabled !== false,
             channelId: conf.channel_id || null,
+            notifyOnUpdateOnly: conf.notify_on_update_only ?? false,
+            includeGitHistory: conf.include_git_history ?? true,
+            embedColor: conf.embed_color || '#f2c7ce',
+            githubRepo: conf.github?.repo || process.env.GITHUB_REPO || 'sinteam-bot/chienne-bot',
             currentSha: commitInfo.sha,
+            shortSha: commitInfo.sha ? commitInfo.sha.substring(0, 7) : null,
             source: commitInfo.source,
             lastNotifiedCommit: lastNotified || null,
-            lastStartupAt: lastStartup || null
+            lastStartupAt: lastStartup || null,
+            latestCommits
         };
     }
 }

@@ -8,8 +8,9 @@ class StartupNotifierController {
         this.service = service;
     }
 
-    async getStatus(req) {
-        const data = await this.service.getStatus();
+    async getStatus(req = {}) {
+        const guildId = req?.query?.guildId || req?.query?.guild_id || null;
+        const data = await this.service.getStatus(guildId);
         return { success: true, data };
     }
 
@@ -18,7 +19,8 @@ class StartupNotifierController {
         if (!client) {
             return { success: false, error: 'Client Discord non disponible' };
         }
-        const result = await this.service.sendStartupNotification(client, true);
+        const guildId = req.body?.guildId || req.body?.guild_id || req.query?.guildId || null;
+        const result = await this.service.sendStartupNotification(client, true, guildId);
         return { success: true, ...result };
     }
 }

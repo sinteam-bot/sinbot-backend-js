@@ -270,6 +270,94 @@ describe('Captcha Challenges — Integration (full pipeline)', () => {
         assert.strictEqual(generated.answer, '10');
     });
 
+    test('math: respects num1_mode=text (default for backward compatibility)', async () => {
+        const ch = getChallenge('math');
+        const cfg = {
+            math_questions: { operations: ['+'], min_number: 7, max_number: 7, operation_weights: { '+': 1 } }
+        };
+        for (let i = 0; i < 5; i++) {
+            const gen = await ch.generate({ captchaConfig: cfg });
+            assert.ok(/sept/.test(gen.question), `Expected "sept" in question "${gen.question}"`);
+            assert.ok(!/7/.test(gen.question), `Expected no raw digit 7 in "${gen.question}"`);
+        }
+    });
+
+    test('math: num1_mode=digit renders numeric digit', async () => {
+        const ch = getChallenge('math');
+        const cfg = {
+            num1_mode: 'digit',
+            num2_mode: 'digit',
+            operator_mode: 'symbol',
+            math_questions: { operations: ['+'], min_number: 7, max_number: 7, operation_weights: { '+': 1 } }
+        };
+        for (let i = 0; i < 5; i++) {
+            const gen = await ch.generate({ captchaConfig: cfg });
+            assert.ok(/sept/.test(gen.question) === false, `Should not contain "sept" in "${gen.question}"`);
+            assert.ok(/7/.test(gen.question), `Expected digit "7" in "${gen.question}"`);
+            assert.ok(gen.question.includes(' + '), `Expected " + " in "${gen.question}"`);
+        }
+    });
+
+    test('math: operator_mode=text renders word operator', async () => {
+        const ch = getChallenge('math');
+        const cfg = {
+            num1_mode: 'digit',
+            num2_mode: 'digit',
+            operator_mode: 'text',
+            math_questions: { operations: ['*'], min_number: 2, max_number: 2, operation_weights: { '*': 1 } }
+        };
+        const gen = await ch.generate({ captchaConfig: cfg });
+        assert.ok(gen.question.includes('fois'), `Expected "fois" in "${gen.question}"`);
+        assert.ok(!gen.question.includes(' * '), `Should not contain raw * in "${gen.question}"`);
+    });
+
+    test('math: random mode resolves to text or digit at each call', async () => {
+        const ch = getChallenge('math');
+        const cfg = {
+            num1_mode: 'random',
+            num2_mode: 'random',
+            operator_mode: 'random',
+            math_questions: { operations: ['+'], min_number: 5, max_number: 5, operation_weights: { '+': 1 } }
+        };
+        const seen = new Set();
+        for (let i = 0; i < 50; i++) {
+            const gen = await ch.generate({ captchaConfig: cfg });
+            seen.add(gen.payload.num1Mode);
+            seen.add(gen.payload.num2Mode);
+            seen.add(gen.payload.operatorMode);
+        }
+        // On doit avoir vu au moins 2 valeurs différentes sur 50 essais
+        assert.ok(seen.size >= 2, `Expected random variety, saw only: ${[...seen].join(',')}`);
+    });
+
+    test('math: invalid mode falls back to defaults', async () => {
+        const ch = getChallenge('math');
+        const cfg = {
+            num1_mode: 'invalid_value',
+            num2_mode: 42,
+            operator_mode: 'gibberish',
+            math_questions: { operations: ['+'], min_number: 7, max_number: 7, operation_weights: { '+': 1 } }
+        };
+        const gen = await ch.generate({ captchaConfig: cfg });
+        assert.strictEqual(gen.payload.num1Mode, 'text', 'invalid num1_mode should fall back to text');
+        assert.strictEqual(gen.payload.num2Mode, 'text', 'invalid num2_mode should fall back to text');
+        assert.strictEqual(gen.payload.operatorMode, 'symbol', 'invalid operator_mode should fall back to symbol');
+    });
+
+    test('math: payload exposes effective modes (num1Mode, num2Mode, operatorMode)', async () => {
+        const ch = getChallenge('math');
+        const cfg = {
+            num1_mode: 'digit',
+            num2_mode: 'text',
+            operator_mode: 'text',
+            math_questions: { operations: ['+'], min_number: 1, max_number: 9, operation_weights: { '+': 1 } }
+        };
+        const gen = await ch.generate({ captchaConfig: cfg });
+        assert.strictEqual(gen.payload.num1Mode, 'digit');
+        assert.strictEqual(gen.payload.num2Mode, 'text');
+        assert.strictEqual(gen.payload.operatorMode, 'text');
+    });
+
     test('image: generate → verify success path (case-insensitive)', async () => {
         const ch = getChallenge('image');
         let canvasFound = true;

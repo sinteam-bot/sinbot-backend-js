@@ -36,7 +36,7 @@ class SuggestionsService {
     static inject = [SuggestionsRepository];
 
     constructor(repo) {
-        this.repo = repo;
+        this.repo = repo || new SuggestionsRepository();
     }
 
     getConfig(guildId) {

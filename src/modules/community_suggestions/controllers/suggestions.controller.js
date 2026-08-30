@@ -14,8 +14,8 @@ class SuggestionsController {
     static inject = [SuggestionsService, SuggestionsRepository];
 
     constructor(service, repo) {
-        this.service = service;
-        this.repo = repo;
+        this.service = service || new SuggestionsService();
+        this.repo = repo || new SuggestionsRepository();
     }
 
     async getStatus(req) {
