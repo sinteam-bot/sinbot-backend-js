@@ -64,6 +64,27 @@ module.exports = {
         action: 'delete_warn'
     },
 
+    anti_attachment_spam: {
+        enabled: false,
+        max_attachments: 3,
+        window_seconds: 10,
+        max_per_message: 5,
+        action: 'delete_warn'
+    },
+
+    anti_zalgo: {
+        enabled: false,
+        max_zalgo_chars: 3,
+        action: 'delete_warn'
+    },
+
+    anti_sticker: {
+        enabled: false,
+        action: 'delete'
+    },
+
+    channel_rules: {},
+
     sanctions: {
         warn_expire_days: 30,
         progression: [

@@ -1,0 +1,13 @@
+# data/example/autoban.config.yml
+#
+# Template de configuration pour la feature "autoban" (Phase 11 G17).
+#
+enabled: false
+min_account_age_hours: 24
+block_default_avatar: false
+username_blacklist_regex:
+  - ".*discord.*nitro.*"
+  - ".*steam.*gift.*"
+action: "ban" # ban | kick | quarantine
+quarantine_role_id: null
+dm_reason: true

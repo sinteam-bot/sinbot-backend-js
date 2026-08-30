@@ -49,6 +49,7 @@ const { ServerStatsModule } = require('./util_server_stats/server-stats.module.j
 const { TagsModule } = require('./util_tags/tags.module.js');
 const { TimedRolesModule } = require('./community_timed_roles/timed-roles.module.js');
 const { RanksModule } = require('./community_ranks/ranks.module.js');
+const { AutobanModule } = require('./security_autoban/autoban.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -94,7 +95,8 @@ const MODULE_FEATURE_MAP = {
     [ServerStatsModule.name]: 'server_stats',
     [TagsModule.name]: 'tags',
     [TimedRolesModule.name]: 'timed_roles',
-    [RanksModule.name]: 'ranks'
+    [RanksModule.name]: 'ranks',
+    [AutobanModule.name]: 'autoban'
 };
 
 const ALL_MODULES = [
@@ -131,7 +133,8 @@ const ALL_MODULES = [
     ServerStatsModule,
     TagsModule,
     TimedRolesModule,
-    RanksModule
+    RanksModule,
+    AutobanModule
 ];
 
 /**

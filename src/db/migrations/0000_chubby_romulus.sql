@@ -938,5 +938,16 @@ CREATE TABLE IF NOT EXISTS "ranks" (
 	"created_at" bigint NOT NULL,
 	CONSTRAINT "ranks_guild_name_unique" UNIQUE("guild_id","name")
 );--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_ranks_guild" ON "ranks" USING btree ("guild_id");
+CREATE INDEX IF NOT EXISTS "idx_ranks_guild" ON "ranks" USING btree ("guild_id");--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "autoban_logs" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"user_tag" text,
+	"reason" text NOT NULL,
+	"action" text NOT NULL,
+	"created_at" bigint NOT NULL
+);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_autoban_logs_guild" ON "autoban_logs" USING btree ("guild_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_autoban_logs_created" ON "autoban_logs" USING btree ("created_at");
 CREATE INDEX "idx_pg_auth_failed_blocked" ON "auth_failed_attempts" USING btree ("blocked_until");
