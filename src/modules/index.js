@@ -47,6 +47,8 @@ const { FunModule } = require('./util_fun/fun.module.js');
 const { AfkModule } = require('./util_afk/afk.module.js');
 const { ServerStatsModule } = require('./util_server_stats/server-stats.module.js');
 const { TagsModule } = require('./util_tags/tags.module.js');
+const { TimedRolesModule } = require('./community_timed_roles/timed-roles.module.js');
+const { RanksModule } = require('./community_ranks/ranks.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -90,7 +92,9 @@ const MODULE_FEATURE_MAP = {
     [FunModule.name]: 'fun',
     [AfkModule.name]: 'afk',
     [ServerStatsModule.name]: 'server_stats',
-    [TagsModule.name]: 'tags'
+    [TagsModule.name]: 'tags',
+    [TimedRolesModule.name]: 'timed_roles',
+    [RanksModule.name]: 'ranks'
 };
 
 const ALL_MODULES = [
@@ -125,7 +129,9 @@ const ALL_MODULES = [
     FunModule,
     AfkModule,
     ServerStatsModule,
-    TagsModule
+    TagsModule,
+    TimedRolesModule,
+    RanksModule
 ];
 
 /**

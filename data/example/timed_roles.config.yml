@@ -1,0 +1,6 @@
+# data/example/timed_roles.config.yml
+#
+# Template de configuration pour la feature "timed_roles" (Phase 10 G07).
+#
+enabled: true
+check_interval_seconds: 30

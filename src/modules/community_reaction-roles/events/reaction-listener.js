@@ -38,10 +38,33 @@ class ReactionListener {
             const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
             if (!member?.permissions?.has?.('ManageRoles')) return;
         }
+
         try {
             const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
-            if (member && !member.roles.cache.has(rr.roleId)) {
-                await member.roles.add(rr.roleId);
+            if (!member) return;
+
+            const mode = rr.mode || 'toggle';
+
+            if (mode === 'reversed') {
+                if (member.roles.cache.has(rr.roleId)) {
+                    await member.roles.remove(rr.roleId);
+                }
+            } else if (mode === 'temporary') {
+                if (!member.roles.cache.has(rr.roleId)) {
+                    await member.roles.add(rr.roleId);
+                }
+                const durationSec = rr.metadata?.duration || 60;
+                setTimeout(async () => {
+                    const freshMember = await reaction.message.guild.members.fetch(user.id).catch(() => null);
+                    if (freshMember && freshMember.roles.cache.has(rr.roleId)) {
+                        await freshMember.roles.remove(rr.roleId).catch(() => { });
+                    }
+                }, durationSec * 1000);
+            } else {
+                // 'toggle' ou 'binding'
+                if (!member.roles.cache.has(rr.roleId)) {
+                    await member.roles.add(rr.roleId);
+                }
             }
         } catch (err) {
             console.warn(`[ReactionListener] add failed: ${err.message}`);
@@ -56,10 +79,26 @@ class ReactionListener {
 
         const rr = await this.service.findForReaction(reaction.message.id, reaction.emoji);
         if (!rr) return;
+
+        const mode = rr.mode || 'toggle';
+        if (mode === 'binding' || mode === 'temporary') {
+            // Mode binding ou temporary : on ne retire pas le rôle lors du retrait du réact
+            return;
+        }
+
         try {
             const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
-            if (member && member.roles.cache.has(rr.roleId)) {
-                await member.roles.remove(rr.roleId);
+            if (!member) return;
+
+            if (mode === 'reversed') {
+                if (!member.roles.cache.has(rr.roleId)) {
+                    await member.roles.add(rr.roleId);
+                }
+            } else {
+                // 'toggle'
+                if (member.roles.cache.has(rr.roleId)) {
+                    await member.roles.remove(rr.roleId);
+                }
             }
         } catch (err) {
             console.warn(`[ReactionListener] remove failed: ${err.message}`);

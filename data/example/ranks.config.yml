@@ -1,0 +1,6 @@
+# data/example/ranks.config.yml
+#
+# Template de configuration pour la feature "ranks" (Phase 10 G26).
+#
+enabled: true
+max_ranks_per_guild: 50
