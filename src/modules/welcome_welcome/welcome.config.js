@@ -1,143 +1,61 @@
-const { getConfig, saveModuleConfig } = require('../../config/index.js');
+/**
+ * welcome.config.js — Helper de lecture de la config welcome par-guilde.
+ *
+ * Lit la config depuis data/{guildId}/welcome.config.yml via c12-loader.
+ * Pour les écritures (setters), persiste via setFeatureConfig (par-guilde).
+ */
 
-function getWelcomeConfig() {
-    const fullConfig = getConfig();
-    const w = fullConfig.welcome || {};
+const path = require('path');
+const fs = require('fs');
 
-    return {
-        get WELCOME_CHANNEL_ID() {
-            return w.channel_id || '';
-        },
-        set WELCOME_CHANNEL_ID(val) {
-            w.channel_id = val;
-            saveModuleConfig('welcome', w);
-        },
-        get channel_id() {
-            return w.channel_id || '';
-        },
-        set channel_id(val) {
-            w.channel_id = val;
-            saveModuleConfig('welcome', w);
-        },
+const { getFeatureConfig, setFeatureConfig } = require('../../config/c12-loader.js');
 
-        get welcome_channel_name() {
-            return w.welcome_channel_name || 'bienvenue';
-        },
-        get welcome_color() {
-            return w.welcome_color || '#f2c7ce';
-        },
-
-        get AUTO_ROLES() {
-            return w.AUTO_ROLES || w.auto_roles || [];
-        },
-        set AUTO_ROLES(val) {
-            w.AUTO_ROLES = val;
-            saveModuleConfig('welcome', w);
-        },
-        get auto_roles() {
-            return w.AUTO_ROLES || w.auto_roles || [];
-        },
-
-        get WELCOME_MESSAGE() {
-            return w.welcome_message || {
-                title: '🎉 Bienvenue sur {server} !',
-                description: 'Bienvenue {user} !\n\nNous sommes ravis de t\'accueillir parmi nous ! 🎊',
-                color: '#f2c7ce',
-                footer: 'Membre #{memberCount}',
-                thumbnail: 'user',
-                image: null,
-                fields: [
-                    {
-                        name: '📚 Pour commencer',
-                        value: '• Lis les règles dans <#CHANNEL_REGLES_ID>\n• Présente-toi dans <#CHANNEL_PRESENTATION_ID>\n• N\'hésite pas à poser des questions !',
-                        inline: false
-                    },
-                    {
-                        name: '🎮 Commandes utiles',
-                        value: '`/help` - Liste des commandes\n`/rank` - Voir ton niveau',
-                        inline: true
-                    }
-                ]
-            };
-        },
-        set WELCOME_MESSAGE(val) {
-            w.welcome_message = val;
-            saveModuleConfig('welcome', w);
-        },
-        get welcome_message() {
-            return this.WELCOME_MESSAGE;
-        },
-
-        get ENABLED() {
-            return w.enabled !== undefined ? w.enabled : true;
-        },
-        set ENABLED(val) {
-            w.enabled = val;
-            saveModuleConfig('welcome', w);
-        },
-        get enabled() {
-            return this.ENABLED;
-        },
-
-        get SEND_DM() {
-            return w.dm_message?.enabled !== undefined ? w.dm_message.enabled : (w.SEND_DM ?? true);
-        },
-        set SEND_DM(val) {
-            w.SEND_DM = val;
-            if (w.dm_message) w.dm_message.enabled = val;
-            saveModuleConfig('welcome', w);
-        },
-
-        get DM_MESSAGE() {
-            return w.dm_message || {
-                title: '👋 Bienvenue !',
-                description: 'Salut {username} !\n\nBienvenue sur **{server}** ! Nous espérons que tu vas t\'amuser avec nous. 😊',
-                color: '#f2c7ce',
-                fields: [
-                    {
-                        name: '💡 Conseil',
-                        value: 'N\'oublie pas de te présenter pour que la communauté apprenne à te connaître !',
-                        inline: false
-                    }
-                ]
-            };
-        },
-        set DM_MESSAGE(val) {
-            w.dm_message = val;
-            saveModuleConfig('welcome', w);
-        },
-        get dm_message() {
-            return this.DM_MESSAGE;
-        },
-
-        get LOG_TO_CONSOLE() {
-            return w.LOG_TO_CONSOLE !== undefined ? w.LOG_TO_CONSOLE : true;
-        }
-    };
+/**
+ * Charge la config welcome d'une guilde.
+ * @param {string} guildId
+ * @returns {Promise<object>}
+ */
+async function getWelcomeConfig(guildId) {
+    if (!guildId) return {};
+    try {
+        const cfg = await getFeatureConfig(guildId, 'welcome');
+        return cfg || {};
+    } catch (e) {
+        console.warn(`[welcome.config] getWelcomeConfig(${guildId}):`, e.message);
+        return {};
+    }
 }
 
-module.exports = new Proxy({}, {
-    get(target, prop) {
-        const conf = getWelcomeConfig();
-        if (prop in conf) {
-            return conf[prop];
-        }
-        return getConfig().welcome?.[prop];
-    },
-    set(target, prop, value) {
-        const conf = getWelcomeConfig();
-        conf[prop] = value;
-        return true;
-    },
-    ownKeys() {
-        const conf = getWelcomeConfig();
-        return Array.from(new Set([...Object.keys(conf), ...Object.keys(getConfig().welcome || {})]));
-    },
-    getOwnPropertyDescriptor(target, prop) {
-        return {
-            enumerable: true,
-            configurable: true,
-            value: this.get(target, prop)
-        };
+/**
+ * Sauvegarde (patch) la config welcome d'une guilde.
+ * @param {string} guildId
+ * @param {object} patch
+ */
+async function saveWelcomeConfig(guildId, patch) {
+    if (!guildId) return null;
+    try {
+        return await setFeatureConfig(guildId, 'welcome', patch || {});
+    } catch (e) {
+        console.warn(`[welcome.config] saveWelcomeConfig(${guildId}):`, e.message);
+        return null;
     }
-});
+}
+
+/**
+ * Lit la valeur d'un champ de la config welcome pour une guilde.
+ * Helper simple pour le service (les setters passent par saveWelcomeConfig).
+ * @param {string} guildId
+ * @param {string} key
+ * @param {*} fallback
+ */
+async function getWelcomeField(guildId, key, fallback) {
+    const cfg = await getWelcomeConfig(guildId);
+    if (cfg && Object.prototype.hasOwnProperty.call(cfg, key)) return cfg[key];
+    return fallback;
+}
+
+module.exports = {
+    getWelcomeConfig,
+    saveWelcomeConfig,
+    getWelcomeField
+};

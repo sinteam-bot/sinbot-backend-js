@@ -55,6 +55,7 @@ class InvitesService {
 
     async registerCommandInvite(guild, invite, user) {
         if (!guild || !invite || !user) return;
+        const botId = guild.client?.user?.id || null;
         const inviterId = user.id;
         const inviterUsername = user.tag || user.username;
         const data = {
@@ -66,7 +67,7 @@ class InvitesService {
             expiresAt: toISOStringSafe(invite.expiresAt),
             createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
         };
-        await this.repo.upsertInviteCode(invite.code, guild.id, data);
+        await this.repo.upsertInviteCode(invite.code, guild.id, data, { botId });
         const cache = this._inviteCache.get(guild.id) || new Map();
         cache.set(invite.code, {
             code: invite.code,
@@ -117,7 +118,7 @@ class InvitesService {
                 };
 
                 map.set(code, item);
-                await this.repo.upsertInviteCode(code, guild.id, item);
+                await this.repo.upsertInviteCode(code, guild.id, item, { botId });
             }
             this._inviteCache.set(guild.id, map);
             return map;
@@ -170,7 +171,7 @@ class InvitesService {
             createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
         };
 
-        await this.repo.upsertInviteCode(invite.code, guild.id, data);
+        await this.repo.upsertInviteCode(invite.code, guild.id, data, { botId });
         cache.set(invite.code, {
             code: invite.code,
             ...data
@@ -258,7 +259,7 @@ class InvitesService {
 
         this._inviteCache.set(guild.id, after);
         if (cache) cache.set(usedCode, { code: usedCode, ...updatedData });
-        await this.repo.upsertInviteCode(usedCode, guild.id, updatedData);
+        await this.repo.upsertInviteCode(usedCode, guild.id, updatedData, { botId });
 
         return {
             isBot: false,

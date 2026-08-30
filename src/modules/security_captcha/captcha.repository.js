@@ -300,6 +300,7 @@ class CaptchaRepository {
         .where(
             and(
                 eq(this.schema.userCaptchas.isVerified, 0),
+                sql`${this.schema.userCaptchas.expiredAt} IS NULL`,
                 sql`${this.schema.userCaptchas.expiresAt} IS NOT NULL`,
                 sql`${this.schema.userCaptchas.expiresAt} <= ${nowIso}`
             )

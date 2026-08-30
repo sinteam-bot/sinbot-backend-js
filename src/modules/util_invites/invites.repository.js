@@ -35,7 +35,7 @@ class InvitesRepository {
 
     // ───────────────────────── invite_codes ─────────────────────────
 
-    async upsertInviteCode(code, guildId, data = {}) {
+    async upsertInviteCode(code, guildId, data = {}, options = {}) {
         const now = Date.now();
         // Normalisation : `null || null` retournerait `""` si la valeur est
         // une chaîne vide. On utilise une fonction helper pour s'assurer
@@ -54,6 +54,26 @@ class InvitesRepository {
                 expiresAt_norm: norm(data.expiresAt)
             });
         }
+
+        // Garde-fou : on ne doit JAMAIS écraser un inviter humain avec le bot.
+        // Discord émet `inviteCreate` avec `inviter = bot` (puisque c'est le
+        // bot qui crée techniquement via `channel.createInvite` lors de
+        // `/invite create`). Si une ligne existe déjà avec un inviter
+        // humain (membre qui a lancé la commande), on la préserve.
+        let preservedInviterId = null;
+        let preservedInviterUsername = null;
+        if (options.botId && data.inviterId === options.botId) {
+            try {
+                const existing = await this.getInviteByCode(code);
+                if (existing && existing.inviterId && existing.inviterId !== options.botId) {
+                    preservedInviterId = existing.inviterId;
+                    preservedInviterUsername = existing.inviterUsername;
+                }
+            } catch {}
+        }
+        const finalInviterId = preservedInviterId ?? norm(data.inviterId);
+        const finalInviterUsername = preservedInviterUsername ?? norm(data.inviterUsername);
+
         // On force les null via SQL brut pour éviter tout mapping Drizzle
         // (notamment la conversion de `null` en `""` qui peut survenir dans
         // certaines versions de PGlite/Drizzle).
@@ -79,8 +99,8 @@ class InvitesRepository {
                 code,
                 guildId,
                 norm(data.channelId),
-                norm(data.inviterId),
-                norm(data.inviterUsername),
+                finalInviterId,
+                finalInviterUsername,
                 data.maxUses ?? 0,
                 data.uses ?? 0,
                 norm(data.expiresAt),
@@ -96,8 +116,8 @@ class InvitesRepository {
                 code,
                 guildId,
                 channelId: norm(data.channelId),
-                inviterId: norm(data.inviterId),
-                inviterUsername: norm(data.inviterUsername),
+                inviterId: finalInviterId,
+                inviterUsername: finalInviterUsername,
                 maxUses: data.maxUses ?? 0,
                 uses: data.uses ?? 0,
                 expiresAt: norm(data.expiresAt),
@@ -109,8 +129,8 @@ class InvitesRepository {
                 target: inviteCodes.code,
                 set: {
                     channelId: norm(data.channelId),
-                    inviterId: norm(data.inviterId),
-                    inviterUsername: norm(data.inviterUsername),
+                    inviterId: finalInviterId,
+                    inviterUsername: finalInviterUsername,
                     maxUses: data.maxUses ?? 0,
                     uses: data.uses ?? 0,
                     expiresAt: norm(data.expiresAt),
