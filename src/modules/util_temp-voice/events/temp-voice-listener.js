@@ -91,6 +91,27 @@ class TempVoiceListener {
                 const ch = await guild.channels.fetch(oldChannel.id).catch(() => null);
                 if (ch && ch.members && ch.members.size === 0) {
                     await this.service.markEmpty(oldChannel.id);
+                    console.log(`⏳ [TempVoice] Salon "${ch.name}" (${oldChannel.id}) est vide. Suppression dans ${deleteDelaySeconds}s...`);
+
+                    const targetChannelId = oldChannel.id;
+                    setTimeout(async () => {
+                        try {
+                            const currentCh = await guild.channels.fetch(targetChannelId).catch(() => null);
+                            if (!currentCh) {
+                                await this.service.forgetChannel(targetChannelId);
+                                return;
+                            }
+                            if (currentCh.members && currentCh.members.size === 0) {
+                                console.log(`🗑️ [TempVoice] Suppression du salon éphémère vide "${currentCh.name}" (${targetChannelId})`);
+                                await currentCh.delete('Salon temporaire vide (délai expiré)').catch(err => {
+                                    console.warn(`[TempVoice] Erreur suppression salon: ${err.message}`);
+                                });
+                                await this.service.forgetChannel(targetChannelId);
+                            }
+                        } catch (err) {
+                            console.warn(`[TempVoice] Erreur timer suppression: ${err.message}`);
+                        }
+                    }, Math.max(deleteDelaySeconds, 0) * 1000);
                 } else if (ch) {
                     await this._maybeRename(guild, ch);
                 }

@@ -29,8 +29,31 @@ class TempVoiceService {
     }
 
     async getConfig(guildId) {
+        let fileConfig = null;
+        try {
+            const { featureRegistry } = require('../../../core/feature-registry.js');
+            const state = await featureRegistry.get(guildId, 'temp-voice');
+            if (state && state.config) {
+                fileConfig = {
+                    guildId,
+                    categoryId: state.config.category_id || state.config.categoryId || null,
+                    format: state.config.format || "{user}'s game",
+                    deleteDelaySeconds: Number(state.config.delete_delay_seconds ?? state.config.deleteDelaySeconds ?? 5),
+                    maxPerGuild: Number(state.config.max_per_guild ?? state.config.maxPerGuild ?? 0),
+                    lockedRoleId: state.config.locked_role_id || state.config.lockedRoleId || null,
+                    joinChannels: state.config.join_channels || state.config.joinChannels || [],
+                    enabled: state.enabled !== false,
+                    updatedAt: 0
+                };
+            }
+        } catch (_) {}
+
         const c = await this.repo.getConfig(guildId);
-        if (c) return c;
+        if (c) {
+            return { ...(fileConfig || {}), ...c };
+        }
+        if (fileConfig) return fileConfig;
+
         return {
             guildId,
             categoryId: null,

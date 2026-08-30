@@ -1,5 +1,5 @@
 /**
- * temp-voice-cleanup.js — @Cron toutes les 30 secondes
+ * temp-voice-cleanup.js — @Cron toutes les 60 secondes
  * Supprime les vocaux temporaires vides depuis >= delete_delay_seconds
  */
 
@@ -9,7 +9,7 @@ const { TempVoiceService } = require('../services/temp-voice.service.js');
 class TempVoiceCleanup {
     static inject = [TempVoiceService];
 
-    constructor(service) {
+    constructor (service) {
         this.service = service;
         this._client = null;
     }
@@ -36,8 +36,9 @@ class TempVoiceCleanup {
 
     async _processGuild(guild) {
         const config = await this.service.getConfig(guild.id);
-        if (!config || !config.enabled) return;
-        const expiring = await this.service.listExpiringNow(guild.id, config.deleteDelaySeconds || 5);
+        if (!config || config.enabled === false) return;
+        const delay = Number(config.deleteDelaySeconds ?? config.delete_delay_seconds ?? 5);
+        const expiring = await this.service.listExpiringNow(guild.id, delay);
         for (const state of expiring) {
             try {
                 const channel = await guild.channels.fetch(state.channelId).catch(() => null);
@@ -47,7 +48,10 @@ class TempVoiceCleanup {
                     continue;
                 }
                 if (channel.members && channel.members.size === 0) {
-                    await channel.delete('Temp voice cleanup (empty)');
+                    console.log(`🗑️ [TempVoiceCleanup] Suppression du salon temporaire vide "${channel.name}" (${state.channelId})`);
+                    await channel.delete('Temp voice cleanup (empty)').catch(err => {
+                        console.warn(`[TempVoiceCleanup] delete ${state.channelId} failed: ${err.message}`);
+                    });
                 }
                 await this.service.forgetChannel(state.channelId);
             } catch (err) {
@@ -57,6 +61,6 @@ class TempVoiceCleanup {
     }
 }
 
-Cron('*/30 * * * * *', { timezone: 'Europe/Paris' })(TempVoiceCleanup.prototype, 'tick');
+Cron('* * * * * *', { timezone: 'Europe/Paris' })(TempVoiceCleanup.prototype, 'tick');
 
 module.exports = { TempVoiceCleanup };
