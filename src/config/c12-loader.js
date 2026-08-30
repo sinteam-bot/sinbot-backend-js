@@ -179,7 +179,8 @@ async function getFeatureConfig(guildId, feature, options = {}) {
     if (!feature) throw new Error('feature requis');
     if (!guildId) throw new Error('guildId requis');
 
-    const cacheKey = `${guildId}:${feature}`;
+    const normKey = String(feature).replace(/-/g, '_');
+    const cacheKey = `${guildId}:${normKey}`;
     if (options.fresh !== true && _featureCache.has(cacheKey)) {
         return _featureCache.get(cacheKey);
     }
@@ -191,15 +192,30 @@ async function getFeatureConfig(guildId, feature, options = {}) {
 
     const merged = _deepMerge(_deepMerge(exampleConfig, defaultConfig), guildConfig);
     _featureCache.set(cacheKey, merged);
+    _featureCache.set(`${guildId}:${feature}`, merged);
     return merged;
 }
 
 async function _loadFromDir(dir, feature) {
-    const filePath = path.join(dir, `${feature}.config.yml`);
-    if (!fs.existsSync(filePath)) return {};
+    if (!fs.existsSync(dir)) return {};
+    let targetName = feature;
+    let filePath = path.join(dir, `${targetName}.config.yml`);
+    if (!fs.existsSync(filePath)) {
+        const alt1 = String(feature).replace(/-/g, '_');
+        const alt2 = String(feature).replace(/_/g, '-');
+        if (fs.existsSync(path.join(dir, `${alt1}.config.yml`))) {
+            targetName = alt1;
+            filePath = path.join(dir, `${alt1}.config.yml`);
+        } else if (fs.existsSync(path.join(dir, `${alt2}.config.yml`))) {
+            targetName = alt2;
+            filePath = path.join(dir, `${alt2}.config.yml`);
+        } else {
+            return {};
+        }
+    }
     const result = await loadConfig({
         cwd: dir,
-        name: feature
+        name: targetName
     });
     return result.config || {};
 }
@@ -234,7 +250,20 @@ async function setFeatureConfig(guildId, feature, patch) {
     const guildDir = path.join(_dataDir(), String(guildId));
     await fsp.mkdir(guildDir, { recursive: true });
 
-    const filePath = path.join(guildDir, `${feature}.config.yml`);
+    const alt1 = String(feature).replace(/-/g, '_');
+    const alt2 = String(feature).replace(/_/g, '-');
+    let targetFeature = feature;
+    let filePath = path.join(guildDir, `${targetFeature}.config.yml`);
+    if (!fs.existsSync(filePath)) {
+        if (fs.existsSync(path.join(guildDir, `${alt1}.config.yml`))) {
+            targetFeature = alt1;
+            filePath = path.join(guildDir, `${alt1}.config.yml`);
+        } else if (fs.existsSync(path.join(guildDir, `${alt2}.config.yml`))) {
+            targetFeature = alt2;
+            filePath = path.join(guildDir, `${alt2}.config.yml`);
+        }
+    }
+
     const current = await getFeatureConfig(guildId, feature, { fresh: true });
     const next = _deepMerge(current, patch || {});
 
@@ -244,9 +273,12 @@ async function setFeatureConfig(guildId, feature, patch) {
     await fsp.writeFile(tmpPath, yaml.stringify(next), 'utf8');
     await fsp.rename(tmpPath, filePath);
 
-    // Invalider le cache pour cette clé
-    const cacheKey = `${guildId}:${feature}`;
-    _featureCache.set(cacheKey, next);
+    // Invalider le cache pour toutes les variantes
+    const normKey = String(feature).replace(/-/g, '_');
+    _featureCache.set(`${guildId}:${normKey}`, next);
+    _featureCache.set(`${guildId}:${feature}`, next);
+    _featureCache.set(`${guildId}:${alt1}`, next);
+    _featureCache.set(`${guildId}:${alt2}`, next);
 
     // Émettre l'event
     try {

@@ -49,19 +49,23 @@ class TempVoiceService {
         const merged = { ...current, ...patch, guildId };
         return this.repo.upsertConfig({
             guildId,
-            categoryId: merged.categoryId,
+            categoryId: merged.categoryId || merged.category_id || null,
             format: merged.format,
-            deleteDelaySeconds: merged.deleteDelaySeconds,
-            maxPerGuild: merged.maxPerGuild,
-            lockedRoleId: merged.lockedRoleId,
-            joinChannels: merged.joinChannels,
+            deleteDelaySeconds: merged.deleteDelaySeconds ?? merged.delete_delay_seconds ?? 5,
+            maxPerGuild: merged.maxPerGuild ?? merged.max_per_guild ?? 0,
+            lockedRoleId: merged.lockedRoleId || merged.locked_role_id || null,
+            joinChannels: Array.isArray(merged.joinChannels)
+                ? merged.joinChannels
+                : (Array.isArray(merged.join_channels) ? merged.join_channels : (merged.joinChannels ? [String(merged.joinChannels)] : [])),
             enabled: merged.enabled
         });
     }
 
     isJoinChannel(channelId, config) {
-        if (!config || !config.joinChannels) return false;
-        return config.joinChannels.includes(channelId);
+        if (!config || !channelId) return false;
+        const raw = config.join_channels || config.joinChannels || [];
+        const channels = Array.isArray(raw) ? raw : (typeof raw === 'string' && raw.trim() !== '' ? [raw.trim()] : []);
+        return channels.includes(channelId);
     }
 
     isEnabled(config) {
@@ -70,7 +74,7 @@ class TempVoiceService {
 
     computeChannelName(user, config) {
         const fmt = (config && config.format) || "{user}'s game";
-        const display = user.globalName || user.username || 'User';
+        const display = user.globalName || user.displayName || user.username || 'User';
         return fmt
             .replace(/{user}/g, display)
             .replace(/{username}/g, user.username || display)
@@ -85,7 +89,7 @@ class TempVoiceService {
     }
 
     async canCreate(guildId, config) {
-        const max = config?.maxPerGuild || 0;
+        const max = config?.max_per_guild ?? config?.maxPerGuild ?? 0;
         if (max <= 0) return true;
         const count = await this.repo.countByGuild(guildId);
         return count < max;
