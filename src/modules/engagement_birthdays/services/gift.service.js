@@ -48,7 +48,7 @@ class GiftService {
         // 2) XP cadeau (si configuré)
         if (config.gifts?.xp_per_birthday && config.gifts.xp_per_birthday > 0) {
             try {
-                const { XPLevelRepository } = require('../../../feature_xp-level/xp-level.repository.js');
+                const { XPLevelRepository } = require('../../engagement_xp-level/xp-level.repository.js');
                 const xpRepo = new XPLevelRepository();
                 await xpRepo.addXP(user.id, user.username, config.gifts.xp_per_birthday, 'event', `Anniversaire +${config.gifts.xp_per_birthday} XP`);
                 given.push('xp');

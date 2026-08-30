@@ -135,7 +135,7 @@ class CaptchaService {
     async triggerWelcome(member) {
         try {
             const { container } = require('../../core/container.js');
-            const { WelcomeService } = require('../feature_welcome/welcome.service.js');
+            const { WelcomeService } = require('../welcome_welcome/welcome.service.js');
             const welcomeService = container.resolve(WelcomeService);
             await welcomeService.handleWelcome(member);
         } catch (err) {
