@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express from 'express';
 import createWebRouter from '../src/web/webRouter.js';
-import { db } from '../src/db/index.js';
+import { db, ready } from '../src/db/index.js';
 
 describe('Feature G01: Public Leaderboard Endpoint Tests', () => {
     let app, server, baseUrl;
     const guildId = 'test_guild_lb_123';
 
     beforeAll(async () => {
+        await ready;
         // Populate test data in user_xp and user_economy
         await db.pool.query(`DELETE FROM user_xp WHERE user_id LIKE 'test_lb_%'`);
         await db.pool.query(`DELETE FROM user_economy WHERE guild_id = $1`, [guildId]);

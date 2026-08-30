@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
-import { db } from '../src/db/index.js';
+import { db, ready } from '../src/db/index.js';
 import { EconomyRepository } from '../src/modules/engagement_economy/services/economy.repository.js';
 import { EconomyService } from '../src/modules/engagement_economy/services/economy.service.js';
 
@@ -16,40 +16,7 @@ describe('Feature G11: Economy Boosts Tests', () => {
     const userId = 'usr_boost_456';
 
     beforeAll(async () => {
-        await db.pool.query(`
-            CREATE TABLE IF NOT EXISTS "user_economy" (
-                "user_id" text NOT NULL,
-                "guild_id" text NOT NULL,
-                "balance" integer DEFAULT 0 NOT NULL,
-                "bank_balance" integer DEFAULT 0 NOT NULL,
-                "last_daily_claim_at" bigint,
-                "last_work_claim_at" bigint,
-                "total_earned" integer DEFAULT 0 NOT NULL,
-                "total_spent" integer DEFAULT 0 NOT NULL,
-                "created_at" bigint NOT NULL,
-                "updated_at" bigint NOT NULL,
-                CONSTRAINT "user_economy_guild_id_user_id_pk" PRIMARY KEY("guild_id","user_id")
-            );
-            CREATE TABLE IF NOT EXISTS "economy_transactions" (
-                "id" text PRIMARY KEY NOT NULL,
-                "guild_id" text NOT NULL,
-                "user_id" text NOT NULL,
-                "amount" integer NOT NULL,
-                "type" text NOT NULL,
-                "counterparty_id" text,
-                "reason" text,
-                "metadata" jsonb,
-                "created_at" bigint NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS "economy_boosts" (
-                "id" text PRIMARY KEY NOT NULL,
-                "guild_id" text NOT NULL,
-                "user_id" text NOT NULL,
-                "multiplier" numeric(5, 2) NOT NULL,
-                "expires_at" bigint NOT NULL,
-                "created_at" bigint NOT NULL
-            );
-        `);
+        await ready;
     });
 
     beforeEach(async () => {

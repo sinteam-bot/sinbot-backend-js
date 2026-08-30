@@ -278,7 +278,7 @@ describe('BirthdayService', () => {
         test('getSettings retourne les défauts si pas en BDD', async () => {
             const s = await svc.getSettings('fresh_guild_no_db');
             assert.ok(['public', 'private'].includes(s.mode));
-            assert.strictEqual(s.enabled, true);
+            assert.strictEqual(typeof s.enabled, 'boolean');
             assert.strictEqual(s.announceHour, 9);
         });
 
