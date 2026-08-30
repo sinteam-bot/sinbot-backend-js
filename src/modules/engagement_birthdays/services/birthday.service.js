@@ -36,8 +36,14 @@ class BirthdayService {
 
     async getSettings(guildId) {
         const s = await this.repo.getSettings(guildId);
-        const { getConfig } = require('../../../config/index.js');
-        const yaml = getConfig().birthdays || {};
+        let yaml = {};
+        try {
+            const { getFeatureConfig } = require('../../../config/c12-loader.js');
+            yaml = await getFeatureConfig(guildId || 'default', 'birthdays');
+        } catch {
+            const { getConfig } = require('../../../config/index.js');
+            yaml = getConfig().birthdays || {};
+        }
 
         const mode = s?.mode || yaml.mode || 'public';
         const announceChannelId = s?.announceChannelId !== undefined && s?.announceChannelId !== null ? s.announceChannelId : (yaml.announce?.channel_id || null);
