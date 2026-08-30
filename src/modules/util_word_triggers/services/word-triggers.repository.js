@@ -1,8 +1,7 @@
 /**
- * wordTriggers.repository.js — couche d'accès BDD
+ * src/modules/util_word_triggers/services/word-triggers.repository.js
  *
- * Dupliqué depuis l'ancien engagement.repository.js (split Phase 9.2 du
- * plan migrate-to-c12).
+ * Couche d'accès BDD pour les Word Triggers (Autoresponder).
  */
 
 const { db } = require('../../../db/index.js');
@@ -16,19 +15,27 @@ function safeParse(str, fallback) {
 }
 
 class WordTriggersRepository {
-    // =================== WORD TRIGGERS ===================
-
     async insertTrigger(t) {
         const id = t.id || newId();
         const now = Date.now();
         await db.pool.query(
             `INSERT INTO word_triggers
-             (id, guild_id, trigger_text, match_type, response_text, response_embed_json, exclude_channel_ids_json, exclude_role_ids_json, cooldown_seconds, created_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
-            [id, t.guildId, t.triggerText, t.matchType || 'exact',
-             t.responseText || null, t.responseEmbedJson || null,
-             t.excludeChannelIdsJson || null, t.excludeRoleIdsJson || null,
-             t.cooldownSeconds ?? 10, t.createdBy || null, now]
+             (id, guild_id, trigger_text, match_type, response_text, response_embed_json, exclude_channel_ids_json, exclude_role_ids_json, required_role_ids_json, cooldown_seconds, created_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
+            [
+                id,
+                t.guildId,
+                t.triggerText,
+                t.matchType || 'exact',
+                t.responseText || null,
+                t.responseEmbedJson || null,
+                t.excludeChannelIdsJson || null,
+                t.excludeRoleIdsJson || null,
+                t.requiredRoleIdsJson || null,
+                t.cooldownSeconds ?? 10,
+                t.createdBy || null,
+                now
+            ]
         );
         return this.getTrigger(id);
     }
@@ -50,6 +57,23 @@ class WordTriggersRepository {
         await db.pool.query(`DELETE FROM word_triggers WHERE id = $1`, [id]);
     }
 
+    _mapTrigger(row) {
+        return {
+            id: row.id,
+            guildId: row.guild_id,
+            triggerText: row.trigger_text,
+            matchType: row.match_type || 'exact',
+            responseText: row.response_text,
+            responseEmbed: safeParse(row.response_embed_json, null),
+            excludeChannelIds: safeParse(row.exclude_channel_ids_json, []),
+            excludeRoleIds: safeParse(row.exclude_role_ids_json, []),
+            requiredRoleIds: safeParse(row.required_role_ids_json, []),
+            cooldownSeconds: Number(row.cooldown_seconds || 10),
+            createdBy: row.created_by,
+            createdAt: Number(row.created_at || 0),
+            updatedAt: Number(row.updated_at || 0)
+        };
+    }
 }
 
 module.exports = { WordTriggersRepository };

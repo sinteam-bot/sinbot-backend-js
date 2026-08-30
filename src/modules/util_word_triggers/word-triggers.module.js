@@ -9,6 +9,7 @@ const { WordTriggersRepository } = require('./services/word-triggers.repository.
 const { WordTriggerService } = require('./services/word-trigger.service.js');
 const { WordTriggersController } = require('./controllers/word-triggers.controller.js');
 const { WordTriggersMessageListener } = require('./events/message-create.listener.js');
+const { MemberRoleUpdateListener } = require('./events/member-role-update.listener.js');
 const { WordTriggersCommands } = require('./commands/trigger-commands.js');
 
 const defaults = require('./config/defaults.js');
@@ -51,7 +52,7 @@ Module({
         WordTriggersModule
     ],
     controllers: [WordTriggersController],
-    events: [WordTriggersMessageListener],
+    events: [WordTriggersMessageListener, MemberRoleUpdateListener],
     commands: [WordTriggersCommands]
 })(WordTriggersModule);
 

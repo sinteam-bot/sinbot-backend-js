@@ -42,6 +42,7 @@ const { WordTriggersModule } = require('./util_word_triggers/word-triggers.modul
 const { CustomCommandsModule } = require('./util_custom_commands/custom-commands.module.js');
 const { StarboardModule } = require('./community_starboard/starboard.module.js');
 const { SuggestionsModule } = require('./community_suggestions/suggestions.module.js');
+const { SchedulerModule } = require('./automation_scheduler/scheduler.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -80,7 +81,8 @@ const MODULE_FEATURE_MAP = {
     [WordTriggersModule.name]: 'word_triggers',
     [CustomCommandsModule.name]: 'custom_commands',
     [StarboardModule.name]: 'starboard',
-    [SuggestionsModule.name]: 'suggestions'
+    [SuggestionsModule.name]: 'suggestions',
+    [SchedulerModule.name]: 'scheduler'
 };
 
 const ALL_MODULES = [
@@ -110,7 +112,8 @@ const ALL_MODULES = [
     WordTriggersModule,
     CustomCommandsModule,
     StarboardModule,
-    SuggestionsModule
+    SuggestionsModule,
+    SchedulerModule
 ];
 
 /**

@@ -1,0 +1,7 @@
+# data/example/scheduler.config.yml
+#
+# Template de configuration pour la feature "scheduler" (Phase 8 G03).
+#
+enabled: true
+check_interval_seconds: 30
+max_messages_per_guild: 25

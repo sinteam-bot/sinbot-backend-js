@@ -1,15 +1,7 @@
 /**
- * word-trigger.service.js — gestion des triggers de mots
+ * src/modules/util_word_triggers/services/word-trigger.service.js
  *
- *   - create({ guildId, triggerText, matchType, responseText, responseEmbed, excludeChannels, excludeRoles, cooldown, createdBy })
- *   - list(guildId)
- *   - delete(id)
- *   - findMatching(guildId, content) : retourne le premier trigger qui match
- *   - shouldFire(trigger, message, member) : check cooldown, excludes
- *   - incrementCooldown(triggerId)
- *
- * Cooldowns : Map en mémoire (par guildId+triggerId).
- * Regex match type : à venir en V2 (sécurité : éviter les ReDoS).
+ * Gestion des triggers de mots et autoresponder (Phase 8 G02 Regex, G30 Conditions positives).
  */
 
 const { Injectable } = require('../../../core/index.js');
@@ -23,27 +15,39 @@ class WordTriggerService {
         this._cooldowns = new Map(); // key: `g::t`, value: ts
     }
 
-    async create({ guildId, triggerText, matchType, responseText, responseEmbed, excludeChannels, excludeRoles, cooldown, createdBy }) {
+    async create({ guildId, triggerText, matchType, responseText, responseEmbed, excludeChannels, excludeRoles, requiredRoles, cooldown, createdBy }) {
         if (!guildId || !triggerText) {
             return { ok: false, error: 'missing_params' };
-        }
-        if (matchType === 'regex') {
-            return { ok: false, error: 'regex_not_supported_yet' };
         }
         if (!responseText && !responseEmbed) {
             return { ok: false, error: 'response_required' };
         }
+
+        const type = matchType || 'exact';
+        if (type === 'regex') {
+            try {
+                // Valider la syntaxe regex
+                new RegExp(triggerText, 'i');
+            } catch {
+                return { ok: false, error: 'invalid_regex' };
+            }
+        }
+
         const created = await this.repo.insertTrigger({
             guildId,
             triggerText: triggerText.slice(0, 100),
-            matchType: matchType || 'exact',
+            matchType: type,
             responseText: responseText?.slice(0, 500) || null,
             responseEmbedJson: responseEmbed ? JSON.stringify(responseEmbed) : null,
             excludeChannelIdsJson: excludeChannels?.length ? JSON.stringify(excludeChannels) : null,
             excludeRoleIdsJson: excludeRoles?.length ? JSON.stringify(excludeRoles) : null,
+            requiredRoleIdsJson: requiredRoles?.length ? JSON.stringify(requiredRoles) : null,
             cooldownSeconds: cooldown ?? 10,
             createdBy
         });
+
+        // Mettre à jour le cache
+        await this.loadCache(guildId).catch(() => { });
         return { ok: true, data: created };
     }
 
@@ -56,71 +60,71 @@ class WordTriggerService {
     }
 
     async delete(id) {
+        const trigger = await this.repo.getTrigger(id);
         await this.repo.deleteTrigger(id);
+        if (trigger?.guildId) {
+            await this.loadCache(trigger.guildId).catch(() => { });
+        }
         return { ok: true };
     }
 
-    /**
-     * Trouve le premier trigger qui matche le contenu d'un message
-     * dans un guild. Le matching est 'exact' ou 'contains'.
-     *
-     * Utilise la cache en mémoire si disponible (loadCache),
-     * sinon fait un lookup direct en BDD.
-     */
     async findMatching(guildId, content) {
+        if (!this._cache?.has(guildId)) {
+            await this.loadCache(guildId);
+        }
         return this._match(guildId, content);
     }
 
-    /**
-     * Sync version of findMatching (assumes cache is already loaded)
-     */
     findMatchingSync(guildId, content) {
         return this._match(guildId, content);
     }
 
     _match(guildId, content) {
         const list = this._cache?.get(guildId) || [];
-        const lc = content.toLowerCase();
+        const lc = (content || '').toLowerCase();
         for (const t of list) {
-            const trigger = t.triggerText.toLowerCase();
+            const trigger = (t.triggerText || '').toLowerCase();
             if (t.matchType === 'exact' && lc === trigger) return t;
             if (t.matchType === 'contains' && lc.includes(trigger)) return t;
             if (t.matchType === 'regex') {
                 try {
                     const re = new RegExp(t.triggerText, 'i');
                     if (re.test(content)) return t;
-                } catch (err) {
-                    console.warn(`[WordTriggerService] Regex invalide "${t.triggerText}":`, err.message);
-                }
+                } catch { }
             }
         }
         return null;
     }
 
-    /**
-     * Vérifie si le trigger peut être déclenché maintenant
-     * (cooldown + channel exclude + role exclude)
-     */
     shouldFire(trigger, message, member) {
         if (!trigger || !message) return { ok: false, reason: 'invalid' };
 
-        // Cooldown
+        // 1. Cooldown
         const key = `${trigger.guildId}::${trigger.id}`;
         const last = this._cooldowns.get(key) || 0;
         if (Date.now() - last < (trigger.cooldownSeconds || 0) * 1000) {
             return { ok: false, reason: 'cooldown' };
         }
 
-        // Channel excludes
+        // 2. Channel excludes
         if (trigger.excludeChannelIds?.length && trigger.excludeChannelIds.includes(message.channelId)) {
             return { ok: false, reason: 'channel_excluded' };
         }
 
-        // Role excludes
+        // 3. Role excludes
         if (trigger.excludeRoleIds?.length && member) {
             const memberRoleIds = Array.from(member.roles?.cache?.keys() || []);
             if (trigger.excludeRoleIds.some(rid => memberRoleIds.includes(rid))) {
                 return { ok: false, reason: 'role_excluded' };
+            }
+        }
+
+        // 4. Positive condition: Required roles (G30)
+        if (trigger.requiredRoleIds?.length && member) {
+            const memberRoleIds = Array.from(member.roles?.cache?.keys() || []);
+            const hasRequired = trigger.requiredRoleIds.some(rid => memberRoleIds.includes(rid));
+            if (!hasRequired) {
+                return { ok: false, reason: 'role_required' };
             }
         }
 
@@ -132,10 +136,6 @@ class WordTriggerService {
         this._cooldowns.set(key, Date.now());
     }
 
-    /**
-     * Recharge la cache en mémoire (appelée par le module init).
-     * On garde une copie pour eviter les requetes BDD a chaque message.
-     */
     async loadCache(guildId) {
         const list = await this.repo.listTriggers(guildId);
         this._cache = this._cache || new Map();
