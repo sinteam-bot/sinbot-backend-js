@@ -119,6 +119,45 @@ class EconomyService {
         return { ok: true, balance: result.balance, reward: config.daily_reward || 100 };
     }
 
+    /**
+     * /work : récompense de travail horaire (Phase 7 G09)
+     */
+    async claimWork(guildId, userId, config = {}) {
+        const cooldownHours = config.work_cooldown_hours ?? 1;
+        const cooldownMs = cooldownHours * 3600 * 1000;
+        const current = await this.getOrInitBalance(guildId, userId);
+
+        if (current.lastWorkClaimAt && (Date.now() - current.lastWorkClaimAt) < cooldownMs) {
+            const nextAt = current.lastWorkClaimAt + cooldownMs;
+            return { ok: false, error: 'cooldown', nextAt };
+        }
+
+        const minReward = Math.max(config.work_min_reward ?? 100, 1);
+        const maxReward = Math.max(config.work_max_reward ?? 300, minReward);
+        const reward = Math.floor(Math.random() * (maxReward - minReward + 1)) + minReward;
+
+        const jobs = [
+            'Tu as développé une nouvelle fonctionnalité pour le bot',
+            'Tu as préparé de délicieux cafés au café du coin',
+            'Tu as livré des colis express à travers toute la ville',
+            'Tu as animé un live stream communautaire interactif',
+            'Tu as modéré le serveur Discord avec brio et diplomatie',
+            'Tu as résolu une enquête mystérieuse avec perspicacité',
+            'Tu as optimisé les bases de données et réparé les serveurs',
+            'Tu as conçu un design graphique sensationnel pour la communauté',
+            'Tu as donné des cours particuliers en informatique'
+        ];
+        const job = jobs[Math.floor(Math.random() * jobs.length)];
+
+        const result = await this.add(guildId, userId, reward, {
+            type: 'work', reason: `Work: ${job}`
+        });
+        if (!result.ok) return result;
+
+        await this.repo.upsertBalance(guildId, userId, { lastWorkClaimAt: Date.now() });
+        return { ok: true, balance: result.balance, reward, job };
+    }
+
     async leaderboard(guildId, limit = 50) {
         return this.repo.leaderboard(guildId, limit);
     }

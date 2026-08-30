@@ -28,21 +28,22 @@ class EconomyRepository {
             const next = { ...existing, ...fields, updatedAt: now };
             await db.pool.query(
                 `UPDATE user_economy SET balance = $1, bank_balance = $2, last_daily_claim_at = $3,
-                 total_earned = $4, total_spent = $5, updated_at = $6
-                 WHERE guild_id = $7 AND user_id = $8`,
-                [next.balance, next.bankBalance, next.lastDailyClaimAt, next.totalEarned, next.totalSpent, now, guildId, userId]
+                 last_work_claim_at = $4, total_earned = $5, total_spent = $6, updated_at = $7
+                 WHERE guild_id = $8 AND user_id = $9`,
+                [next.balance, next.bankBalance, next.lastDailyClaimAt, next.lastWorkClaimAt, next.totalEarned, next.totalSpent, now, guildId, userId]
             );
             return next;
         }
         const balance = fields.balance ?? 0;
         const bankBalance = fields.bankBalance ?? 0;
         const lastDaily = fields.lastDailyClaimAt ?? null;
+        const lastWork = fields.lastWorkClaimAt ?? null;
         const totalEarned = fields.totalEarned ?? 0;
         const totalSpent = fields.totalSpent ?? 0;
         await db.pool.query(
-            `INSERT INTO user_economy (user_id, guild_id, balance, bank_balance, last_daily_claim_at, total_earned, total_spent, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
-            [userId, guildId, balance, bankBalance, lastDaily, totalEarned, totalSpent, now]
+            `INSERT INTO user_economy (user_id, guild_id, balance, bank_balance, last_daily_claim_at, last_work_claim_at, total_earned, total_spent, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+            [userId, guildId, balance, bankBalance, lastDaily, lastWork, totalEarned, totalSpent, now]
         );
         return this.getBalance(guildId, userId);
     }
@@ -330,6 +331,7 @@ class EconomyRepository {
             balance: Number(row.balance || 0),
             bankBalance: Number(row.bank_balance || 0),
             lastDailyClaimAt: row.last_daily_claim_at ? Number(row.last_daily_claim_at) : null,
+            lastWorkClaimAt: row.last_work_claim_at ? Number(row.last_work_claim_at) : null,
             totalEarned: Number(row.total_earned || 0),
             totalSpent: Number(row.total_spent || 0),
             createdAt: Number(row.created_at || 0),

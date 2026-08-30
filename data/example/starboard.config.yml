@@ -1,0 +1,12 @@
+# data/example/starboard.config.yml
+#
+# Template de configuration pour la feature "starboard" (Phase 7 G05).
+#
+enabled: false
+channel_id: null
+threshold: 3
+emoji: '⭐'
+self_star: false
+color: '#FEE75C'
+ignored_channels: []
+allow_nsfw: false

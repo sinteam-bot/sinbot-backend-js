@@ -12,6 +12,7 @@ const userEconomy = pgTable('user_economy', {
     balance: bigint('balance', { mode: 'number' }).notNull().default(0),
     bankBalance: bigint('bank_balance', { mode: 'number' }).notNull().default(0),
     lastDailyClaimAt: bigint('last_daily_claim_at', { mode: 'number' }),
+    lastWorkClaimAt: bigint('last_work_claim_at', { mode: 'number' }),
     totalEarned: bigint('total_earned', { mode: 'number' }).notNull().default(0),
     totalSpent: bigint('total_spent', { mode: 'number' }).notNull().default(0),
     createdAt: bigint('created_at', { mode: 'number' }).notNull(),

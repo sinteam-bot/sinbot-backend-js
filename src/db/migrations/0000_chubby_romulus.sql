@@ -444,6 +444,7 @@ CREATE TABLE "user_economy" (
 	"balance" bigint DEFAULT 0 NOT NULL,
 	"bank_balance" bigint DEFAULT 0 NOT NULL,
 	"last_daily_claim_at" bigint,
+	"last_work_claim_at" bigint,
 	"total_earned" bigint DEFAULT 0 NOT NULL,
 	"total_spent" bigint DEFAULT 0 NOT NULL,
 	"created_at" bigint NOT NULL,
@@ -834,4 +835,38 @@ CREATE INDEX "idx_pg_auth_sessions_token_hash" ON "auth_sessions" USING btree ("
 CREATE INDEX "idx_pg_auth_audit_logs_ip" ON "auth_audit_logs" USING btree ("ip_address","created_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_auth_audit_logs_user" ON "auth_audit_logs" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_pg_auth_audit_logs_type" ON "auth_audit_logs" USING btree ("event_type","created_at");--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "starboard_entries" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"source_channel_id" text NOT NULL,
+	"source_message_id" text NOT NULL,
+	"starboard_message_id" text,
+	"author_id" text NOT NULL,
+	"reaction_count" integer DEFAULT 0 NOT NULL,
+	"starred_users" text,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL,
+	CONSTRAINT "starboard_entries_guild_source_unique" UNIQUE("guild_id","source_message_id")
+);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_starboard_guild" ON "starboard_entries" USING btree ("guild_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_starboard_source" ON "starboard_entries" USING btree ("guild_id","source_message_id");--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "suggestions" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"suggestion_number" integer NOT NULL,
+	"content" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"channel_id" text,
+	"message_id" text,
+	"staff_id" text,
+	"staff_reason" text,
+	"upvotes" integer DEFAULT 0 NOT NULL,
+	"downvotes" integer DEFAULT 0 NOT NULL,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL,
+	CONSTRAINT "suggestions_guild_number_unique" UNIQUE("guild_id","suggestion_number")
+);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_suggestions_guild_status" ON "suggestions" USING btree ("guild_id","status");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_suggestions_guild_number" ON "suggestions" USING btree ("guild_id","suggestion_number");
 CREATE INDEX "idx_pg_auth_failed_blocked" ON "auth_failed_attempts" USING btree ("blocked_until");

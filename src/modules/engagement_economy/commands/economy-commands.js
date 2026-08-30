@@ -58,6 +58,18 @@ class EconomyCommands {
         return interaction.reply({ content: `✅ Tu as reçu **${r.reward}** 🪙 ! Solde : **${r.balance}**` });
     }
 
+    async executeWork(interaction) {
+        const cfg = getConfig().features?.economy || {};
+        const r = await this.economy.claimWork(interaction.guild.id, interaction.user.id, cfg);
+        if (!r.ok) {
+            if (r.error === 'cooldown') {
+                return interaction.reply({ content: `⏳ Tu es fatigué ! Reviens travailler <t:${Math.floor(r.nextAt / 1000)}:R>.`, ephemeral: true });
+            }
+            return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
+        }
+        return interaction.reply({ content: `💼 ${r.job} et tu as gagné **${r.reward}** 🪙 ! Solde : **${r.balance}**` });
+    }
+
     async executePay(interaction) {
         const target = interaction.options.getUser('user');
         const amount = interaction.options.getInteger('amount');
@@ -479,6 +491,10 @@ const dailyBuilder = new SlashCommandBuilder()
     .setName('daily')
     .setDescription('Claim ta récompense quotidienne');
 
+const workBuilder = new SlashCommandBuilder()
+    .setName('work')
+    .setDescription('Travailler pour gagner des coins (cooldown horaire)');
+
 const payBuilder = new SlashCommandBuilder()
     .setName('pay')
     .setDescription('Envoyer de la monnaie à un autre membre')
@@ -493,6 +509,7 @@ const leaderboardBuilder = new SlashCommandBuilder()
 
 Command({ name: 'balance', builder: balanceBuilder })(EconomyCommands.prototype, 'executeBalance');
 Command({ name: 'daily', builder: dailyBuilder })(EconomyCommands.prototype, 'executeDaily');
+Command({ name: 'work', builder: workBuilder })(EconomyCommands.prototype, 'executeWork');
 Command({ name: 'pay', builder: payBuilder })(EconomyCommands.prototype, 'executePay');
 Command({ name: 'leaderboard', builder: leaderboardBuilder })(EconomyCommands.prototype, 'executeLeaderboard');
 

@@ -20,7 +20,8 @@ const {
     createGamesRouter,
     createDailyMessagesRouter,
     createCaptchaRouter,
-    createBumpRouter
+    createBumpRouter,
+    createLeaderboardRouter
 } = require('./controllers/index.js');
 
 function createWebRouter(client) {
@@ -87,6 +88,9 @@ function createWebRouter(client) {
     router.use('/daily-messages', createDailyMessagesRouter(client));
     router.use('/', createCaptchaRouter());
     router.use('/bump', createBumpRouter(client));
+
+    // 12. Classement public (XP & Économie)
+    router.use('/leaderboard', createLeaderboardRouter(client));
 
     return router;
 }

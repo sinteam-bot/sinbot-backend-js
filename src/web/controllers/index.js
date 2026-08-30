@@ -18,6 +18,7 @@ const createGamesRouter = require('./games.controller.js');
 const createDailyMessagesRouter = require('./daily-messages.controller.js');
 const createCaptchaRouter = require('./captcha.controller.js');
 const createBumpRouter = require('./bump.controller.js');
+const createLeaderboardRouter = require('./leaderboard.controller.js');
 
 module.exports = {
     createProxyRouter,
@@ -33,5 +34,6 @@ module.exports = {
     createGamesRouter,
     createDailyMessagesRouter,
     createCaptchaRouter,
-    createBumpRouter
+    createBumpRouter,
+    createLeaderboardRouter
 };

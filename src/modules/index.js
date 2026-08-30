@@ -40,6 +40,8 @@ const { InvitesModule } = require('./util_invites/invites.module.js');
 const { RemindersModule } = require('./util_reminders/reminders.module.js');
 const { WordTriggersModule } = require('./util_word_triggers/word-triggers.module.js');
 const { CustomCommandsModule } = require('./util_custom_commands/custom-commands.module.js');
+const { StarboardModule } = require('./community_starboard/starboard.module.js');
+const { SuggestionsModule } = require('./community_suggestions/suggestions.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -76,7 +78,9 @@ const MODULE_FEATURE_MAP = {
     [InvitesModule.name]: 'invites',
     [RemindersModule.name]: 'reminders',
     [WordTriggersModule.name]: 'word_triggers',
-    [CustomCommandsModule.name]: 'custom_commands'
+    [CustomCommandsModule.name]: 'custom_commands',
+    [StarboardModule.name]: 'starboard',
+    [SuggestionsModule.name]: 'suggestions'
 };
 
 const ALL_MODULES = [
@@ -104,7 +108,9 @@ const ALL_MODULES = [
     InvitesModule,
     RemindersModule,
     WordTriggersModule,
-    CustomCommandsModule
+    CustomCommandsModule,
+    StarboardModule,
+    SuggestionsModule
 ];
 
 /**

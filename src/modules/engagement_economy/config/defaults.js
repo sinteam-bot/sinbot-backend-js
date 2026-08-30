@@ -1,8 +1,11 @@
 /**
- * defaults.js — Économie & Inventaire (Phase 9)
+ * defaults.js — Économie & Inventaire (Phase 7 & 9)
  *
  * - daily_reward : montant du /daily
  * - cooldown_hours : nombre d'heures entre deux /daily
+ * - work_cooldown_hours : nombre d'heures entre deux /work (Phase 7 G09)
+ * - work_min_reward : montant minimum de /work (100)
+ * - work_max_reward : montant maximum de /work (300)
  * - starting_balance : balance initiale donnée aux nouveaux membres
  * - tax_percent : % prélevé sur /pay (0 = pas de taxe)
  * - shop.max_items : limite dure d'items dans le shop par guild
@@ -18,6 +21,11 @@ module.exports = {
 
     daily_reward: 100,
     cooldown_hours: 22,
+
+    work_cooldown_hours: 1,
+    work_min_reward: 100,
+    work_max_reward: 300,
+
     starting_balance: 0,
     tax_percent: 0,
     max_balance: 999999999,
