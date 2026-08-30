@@ -9,7 +9,23 @@ class CaptchaRepository {
     }
 
     /**
-     * Crée ou remplace un captcha pour un utilisateur
+     * Construit une sous-requête SQL qui retourne l'id de la dernière
+     * tentative de captcha (par created_at DESC, id DESC) pour un couple
+     * (user_id, guild_id). À utiliser dans les UPDATE pour ne modifier
+     * que la tentative en cours, jamais les anciennes.
+     */
+    _latestIdSubquery(userId, guildId) {
+        return sql`(SELECT id FROM user_captchas uc
+                    WHERE uc.user_id = ${userId}
+                      AND uc.guild_id = ${guildId}
+                    ORDER BY uc.created_at DESC, uc.id DESC
+                    LIMIT 1)`;
+    }
+
+    /**
+     * Crée une NOUVELLE ligne de captcha pour cet utilisateur.
+     * Depuis la migration 0017, on conserve l'historique complet des
+     * tentatives (plus d'upsert sur la contrainte unique).
      */
     async createCaptcha(userId, username, guildId, question, answer, channelId, timeoutMinutes = 10) {
         const expiresAt = new Date(Date.now() + timeoutMinutes * 60 * 1000).toISOString();
@@ -26,20 +42,6 @@ class CaptchaRepository {
                 isVerified: 0,
                 expiresAt,
                 createdAt: sql`CURRENT_TIMESTAMP`
-            })
-            .onConflictDoUpdate({
-                target: [this.schema.userCaptchas.userId, this.schema.userCaptchas.guildId],
-                set: {
-                    username,
-                    question,
-                    answer,
-                    channelId,
-                    attempts: 0,
-                    isVerified: 0,
-                    expiresAt,
-                    verifiedAt: null,
-                    createdAt: sql`CURRENT_TIMESTAMP`
-                }
             })
             .returning();
 
@@ -58,6 +60,7 @@ class CaptchaRepository {
                     eq(this.schema.userCaptchas.guildId, guildId)
                 )
             )
+            .orderBy(desc(this.schema.userCaptchas.createdAt), desc(this.schema.userCaptchas.id))
             .limit(1);
 
         if (!captcha) return null;
@@ -70,7 +73,8 @@ class CaptchaRepository {
             is_verified: captcha.isVerified,
             created_at: captcha.createdAt,
             expires_at: captcha.expiresAt,
-            verified_at: captcha.verifiedAt
+            verified_at: captcha.verifiedAt,
+            expired_at: captcha.expiredAt
         };
     }
 
@@ -182,17 +186,20 @@ class CaptchaRepository {
         }
 
         // Récupérer le captcha lié pour avoir le contexte (question/réponse)
+        // On prend la dernière tentative correspondante.
         let captchaInfo = null;
         if (userId) {
             const [c] = await this.db.select()
                 .from(this.schema.userCaptchas)
                 .where(eq(this.schema.userCaptchas.userId, userId))
+                .orderBy(desc(this.schema.userCaptchas.createdAt), desc(this.schema.userCaptchas.id))
                 .limit(1);
             if (c) captchaInfo = c;
         } else if (channelId) {
             const [c] = await this.db.select()
                 .from(this.schema.userCaptchas)
                 .where(eq(this.schema.userCaptchas.channelId, channelId))
+                .orderBy(desc(this.schema.userCaptchas.createdAt), desc(this.schema.userCaptchas.id))
                 .limit(1);
             if (c) captchaInfo = c;
         }
@@ -256,30 +263,46 @@ class CaptchaRepository {
      */
     async updateAttempts(userId, guildId, attempts) {
         await this.db.update(this.schema.userCaptchas)
-            .set({ attempts })
-            .where(
-                and(
-                    eq(this.schema.userCaptchas.userId, userId),
-                    eq(this.schema.userCaptchas.guildId, guildId)
-                )
-            );
+            .set({ attempts, updatedAt: sql`CURRENT_TIMESTAMP` })
+            .where(sql`${this.schema.userCaptchas.id} = ${this._latestIdSubquery(userId, guildId)}`);
     }
 
     /**
-     * Marque un utilisateur comme vérifié avec succès
+     * Marque l'utilisateur comme vérifié (uniquement sur la dernière
+     * tentative, jamais sur les anciennes).
      */
     async markVerified(userId, guildId) {
         await this.db.update(this.schema.userCaptchas)
             .set({
                 isVerified: 1,
-                verifiedAt: sql`CURRENT_TIMESTAMP`
+                verifiedAt: sql`CURRENT_TIMESTAMP`,
+                updatedAt: sql`CURRENT_TIMESTAMP`
             })
-            .where(
-                and(
-                    eq(this.schema.userCaptchas.userId, userId),
-                    eq(this.schema.userCaptchas.guildId, guildId)
-                )
-            );
+            .where(sql`${this.schema.userCaptchas.id} = ${this._latestIdSubquery(userId, guildId)}`);
+    }
+
+    /**
+     * Récupère le captcha actif d'un salon captcha (par channelId),
+     * le plus récent non vérifié.
+     */
+    async getUserCaptchaByChannel(channelId) {
+        const [captcha] = await this.db.select()
+            .from(this.schema.userCaptchas)
+            .where(eq(this.schema.userCaptchas.channelId, channelId))
+            .orderBy(desc(this.schema.userCaptchas.createdAt), desc(this.schema.userCaptchas.id))
+            .limit(1);
+        if (!captcha) return null;
+        return {
+            ...captcha,
+            user_id: captcha.userId,
+            guild_id: captcha.guildId,
+            channel_id: captcha.channelId,
+            is_verified: captcha.isVerified,
+            created_at: captcha.createdAt,
+            expires_at: captcha.expiresAt,
+            verified_at: captcha.verifiedAt,
+            expired_at: captcha.expiredAt
+        };
     }
 
     /**
@@ -287,6 +310,8 @@ class CaptchaRepository {
      */
     async getExpiredCaptchas(now = new Date(), limit = 50) {
         const nowIso = now.toISOString();
+        // On ne sélectionne que la DERNIÈRE tentative non vérifiée et non
+        // encore traitée pour chaque membre (via sous-requête corrélée).
         const rows = await this.db.select({
             captcha: this.schema.userCaptchas,
             channelName: this.schema.discordChannels.name,
@@ -302,7 +327,15 @@ class CaptchaRepository {
                 eq(this.schema.userCaptchas.isVerified, 0),
                 sql`${this.schema.userCaptchas.expiredAt} IS NULL`,
                 sql`${this.schema.userCaptchas.expiresAt} IS NOT NULL`,
-                sql`${this.schema.userCaptchas.expiresAt} <= ${nowIso}`
+                sql`${this.schema.userCaptchas.expiresAt} <= ${nowIso}`,
+                // La ligne courante doit être la plus récente pour ce (user, guild)
+                sql`${this.schema.userCaptchas.id} = (
+                    SELECT id FROM user_captchas uc
+                    WHERE uc.user_id = ${this.schema.userCaptchas.userId}
+                      AND uc.guild_id = ${this.schema.userCaptchas.guildId}
+                    ORDER BY uc.created_at DESC, uc.id DESC
+                    LIMIT 1
+                )`
             )
         )
         .orderBy(asc(this.schema.userCaptchas.expiresAt))
@@ -318,7 +351,8 @@ class CaptchaRepository {
             is_verified: r.captcha.isVerified,
             created_at: r.captcha.createdAt,
             expires_at: r.captcha.expiresAt,
-            verified_at: r.captcha.verifiedAt
+            verified_at: r.captcha.verifiedAt,
+            expired_at: r.captcha.expiredAt
         }));
     }
 
@@ -331,25 +365,16 @@ class CaptchaRepository {
                 expiredAt: sql`CURRENT_TIMESTAMP`,
                 updatedAt: sql`CURRENT_TIMESTAMP`
             })
-            .where(
-                and(
-                    eq(this.schema.userCaptchas.userId, userId),
-                    eq(this.schema.userCaptchas.guildId, guildId)
-                )
-            );
+            .where(sql`${this.schema.userCaptchas.id} = ${this._latestIdSubquery(userId, guildId)}`);
     }
 
     /**
-     * Supprime un enregistrement de captcha
+     * Supprime la dernière tentative (généralement appelée après
+     * résolution réussie).
      */
     async deleteCaptcha(userId, guildId) {
         await this.db.delete(this.schema.userCaptchas)
-            .where(
-                and(
-                    eq(this.schema.userCaptchas.userId, userId),
-                    eq(this.schema.userCaptchas.guildId, guildId)
-                )
-            );
+            .where(sql`${this.schema.userCaptchas.id} = ${this._latestIdSubquery(userId, guildId)}`);
     }
 
     /**

@@ -4,7 +4,7 @@
  * Tables Drizzle du module Captcha (security question + captcha).
  */
 
-const { pgTable, text, integer, serial, uniqueIndex } = require('../../../db/schemas/_drizzle.js');
+const { pgTable, text, integer, serial, index } = require('../../../db/schemas/_drizzle.js');
 const { sql } = require('drizzle-orm');
 
 const userCaptchas = pgTable('user_captchas', {
@@ -23,7 +23,9 @@ const userCaptchas = pgTable('user_captchas', {
     expiredAt: text('expired_at'),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 }, (table) => [
-    uniqueIndex('idx_pg_user_guild_captcha').on(table.userId, table.guildId)
+    // Index non-unique pour accélérer la recherche du captcha actif
+    // le plus récent pour un couple (user, guild).
+    index('idx_pg_user_captchas_user_guild_created').on(table.userId, table.guildId, table.createdAt)
 ]);
 
 const captchaConfig = pgTable('captcha_config', {

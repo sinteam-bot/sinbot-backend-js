@@ -142,6 +142,51 @@ const publicPath = path.join(__dirname, '../public');
 if (!fs.existsSync(publicPath)) {
     fs.mkdirSync(publicPath, { recursive: true });
 }
+
+// Route dynamique /verify/:token pour la page hCaptcha du module captcha.
+// Sert public/verify/index.html en remplaçant le placeholder
+// __HCAPTCHA_SITE_KEY__ par la clé configurée.
+app.get('/verify/:token', (req, res) => {
+    const indexPath = path.join(publicPath, 'verify', 'index.html');
+    if (!fs.existsSync(indexPath)) {
+        return res.status(404).send('Verify page not found');
+    }
+    try {
+        let html = fs.readFileSync(indexPath, 'utf8');
+        const siteKey = process.env.HCAPTCHA_SITE_KEY || process.env.CAPTCHA_WEB_SITE_KEY || '';
+        html = html.replace('__HCAPTCHA_SITE_KEY__', siteKey);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.send(html);
+    } catch (err) {
+        console.error('[verify] Erreur rendu page:', err.message);
+        res.status(500).send('Internal error');
+    }
+});
+
+app.get('/verify/done', (req, res) => {
+    // Page simple affichant le validationToken après succès hCaptcha.
+    // L'utilisateur copiera ce token (s'il le souhaite) puis reviendra
+    // dans Discord cliquer le bouton "J'ai validé".
+    const token = req.query.token || '';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>Captcha validé</title>
+<style>body{font-family:sans-serif;background:#1e1f22;color:#dbdee1;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px}
+.card{background:#2b2d31;border:1px solid #3f4147;border-radius:12px;padding:32px;max-width:520px}
+h1{color:#57f287;margin:0 0 16px 0;font-size:22px}
+code{background:#1e1f22;padding:6px 10px;border-radius:6px;font-size:12px;word-break:break-all;display:block;margin-top:12px;color:#949ba4}
+small{color:#949ba4;line-height:1.6}
+</style></head>
+<body><div class="card">
+<h1>✅ Captcha validé</h1>
+<p>Reviens sur Discord dans ton salon de vérification et clique sur le bouton <strong>« J'ai validé »</strong>.</p>
+<small>ValidationToken (en cas de besoin) :</small>
+<code>${token}</code>
+</div></body></html>`);
+});
+
 app.use(express.static(publicPath));
 
 // Monter le routeur API Discord Web

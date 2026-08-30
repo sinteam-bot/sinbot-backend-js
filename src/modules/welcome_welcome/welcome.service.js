@@ -61,7 +61,34 @@ function applyReplacements(str, replacements) {
 }
 
 class WelcomeService {
-    constructor() {}
+    constructor() {
+        // Garde anti-doublon : évite que handleWelcome soit exécuté deux
+        // fois pour le même membre lorsque l'event welcome et le captcha
+        // (cas "déjà vérifié" / résolution) se chevauchent.
+        // Format clé : `${guildId}:${userId}` → timestamp ms.
+        this._welcomedAt = new Map();
+        this._welcomeTtlMs = 5 * 60 * 1000; // 5 minutes
+    }
+
+    _purgeExpiredWelcomes(now = Date.now()) {
+        for (const [key, ts] of this._welcomedAt.entries()) {
+            if (now - ts > this._welcomeTtlMs) this._welcomedAt.delete(key);
+        }
+    }
+
+    /**
+     * Renvoie true si handleWelcome doit s'exécuter (et enregistre le
+     * timestamp). Renvoie false si un accueil a déjà eu lieu récemment
+     * pour ce même membre (cache anti-doublon).
+     */
+    _markWelcome(guildId, userId) {
+        if (!guildId || !userId) return true;
+        this._purgeExpiredWelcomes();
+        const key = `${guildId}:${userId}`;
+        if (this._welcomedAt.has(key)) return false;
+        this._welcomedAt.set(key, Date.now());
+        return true;
+    }
 
     /**
      * Charge la config welcome d'une guilde.
@@ -73,12 +100,23 @@ class WelcomeService {
 
     /**
      * Traite l'accueil complet d'un nouveau membre (rôles, message public, DM)
+     * Garde anti-doublon : si un welcome vient d'être émis pour ce membre
+     * (TTL 5 min), on skip pour éviter le double déclenchement
+     * welcome.event ↔ captcha.triggerWelcome.
      */
     async handleWelcome(member) {
         if (!member || member.user?.bot) return;
 
         const guildId = member.guild?.id;
-        if (!guildId) return;
+        const userId = member.id;
+        if (!guildId || !userId) return;
+
+        // Garde anti-doublon : on laisse passer au plus une exécution
+        // rapprochée pour le même (guildId, userId).
+        if (!this._markWelcome(guildId, userId)) {
+            console.log(`♻️ [Welcome] handleWelcome ignoré (déjà déclenché récemment) pour ${member.user.tag}`);
+            return;
+        }
 
         const conf = await this._load(guildId);
         if (conf.enabled === false) return;

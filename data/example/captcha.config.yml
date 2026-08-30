@@ -13,6 +13,12 @@ verified_role_id: "1337917252732850206"
 captcha_channel_name: "✅-verification-captcha"
 captcha_timeout: 10
 max_attempts: 3
+# Type de captcha proposé aux nouveaux membres :
+#   - math   : calcul arithmétique en texte (défaut, comportement actuel)
+#   - image  : reconnaissance de texte sur une image (PNG générée par canvas)
+#   - web    : page HTML externe avec hCaptcha (variable HCAPTCHA_SITE_KEY requise)
+#   - audio  : TTS audio (math vocal) — implémenté en phase 2
+captcha_type: math
 use_word_operators: false
 math_questions:
   min_number: 1

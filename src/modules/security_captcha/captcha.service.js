@@ -1,8 +1,9 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { Injectable } = require('../../core/index.js');
 const { CaptchaRepository } = require('./captcha.repository.js');
 const { config, getConfig } = require('../../config/index.js');
 const { sendCaptchaLog } = require('./captcha-logger.js');
+const { getChallenge, listAvailable } = require('./challenges/index.js');
 const DiscordCacheService = require('../../services/discordCacheService.js');
 const logger = require('../../utils/logger.js');
 
@@ -225,23 +226,44 @@ class CaptchaService {
             }
 
             const channel = await this.createUserCaptchaChannel(member, captchaConfig);
-            const mathQuestion = this.generateMathQuestion(captchaConfig);
+
+            // Sélection du type de captcha selon la config de la guilde
+            const captchaType = captchaConfig.captcha_type || 'math';
+            const challenge = getChallenge(captchaType);
+
+            let challengeResult;
+            try {
+                challengeResult = await challenge.generate({
+                    captchaConfig,
+                    userId: member.id,
+                    guildId: member.guild.id
+                });
+            } catch (err) {
+                if (err.message === 'canvas_not_installed' || err.code === 'HCAPTCHA_NOT_CONFIGURED') {
+                    console.warn(`[Captcha] Type "${captchaType}" indisponible (${err.message}), fallback sur math`);
+                    const fallback = getChallenge('math');
+                    challengeResult = await fallback.generate({ captchaConfig, userId: member.id, guildId: member.guild.id });
+                } else {
+                    throw err;
+                }
+            }
+
             const timeoutMinutes = captchaConfig.timeout_minutes || captchaConfig.captcha_timeout || 10;
 
             await this.repo.createCaptcha(
                 member.id,
                 member.user.username,
                 member.guild.id,
-                mathQuestion.question,
-                mathQuestion.answer,
+                challengeResult.question,
+                challengeResult.answer,
                 channel.id,
                 timeoutMinutes
             );
 
-            await sendCaptchaLog(member.guild, 'Création canal', `Canal temporaire de vérification créé pour **${member.user.tag}**`, '#5865F2', {
+            await sendCaptchaLog(member.guild, 'Création canal', `Canal temporaire de vérification créé pour **${member.user.tag}** (type: ${challenge.type})`, '#5865F2', {
                 member,
                 channel,
-                question: mathQuestion.question,
+                question: challengeResult.question,
                 timeoutMinutes,
                 maxAttempts: captchaConfig.max_attempts || 3,
                 logChannelId: captchaConfig.log_channel_id
@@ -250,8 +272,49 @@ class CaptchaService {
             const welcomeMsg = captchaConfig.messages?.welcome_message || "Bienvenue sur le serveur ! Pour des raisons de sécurité, veuillez résoudre ce calcul :";
             const instructions = captchaConfig.messages?.instructions || "Répondez avec le nombre en chiffres uniquement (exemple: 12) dans les 10 minutes.";
 
-            const content = `${member.user}, ${welcomeMsg}\n\n**${mathQuestion.question}**\n\n${instructions}`;
-            const sentMsg = await channel.send(content);
+            // Construction du message de bienvenue en fonction du type
+            let content;
+            const files = [];
+            const components = [];
+
+            if (challenge.type === 'image') {
+                const payload = challengeResult.payload || {};
+                if (payload.filePath) {
+                    try {
+                        const fs = require('fs');
+                        const att = new AttachmentBuilder(payload.filePath, { name: payload.filename || 'captcha.png' });
+                        files.push(att);
+                    } catch (e) {
+                        console.warn('[Captcha] Impossible de charger l\'image générée:', e.message);
+                    }
+                }
+                content = `${member.user}, ${welcomeMsg}\n\n**${challengeResult.question}**\n\n${instructions}`;
+            } else if (challenge.type === 'web') {
+                const payload = challengeResult.payload || {};
+                const verifyUrl = payload.verifyUrl;
+                const linkRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setLabel('🛡️ Ouvrir la vérification hCaptcha')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(verifyUrl)
+                );
+                const confirmRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`captcha_web_validated:${member.id}`)
+                        .setLabel('✅ J\'ai validé le hCaptcha')
+                        .setStyle(ButtonStyle.Success)
+                );
+                components.push(linkRow, confirmRow);
+                content = `${member.user}, ${welcomeMsg}\n\n**${challengeResult.question}**\n\n${instructions}\n\n🔗 **Lien de vérification :** ${verifyUrl}`;
+            } else {
+                content = `${member.user}, ${welcomeMsg}\n\n**${challengeResult.question}**\n\n${instructions}`;
+            }
+
+            const sentMsg = await channel.send({
+                content,
+                files: files.length ? files : undefined,
+                components: components.length ? components : undefined
+            });
             if (sentMsg) {
                 try {
                     await DiscordCacheService.cacheDiscordMessage(sentMsg);
@@ -260,7 +323,7 @@ class CaptchaService {
                 }
             }
 
-            console.log(`🔒 [Captcha] Captcha envoyé à ${member.user.tag} dans ${channel.name} : "${mathQuestion.question}" (Réponse: ${mathQuestion.answer})`);
+            console.log(`🔒 [Captcha] (${challenge.type}) Captcha envoyé à ${member.user.tag} dans ${channel.name} : "${challengeResult.question}" (Réponse: ${challengeResult.answer})`);
 
         } catch (error) {
             console.error('❌ [Captcha] Erreur handleMemberJoin:', error);
@@ -312,8 +375,50 @@ class CaptchaService {
             const captchaConfig = await this.getConfig(message.guild?.id);
             const maxAttempts = captchaConfig.max_attempts || 3;
 
+            // Pour le mode web, l'utilisateur colle ici le validationToken reçu
+            // après validation hCaptcha. Si c'est un validationToken
+            // signé (commence par un base64url suivi d'un point et d'un
+            // autre base64url), on délègue à confirmWebCaptcha.
+            if ((captchaConfig.captcha_type || 'math') === 'web') {
+                if (userAnswer.includes('.') && userAnswer.length > 50) {
+                    const client = message.client;
+                    const result = await this.confirmWebCaptcha({
+                        validationToken: userAnswer,
+                        guildId: message.guild.id,
+                        channelId: message.channel.id,
+                        client
+                    });
+                    if (result.success) {
+                        const rep = await message.reply('✅ Captcha validé avec succès ! Bienvenue sur le serveur 🎉');
+                        if (rep) {
+                            try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[Captcha] Cache reply failed:', err.message); }
+                        }
+                        return true;
+                    }
+                    const rep = await message.reply('❌ Token invalide ou expiré. Merci de résoudre à nouveau le hCaptcha.');
+                    if (rep) {
+                        try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[Captcha] Cache reply failed:', err.message); }
+                    }
+                    return true;
+                }
+                const rep = await message.reply('ℹ️ Pour ce captcha, clique sur le lien dans le message d\'accueil, résous le hCaptcha, puis colle ici le validationToken affiché sur la page de confirmation.');
+                if (rep) {
+                    try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[Captcha] Cache reply failed:', err.message); }
+                }
+                return true;
+            }
+
+            // Vérification polymorphique via le challenge registry
+            const challengeType = captchaConfig.captcha_type || 'math';
+            const challenge = getChallenge(challengeType);
+            const isValid = await challenge.verify({
+                userAnswer,
+                expectedAnswer: captcha.answer,
+                payload: { captchaConfig }
+            });
+
             // Vérification réponse
-            if (userAnswer === captcha.answer) {
+            if (isValid) {
                 // ✅ Succès
                 await this.repo.markVerified(message.author.id, message.guild.id);
                 const rep = await message.reply("✅ Bravo ! Vous avez validé le captcha avec succès.");
@@ -413,6 +518,73 @@ class CaptchaService {
             console.error('❌ [Captcha] Erreur handleIncomingMessage:', error);
             return false;
         }
+    }
+
+    /**
+     * Valide un clic sur "J'ai validé" depuis Discord (mode web).
+     * Vérifie le validationToken signé, marque le captcha comme
+     * vérifié, attribue le rôle vérifié, journalise et déclenche le
+     * welcome. Supprime le salon captcha après 3s.
+     */
+    async confirmWebCaptcha({ validationToken, guildId, channelId, client }) {
+        const webChallenge = require('./challenges/web.js');
+        const captchaConfig = await this.getConfig(guildId);
+        const captcha = await this.repo.getUserCaptchaByChannel(channelId);
+        if (!captcha) {
+            return { success: false, error: 'no_active_captcha_for_channel' };
+        }
+        if (captcha.is_verified === 1) {
+            return { success: true, message: 'déjà vérifié' };
+        }
+
+        const isValid = await webChallenge.verify({
+            userAnswer: validationToken,
+            expectedAnswer: captcha.answer,
+            payload: {}
+        });
+        if (!isValid) {
+            return { success: false, error: 'invalid_validation_token' };
+        }
+
+        await this.repo.markVerified(captcha.user_id, captcha.guild_id);
+
+        // Attribution du rôle vérifié + welcome
+        if (client) {
+            try {
+                const guild = await client.guilds.fetch(captcha.guild_id).catch(() => null);
+                if (guild) {
+                    const member = await guild.members.fetch(captcha.user_id).catch(() => null);
+                    const role = await this.getVerifiedRole(guild, captchaConfig);
+                    if (role && member) {
+                        await member.roles.add(role.id).catch(() => {});
+                    }
+                    const channel = await guild.channels.fetch(channelId).catch(() => null);
+
+                    await sendCaptchaLog(guild, 'Succès captcha', `**${captcha.username || captcha.user_id}** a validé le hCaptcha avec succès.`, '#2ecc71', {
+                        member,
+                        user: member?.user,
+                        channel,
+                        question: captcha.question,
+                        maxAttempts: captchaConfig.max_attempts || 3,
+                        role,
+                        logChannelId: captchaConfig.log_channel_id
+                    });
+
+                    if (member) {
+                        await this.triggerWelcome(member);
+                    }
+                    if (channel) {
+                        setTimeout(() => {
+                            channel.delete().catch(() => {});
+                        }, 3000);
+                    }
+                }
+            } catch (err) {
+                console.warn('[Captcha] Erreur post-confirm-web:', err.message);
+            }
+        }
+
+        return { success: true, message: 'Captcha validé avec succès.' };
     }
 
     /**
