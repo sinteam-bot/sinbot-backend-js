@@ -4,7 +4,7 @@
  * Listener messageCreate pour détecter les mots-clés Highlights.
  */
 
-const { Event } = require('../../../core/index.js');
+const { OnEvent } = require('../../../core/index.js');
 const { HighlightsService } = require('../services/highlights.service.js');
 
 class HighlightsMessageListener {
@@ -20,6 +20,6 @@ class HighlightsMessageListener {
     }
 }
 
-Event('messageCreate')(HighlightsMessageListener.prototype, 'onMessageCreate');
+OnEvent('messageCreate')(HighlightsMessageListener.prototype, 'onMessageCreate');
 
 module.exports = { HighlightsMessageListener };

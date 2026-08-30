@@ -4,7 +4,7 @@
  * Listener messageCreate pour la création automatique de threads.
  */
 
-const { Event } = require('../../../core/index.js');
+const { OnEvent } = require('../../../core/index.js');
 const { AutoThreadService } = require('../services/autothread.service.js');
 
 class AutoThreadListener {
@@ -23,6 +23,6 @@ class AutoThreadListener {
     }
 }
 
-Event('messageCreate')(AutoThreadListener.prototype, 'onMessageCreate');
+OnEvent('messageCreate')(AutoThreadListener.prototype, 'onMessageCreate');
 
 module.exports = { AutoThreadListener };

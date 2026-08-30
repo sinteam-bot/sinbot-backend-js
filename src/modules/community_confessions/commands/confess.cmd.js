@@ -7,7 +7,7 @@
 const {
     SlashCommandBuilder, PermissionFlagsBits, ChannelType
 } = require('discord.js');
-const { Command, Button, getConfig } = require('../../../core/index.js');
+const { Command } = require('../../../core/index.js');
 const { ConfessionsService } = require('../services/confessions.service.js');
 
 class ConfessCommands {
@@ -162,8 +162,5 @@ Command({ name: 'confess', builder: confessBuilder })(ConfessCommands.prototype,
 Command({ name: 'reply', builder: replyBuilder })(ConfessCommands.prototype, 'executeReply');
 Command({ name: 'confessban', builder: confessBanBuilder })(ConfessCommands.prototype, 'executeConfessBan');
 Command({ name: 'confessunban', builder: confessUnbanBuilder })(ConfessCommands.prototype, 'executeConfessUnban');
-
-Button('confession:approve')(ConfessCommands.prototype, 'handleApproveButton');
-Button('confession:reject')(ConfessCommands.prototype, 'handleRejectButton');
 
 module.exports = { ConfessCommands };

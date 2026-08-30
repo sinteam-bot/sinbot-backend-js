@@ -5,7 +5,7 @@
  */
 
 const { ChannelType } = require('discord.js');
-const { Event, getConfig } = require('../../../core/index.js');
+const { OnEvent, getConfig } = require('../../../core/index.js');
 const { ModMailService } = require('../services/modmail.service.js');
 
 class ModMailListener {
@@ -51,6 +51,6 @@ class ModMailListener {
     }
 }
 
-Event('messageCreate')(ModMailListener.prototype, 'onMessageCreate');
+OnEvent('messageCreate')(ModMailListener.prototype, 'onMessageCreate');
 
 module.exports = { ModMailListener };

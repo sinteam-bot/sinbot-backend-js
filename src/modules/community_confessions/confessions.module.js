@@ -12,6 +12,7 @@ const { ConfessionsRepository } = require('./services/confessions.repository.js'
 const { ConfessionsService } = require('./services/confessions.service.js');
 const { ConfessCommands } = require('./commands/confess.cmd.js');
 const { ConfessionsController } = require('./controllers/confessions.controller.js');
+const { ConfessionInteractionListener } = require('./events/interaction-create.listener.js');
 
 featureRegistry.define('confessions', {
     defaults,
@@ -27,6 +28,7 @@ Module({
         ConfessionsService,
         ConfessionsModule
     ],
+    events: [ConfessionInteractionListener],
     controllers: [ConfessionsController],
     commands: [ConfessCommands]
 })(ConfessionsModule);

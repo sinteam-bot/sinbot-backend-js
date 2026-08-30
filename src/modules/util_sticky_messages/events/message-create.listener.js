@@ -4,7 +4,7 @@
  * Listener messageCreate pour gérer les Sticky Messages.
  */
 
-const { Event } = require('../../../core/index.js');
+const { OnEvent } = require('../../../core/index.js');
 const { StickyService } = require('../services/sticky.service.js');
 
 class StickyMessageListener {
@@ -20,6 +20,6 @@ class StickyMessageListener {
     }
 }
 
-Event('messageCreate')(StickyMessageListener.prototype, 'onMessageCreate');
+OnEvent('messageCreate')(StickyMessageListener.prototype, 'onMessageCreate');
 
 module.exports = { StickyMessageListener };
