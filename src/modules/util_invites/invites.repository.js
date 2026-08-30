@@ -72,7 +72,7 @@ class InvitesRepository {
                 updated_at = EXCLUDED.updated_at
             RETURNING *
         `;
-        const client = this.db.pool || this.db._.session?.client || null;
+        const client = this.db?.pool || this.db?._?.session?.client || this.db?.$client || (this.db && typeof this.db.query === 'function' ? this.db : null);
         if (client && typeof client.query === 'function') {
             // PGlite / pg direct
             const result = await client.query(sql, [
@@ -134,6 +134,25 @@ class InvitesRepository {
     }
 
     async getInviteByCode(code) {
+        const client = this.db?.pool || this.db?._?.session?.client || this.db?.$client || (this.db && typeof this.db.query === 'function' ? this.db : null);
+        if (client && typeof client.query === 'function') {
+            const res = await client.query('SELECT * FROM invite_codes WHERE code = $1 LIMIT 1', [code]);
+            const row = res.rows?.[0];
+            if (!row) return null;
+            return {
+                code: row.code,
+                guildId: row.guild_id,
+                channelId: row.channel_id,
+                inviterId: row.inviter_id,
+                inviterUsername: row.inviter_username,
+                maxUses: row.max_uses,
+                uses: row.uses,
+                expiresAt: row.expires_at,
+                createdAt: row.created_at,
+                updatedAt: row.updated_at,
+                deleted: row.deleted
+            };
+        }
         const [row] = await this.db.select()
             .from(inviteCodes)
             .where(eq(inviteCodes.code, code))

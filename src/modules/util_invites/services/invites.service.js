@@ -53,34 +53,71 @@ class InvitesService {
         return !!config;
     }
 
+    async registerCommandInvite(guild, invite, user) {
+        if (!guild || !invite || !user) return;
+        const inviterId = user.id;
+        const inviterUsername = user.tag || user.username;
+        const data = {
+            channelId: invite.channel?.id || null,
+            inviterId,
+            inviterUsername,
+            maxUses: invite.maxUses || 0,
+            uses: invite.uses || 0,
+            expiresAt: toISOStringSafe(invite.expiresAt),
+            createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
+        };
+        await this.repo.upsertInviteCode(invite.code, guild.id, data);
+        const cache = this._inviteCache.get(guild.id) || new Map();
+        cache.set(invite.code, {
+            code: invite.code,
+            ...data
+        });
+        this._inviteCache.set(guild.id, cache);
+    }
+
     /**
      * Synchronise le cache d'invites depuis l'API Discord pour une guilde.
      * À appeler au démarrage du module et à chaque inviteCreate / inviteDelete.
      */
     async refreshInviteCache(guild) {
         try {
+            const currentCache = this._inviteCache.get(guild.id);
             const invites = await guild.invites.fetch();
             const map = new Map();
+            const botId = guild.client?.user?.id;
+
             for (const [code, invite] of invites) {
-                map.set(code, {
+                const existingCached = currentCache?.get(code);
+                let inviterId = invite.inviter?.id || null;
+                let inviterUsername = invite.inviter?.username || null;
+
+                // Si l'invitation a été créée par le bot mais qu'on a un inviteur réel en cache/DB, on le préserve
+                if (botId && (inviterId === botId || !inviterId)) {
+                    if (existingCached?.inviterId && existingCached.inviterId !== botId) {
+                        inviterId = existingCached.inviterId;
+                        inviterUsername = existingCached.inviterUsername;
+                    } else {
+                        const inDb = await this.repo.getInviteByCode(code);
+                        if (inDb?.inviterId && inDb.inviterId !== botId) {
+                            inviterId = inDb.inviterId;
+                            inviterUsername = inDb.inviterUsername || inviterUsername;
+                        }
+                    }
+                }
+
+                const item = {
                     code,
                     uses: invite.uses || 0,
                     maxUses: invite.maxUses || 0,
-                    inviterId: invite.inviter?.id || null,
-                    inviterUsername: invite.inviter?.username || null,
+                    inviterId,
+                    inviterUsername,
                     channelId: invite.channel?.id || null,
                     expiresAt: toISOStringSafe(invite.expiresAt),
                     createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
-                });
-                await this.repo.upsertInviteCode(code, guild.id, {
-                    channelId: invite.channel?.id || null,
-                    inviterId: invite.inviter?.id || null,
-                    inviterUsername: invite.inviter?.username || null,
-                    maxUses: invite.maxUses || 0,
-                    uses: invite.uses || 0,
-                    expiresAt: toISOStringSafe(invite.expiresAt),
-                    createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
-                });
+                };
+
+                map.set(code, item);
+                await this.repo.upsertInviteCode(code, guild.id, item);
             }
             this._inviteCache.set(guild.id, map);
             return map;
@@ -103,25 +140,40 @@ class InvitesService {
     }
 
     async onInviteCreate(guild, invite) {
-        await this.repo.upsertInviteCode(invite.code, guild.id, {
+        const botId = guild?.client?.user?.id;
+        const cache = this._inviteCache.get(guild.id) || new Map();
+        const existingCache = cache.get(invite.code);
+
+        let inviterId = invite.inviter?.id || null;
+        let inviterUsername = invite.inviter?.username || null;
+
+        if (botId && (inviterId === botId || !inviterId)) {
+            if (existingCache?.inviterId && existingCache.inviterId !== botId) {
+                inviterId = existingCache.inviterId;
+                inviterUsername = existingCache.inviterUsername;
+            } else {
+                const inDb = await this.repo.getInviteByCode(invite.code);
+                if (inDb?.inviterId && inDb.inviterId !== botId) {
+                    inviterId = inDb.inviterId;
+                    inviterUsername = inDb.inviterUsername || inviterUsername;
+                }
+            }
+        }
+
+        const data = {
             channelId: invite.channel?.id || null,
-            inviterId: invite.inviter?.id || null,
-            inviterUsername: invite.inviter?.username || null,
+            inviterId,
+            inviterUsername,
             maxUses: invite.maxUses || 0,
             uses: invite.uses || 0,
             expiresAt: toISOStringSafe(invite.expiresAt),
             createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
-        });
-        const cache = this._inviteCache.get(guild.id) || new Map();
+        };
+
+        await this.repo.upsertInviteCode(invite.code, guild.id, data);
         cache.set(invite.code, {
             code: invite.code,
-            uses: invite.uses || 0,
-            maxUses: invite.maxUses || 0,
-            inviterId: invite.inviter?.id || null,
-            inviterUsername: invite.inviter?.username || null,
-            channelId: invite.channel?.id || null,
-            expiresAt: Date.parse(invite.expiresAt) || null,
-            createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
+            ...data
         });
         this._inviteCache.set(guild.id, cache);
     }
@@ -174,24 +226,47 @@ class InvitesService {
         }
 
         const invite = after.get(usedCode);
-        this._inviteCache.set(guild.id, after);
-        await this.repo.upsertInviteCode(usedCode, guild.id, {
+        const botId = guild?.client?.user?.id;
+        const cache = this._inviteCache.get(guild.id);
+        const cachedItem = cache?.get(usedCode);
+
+        let realInviterId = invite.inviter?.id || null;
+        let realInviterUsername = invite.inviter?.username || null;
+
+        if (botId && (realInviterId === botId || !realInviterId)) {
+            if (cachedItem?.inviterId && cachedItem.inviterId !== botId) {
+                realInviterId = cachedItem.inviterId;
+                realInviterUsername = cachedItem.inviterUsername || realInviterUsername;
+            } else {
+                const inDb = await this.repo.getInviteByCode(usedCode);
+                if (inDb?.inviterId && inDb.inviterId !== botId) {
+                    realInviterId = inDb.inviterId;
+                    realInviterUsername = inDb.inviterUsername || realInviterUsername;
+                }
+            }
+        }
+
+        const updatedData = {
             channelId: invite.channel?.id || null,
-            inviterId: invite.inviter?.id || null,
-            inviterUsername: invite.inviter?.username || null,
+            inviterId: realInviterId,
+            inviterUsername: realInviterUsername,
             maxUses: invite.maxUses || 0,
             uses: invite.uses || 0,
             expiresAt: toISOStringSafe(invite.expiresAt),
             createdAt: toDateSafe(invite.createdAt)?.getTime() || Date.now()
-        });
+        };
+
+        this._inviteCache.set(guild.id, after);
+        if (cache) cache.set(usedCode, { code: usedCode, ...updatedData });
+        await this.repo.upsertInviteCode(usedCode, guild.id, updatedData);
 
         return {
             isBot: false,
             isVanity: false,
             isUnknown: false,
             inviteCode: usedCode,
-            inviterId: invite.inviter?.id || null,
-            inviterUsername: invite.inviter?.username || null,
+            inviterId: realInviterId,
+            inviterUsername: realInviterUsername,
             inviteUses: invite.uses || 0
         };
     }

@@ -26,10 +26,14 @@ function getCaptchaConfig() {
         MAX_NUMBER: math.max_number ?? math.MAX_NUMBER ?? 20,
         OPERATIONS: math.operations ?? math.OPERATIONS ?? ['+', '-', '*'],
         OPERATION_WEIGHTS: operationWeights,
+        USE_WORD_OPERATORS: math.use_word_operators ?? math.USE_WORD_OPERATORS ?? c.use_word_operators ?? false,
+        WORD_OPERATORS: math.word_operators ?? math.WORD_OPERATORS ?? { '+': 'plus', '-': 'moins', '*': 'fois' },
         min_number: math.min_number ?? 1,
         max_number: math.max_number ?? 20,
         operations: math.operations ?? ['+', '-', '*'],
-        operation_weights: operationWeights
+        operation_weights: operationWeights,
+        use_word_operators: math.use_word_operators ?? c.use_word_operators ?? false,
+        word_operators: math.word_operators ?? { '+': 'plus', '-': 'moins', '*': 'fois' }
     };
 
     const messagesObj = {
@@ -69,8 +73,12 @@ function getCaptchaConfig() {
         set enabled(v) { this.ENABLED = v; },
 
         get CAPTCHA_LOG_CHANNEL() {
-            return fullConfig.startup_notifier?.channel_id || c.channel_id || process.env.LOG_CHANNEL_ID;
+            return c.log_channel_id || c.channel_id || null;
         },
+        set CAPTCHA_LOG_CHANNEL(v) { c.log_channel_id = v; saveModuleConfig('captcha', c); },
+
+        get log_channel_id() { return c.log_channel_id || null; },
+        set log_channel_id(v) { c.log_channel_id = v; saveModuleConfig('captcha', c); },
 
         get CAPTCHA_CHANNEL_ID() { return c.channel_id || null; },
         set CAPTCHA_CHANNEL_ID(v) { c.channel_id = v; saveModuleConfig('captcha', c); },
@@ -93,6 +101,11 @@ function getCaptchaConfig() {
         get MAX_ATTEMPTS() { return c.max_attempts || 3; },
         set MAX_ATTEMPTS(v) { c.max_attempts = v; saveModuleConfig('captcha', c); },
         get max_attempts() { return this.MAX_ATTEMPTS; },
+
+        get USE_WORD_OPERATORS() { return c.use_word_operators !== undefined ? c.use_word_operators : (c.math_questions?.use_word_operators || false); },
+        set USE_WORD_OPERATORS(v) { c.use_word_operators = v; if (c.math_questions) c.math_questions.use_word_operators = v; saveModuleConfig('captcha', c); },
+        get use_word_operators() { return this.USE_WORD_OPERATORS; },
+        set use_word_operators(v) { this.USE_WORD_OPERATORS = v; },
 
         get MATH_QUESTIONS() { return mathQuestionsObj; },
         get math_questions() { return mathQuestionsObj; },

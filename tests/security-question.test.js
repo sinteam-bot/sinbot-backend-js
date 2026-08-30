@@ -49,6 +49,30 @@ describe('Security Question (Captcha) Module Tests', () => {
         assert.ok(q.question.includes('Combien font'));
     });
 
+    test('Service: should support text operators (plus, moins, fois) when use_word_operators is true', () => {
+        const service = container.resolve(CaptchaService);
+
+        const qWords = service.generateMathQuestion({
+            use_word_operators: true,
+            math_questions: {
+                operations: ['+'],
+                use_word_operators: true,
+                word_operators: { '+': 'plus', '-': 'moins', '*': 'fois' }
+            }
+        });
+        assert.ok(qWords.question.includes('plus'), `Expected "plus" in "${qWords.question}"`);
+        assert.ok(!qWords.question.includes(' + '));
+
+        const qSymbols = service.generateMathQuestion({
+            use_word_operators: false,
+            math_questions: {
+                operations: ['+'],
+                use_word_operators: false
+            }
+        });
+        assert.ok(qSymbols.question.includes('+'), `Expected "+" in "${qSymbols.question}"`);
+    });
+
     test('Service: should convert numbers to French words', () => {
         const service = container.resolve(CaptchaService);
         assert.strictEqual(service.numberToFrench(1), 'un');

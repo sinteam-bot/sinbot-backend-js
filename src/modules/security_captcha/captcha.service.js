@@ -13,7 +13,16 @@ class CaptchaService {
         this.repo = repository;
     }
 
-    getConfig() {
+    async getConfig(guildId) {
+        if (guildId) {
+            try {
+                const { getFeatureConfig } = require('../../config/c12-loader.js');
+                const cfg = await getFeatureConfig(guildId, 'captcha');
+                if (cfg && Object.keys(cfg).length > 0) return cfg;
+            } catch (e) {
+                console.warn(`[Captcha] Erreur chargement config guild ${guildId}:`, e.message);
+            }
+        }
         const currentConfig = getConfig ? getConfig() : config;
         return currentConfig.captcha || {};
     }
@@ -28,17 +37,33 @@ class CaptchaService {
         return numbers[num] || num.toString();
     }
 
-    generateMathQuestion() {
-        const captchaConfig = this.getConfig();
-        const minNum = captchaConfig.min_number || 1;
-        const maxNum = captchaConfig.max_number || 20;
+    generateMathQuestion(guildOrConfig) {
+        let captchaConfig = {};
+        if (typeof guildOrConfig === 'string') {
+            try {
+                const { _featureCache } = require('../../config/c12-loader.js');
+                const cached = _featureCache?.get(`${guildOrConfig}:captcha`);
+                if (cached) captchaConfig = cached;
+            } catch {}
+        } else if (guildOrConfig && typeof guildOrConfig === 'object') {
+            captchaConfig = guildOrConfig;
+        }
 
-        const operations = ['+', '-', '*'];
-        const weights = { '+': 0.5, '-': 0.3, '*': 0.2 };
+        if (!captchaConfig || Object.keys(captchaConfig).length === 0) {
+            const currentConfig = getConfig ? getConfig() : config;
+            captchaConfig = currentConfig.captcha || {};
+        }
+
+        const math = captchaConfig.math_questions || {};
+        const minNum = math.min_number ?? captchaConfig.min_number ?? 1;
+        const maxNum = math.max_number ?? captchaConfig.max_number ?? 20;
+
+        const operations = math.operations ?? captchaConfig.operations ?? ['+', '-', '*'];
+        const weights = math.operation_weights ?? captchaConfig.operation_weights ?? { '+': 0.5, '-': 0.3, '*': 0.2 };
 
         const weightedOperations = [];
         for (const op of operations) {
-            const count = Math.floor((weights[op] || 0.3) * 100);
+            const count = Math.floor((weights[op] ?? 0.3) * 100);
             for (let i = 0; i < count; i++) {
                 weightedOperations.push(op);
             }
@@ -72,19 +97,37 @@ class CaptchaService {
         const num1Str = this.numberToFrench(num1);
         const num2Str = this.numberToFrench(num2);
 
-        const question = `Combien font ${num1Str} ${operator} ${num2Str} ?`;
+        // Version texte des symboles mathématiques ("+": "plus", "-": "moins", "*": "fois")
+        const useWordOperators = math.use_word_operators ?? captchaConfig.use_word_operators ?? false;
+        const wordOperatorsMap = {
+            '+': 'plus',
+            '-': 'moins',
+            '*': 'fois',
+            ...(math.word_operators || {}),
+            ...(captchaConfig.word_operators || {})
+        };
+
+        const displayOperator = useWordOperators ? (wordOperatorsMap[operator] || operator) : operator;
+
+        const template = captchaConfig.messages?.captcha_question || captchaConfig.messages?.CAPTCHA_QUESTION || 'Combien font {num1} {operator} {num2} ?';
+        const question = template
+            .replace('{num1}', num1Str)
+            .replace('{operator}', displayOperator)
+            .replace('{num2}', num2Str);
 
         return {
             question,
             answer: answer.toString(),
             num1: num1Str,
             num2: num2Str,
-            operator
+            operator,
+            displayOperator,
+            useWordOperators
         };
     }
 
-    async getVerifiedRole(guild) {
-        const captchaConfig = this.getConfig();
+    async getVerifiedRole(guild, customConfig) {
+        const captchaConfig = customConfig || await this.getConfig(guild?.id);
         const roleId = captchaConfig.verified_role_id || process.env.VERIFIED_ROLE_ID;
         if (!roleId) return null;
 
@@ -96,7 +139,14 @@ class CaptchaService {
         }
     }
 
-    async createUserCaptchaChannel(member) {
+    async createUserCaptchaChannel(member, customConfig) {
+        const captchaConfig = customConfig || await this.getConfig(member?.guild?.id);
+        const nameTemplate = captchaConfig.captcha_channel_name || 'captcha-{username}';
+        const channelName = nameTemplate
+            .replace('{username}', member.user.username.toLowerCase())
+            .replace('{tag}', member.user.tag.toLowerCase())
+            .replace('{userid}', member.id);
+
         const adminRoles = member.guild.roles.cache.filter(role => role.permissions.has('Administrator'));
 
         const permissionOverwrites = [
@@ -119,7 +169,7 @@ class CaptchaService {
 
         try {
             const channel = await member.guild.channels.create({
-                name: `captcha-${member.user.username.toLowerCase()}`,
+                name: channelName,
                 type: 0,
                 topic: `Canal de vérification pour ${member.user.tag}`,
                 permissionOverwrites
@@ -149,7 +199,7 @@ class CaptchaService {
     async handleMemberJoin(member) {
         if (member.user.bot) return;
 
-        const captchaConfig = this.getConfig();
+        const captchaConfig = await this.getConfig(member.guild.id);
         if (captchaConfig.enabled === false) {
             console.log(`ℹ️ [Captcha] Captcha désactivé - ${member.user.tag} rejoint sans vérification`);
             await this.triggerWelcome(member);
@@ -159,7 +209,7 @@ class CaptchaService {
         try {
             const existing = await this.repo.getUserCaptcha(member.id, member.guild.id);
             if (existing && existing.is_verified) {
-                const role = await this.getVerifiedRole(member.guild);
+                const role = await this.getVerifiedRole(member.guild, captchaConfig);
                 if (role) {
                     await member.roles.add(role.id).catch(err => {
                         console.warn('[Captcha] Impossible d\'ajouter le rôle vérifié:', err.message);
@@ -167,15 +217,16 @@ class CaptchaService {
                 }
                 await sendCaptchaLog(member.guild, 'Déjà vérifié', `**${member.user.tag}** est déjà vérifié sur le serveur. Rôle appliqué directement.`, '#3498db', {
                     member,
-                    role
+                    role,
+                    logChannelId: captchaConfig.log_channel_id
                 });
                 await this.triggerWelcome(member);
                 return;
             }
 
-            const channel = await this.createUserCaptchaChannel(member);
-            const mathQuestion = this.generateMathQuestion();
-            const timeoutMinutes = captchaConfig.timeout_minutes || 10;
+            const channel = await this.createUserCaptchaChannel(member, captchaConfig);
+            const mathQuestion = this.generateMathQuestion(captchaConfig);
+            const timeoutMinutes = captchaConfig.timeout_minutes || captchaConfig.captcha_timeout || 10;
 
             await this.repo.createCaptcha(
                 member.id,
@@ -192,7 +243,8 @@ class CaptchaService {
                 channel,
                 question: mathQuestion.question,
                 timeoutMinutes,
-                maxAttempts: captchaConfig.max_attempts || 3
+                maxAttempts: captchaConfig.max_attempts || 3,
+                logChannelId: captchaConfig.log_channel_id
             });
 
             const welcomeMsg = captchaConfig.messages?.welcome_message || "Bienvenue sur le serveur ! Pour des raisons de sécurité, veuillez résoudre ce calcul :";
@@ -257,7 +309,8 @@ class CaptchaService {
             }
 
             const userAnswer = message.content.trim();
-            const maxAttempts = this.getConfig().max_attempts || 3;
+            const captchaConfig = await this.getConfig(message.guild?.id);
+            const maxAttempts = captchaConfig.max_attempts || 3;
 
             // Vérification réponse
             if (userAnswer === captcha.answer) {
@@ -268,7 +321,7 @@ class CaptchaService {
                     try { await DiscordCacheService.cacheDiscordMessage(rep); } catch (err) { console.debug('[Captcha] Cache reply failed:', err.message); }
                 }
 
-                const role = await this.getVerifiedRole(message.guild);
+                const role = await this.getVerifiedRole(message.guild, captchaConfig);
                 if (role && message.member) {
                     await message.member.roles.add(role.id).catch(err => {
                         console.warn('[Captcha] Impossible d\'ajouter le rôle vérifié:', err.message);
@@ -283,7 +336,8 @@ class CaptchaService {
                     userAnswer,
                     attempts: (captcha.attempts || 0) + 1,
                     maxAttempts,
-                    role
+                    role,
+                    logChannelId: captchaConfig.log_channel_id
                 });
 
                 if (message.member) {
@@ -322,7 +376,8 @@ class CaptchaService {
                         userAnswer,
                         attempts: nextAttempts,
                         maxAttempts,
-                        reason: 'Nombre maximal de tentatives dépassé'
+                        reason: 'Nombre maximal de tentatives dépassé',
+                        logChannelId: captchaConfig.log_channel_id
                     });
 
                     setTimeout(async () => {
@@ -348,7 +403,8 @@ class CaptchaService {
                     userAnswer,
                     attempts: nextAttempts,
                     maxAttempts,
-                    remaining
+                    remaining,
+                    logChannelId: captchaConfig.log_channel_id
                 });
                 return true;
             }

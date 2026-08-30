@@ -79,7 +79,8 @@ class InvitesListener {
         });
 
         if (useRow && config.join_log_channel_id) {
-            const channel = member.guild.channels.cache.get(config.join_log_channel_id);
+            const channel = member.guild.channels.cache.get(config.join_log_channel_id) ||
+                await member.guild.channels.fetch(config.join_log_channel_id).catch(() => null);
             if (channel?.isTextBased?.()) {
                 const count = (this._memberCounter.get(member.guild.id) || 0) + 1;
                 this._memberCounter.set(member.guild.id, count);
@@ -137,7 +138,8 @@ class InvitesListener {
         if (!left) return;
 
         if (!config.leave_log_channel_id) return;
-        const channel = member.guild.channels.cache.get(config.leave_log_channel_id);
+        const channel = member.guild.channels.cache.get(config.leave_log_channel_id) ||
+            await member.guild.channels.fetch(config.leave_log_channel_id).catch(() => null);
         if (!channel?.isTextBased?.()) return;
 
         let inviterMention = 'Inconnu';

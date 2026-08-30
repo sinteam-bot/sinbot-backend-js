@@ -340,6 +340,11 @@ class InviteCommands {
                 unique: true,
                 reason: `Invite créée par ${interaction.user.tag} via /invite create`
             });
+
+            if (this.service) {
+                await this.service.registerCommandInvite(interaction.guild, invite, interaction.user);
+            }
+
             return interaction.reply({ content: `🔗 Invitation créée : https://discord.gg/${invite.code}` });
         } catch (e) {
             return interaction.reply({ content: `❌ Erreur création d'invite: ${e.message}`, flags: MessageFlags.Ephemeral });

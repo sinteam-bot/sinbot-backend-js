@@ -8,13 +8,20 @@
 #   data/{guildId}/captcha.config.yml  (override par guilde, gitignore).
 
 enabled: true
+log_channel_id: null
 verified_role_id: "1337917252732850206"
 captcha_channel_name: "✅-verification-captcha"
 captcha_timeout: 10
 max_attempts: 3
+use_word_operators: false
 math_questions:
   min_number: 1
   max_number: 20
+  use_word_operators: false
+  word_operators:
+    "+": "plus"
+    "-": "moins"
+    "*": "fois"
   operations:
     - "+"
     - "-"

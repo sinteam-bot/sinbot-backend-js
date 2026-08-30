@@ -209,4 +209,54 @@ describe('InvitesService', () => {
         );
         assert.strictEqual(Number(snap.rows[0].cnt), 0);
     });
+
+    test('registerCommandInvite : préserve l\'auteur de la commande lorsque le bot crée l\'invitation', async () => {
+        const service = new InvitesService(new InvitesRepository());
+        service.setDb(dbCtx.rawClient, dbCtx.schema);
+
+        const mockGuild = {
+            id: 'g1',
+            client: { user: { id: 'bot_id_123' } }
+        };
+        const mockInvite = {
+            code: 'XYZ999',
+            channel: { id: 'chan_1' },
+            maxUses: 0,
+            uses: 0,
+            expiresAt: null,
+            createdAt: new Date()
+        };
+        const mockUser = {
+            id: 'nosista_user_id',
+            tag: 'nosista#0001',
+            username: 'nosista'
+        };
+
+        // 1. Enregistrement via la commande /invite create
+        await service.registerCommandInvite(mockGuild, mockInvite, mockUser);
+
+        const inDb = await service.repo.getInviteByCode('XYZ999');
+        assert.ok(inDb);
+        assert.strictEqual(inDb.inviterId, 'nosista_user_id');
+        assert.strictEqual(inDb.inviterUsername, 'nosista#0001');
+
+        // 2. Détection lors du join avec l'invitation Discord renvoyée par l'API (avec inviter = Bot)
+        mockGuild.invites = {
+            fetch: async () => new Map([
+                ['XYZ999', {
+                    code: 'XYZ999',
+                    uses: 1, // +1 use
+                    maxUses: 0,
+                    inviter: { id: 'bot_id_123', username: 'SinBot-Dev' },
+                    channel: { id: 'chan_1' }
+                }]
+            ])
+        };
+
+        const detection = await service.detectInviter(mockGuild, { id: 'new_joiner_id', user: { bot: false } });
+        assert.strictEqual(detection.inviteCode, 'XYZ999');
+        assert.strictEqual(detection.inviterId, 'nosista_user_id');
+        assert.strictEqual(detection.inviterUsername, 'nosista#0001');
+    });
 });
+

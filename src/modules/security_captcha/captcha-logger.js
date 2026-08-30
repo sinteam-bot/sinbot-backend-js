@@ -268,7 +268,21 @@ async function sendCaptchaLog(guild, action, messageOrOptions, color = '#5865F2'
         mergedOptions = { ...options };
     }
 
-    const targetChannelId = mergedOptions.logChannelId || CAPTCHA_CONFIG.CAPTCHA_LOG_CHANNEL || 'mock_channel_id';
+    let targetChannelId = mergedOptions.logChannelId;
+    if (!targetChannelId && guild?.id) {
+        try {
+            const { getFeatureConfig } = require('../../config/c12-loader.js');
+            const cfg = await getFeatureConfig(guild.id, 'captcha');
+            targetChannelId = cfg?.log_channel_id ?? cfg?.channel_id;
+        } catch {}
+    }
+    if (!targetChannelId) {
+        targetChannelId = CAPTCHA_CONFIG.log_channel_id || CAPTCHA_CONFIG.CAPTCHA_LOG_CHANNEL;
+    }
+    if (!targetChannelId && process.env.NODE_ENV === 'test') {
+        targetChannelId = 'mock_channel_id';
+    }
+
     const userId = mergedOptions.userId || mergedOptions.user?.id || mergedOptions.member?.id || null;
 
     if (!targetChannelId || !guild) {
