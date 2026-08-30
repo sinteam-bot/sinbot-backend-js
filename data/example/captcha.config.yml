@@ -1,0 +1,34 @@
+# data/example/captcha.config.yml
+#
+# Template de configuration pour la feature "captcha".
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/captcha.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/captcha.config.yml  (override par guilde, gitignore).
+
+enabled: true
+verified_role_id: "1337917252732850206"
+captcha_channel_name: "✅-verification-captcha"
+captcha_timeout: 10
+max_attempts: 3
+math_questions:
+  min_number: 1
+  max_number: 20
+  operations:
+    - "+"
+    - "-"
+    - "*"
+  operation_weights:
+    "+": 0.6
+    "-": 0.3
+    "*": 0.1
+messages:
+  welcome_message: "Bienvenue sur le serveur ! Pour accéder au reste du serveur, tu dois résoudre ce captcha :"
+  captcha_question: "Combien font {num1} {operator} {num2} ?"
+  instructions: "Réponds avec le résultat **en chiffres** (exemple: 18) dans ce canal."
+  success_message: "✅ Bravo ! Ta réponse est correcte. Tu as maintenant accès au serveur !"
+  fail_message: "Mauvaise réponse, tu n'as plus que {attempts} tentative(s) <:Obsydemoncouverture:1488145689916473544>."
+  timeout_message: "⏰ Temps écoulé ! Le captcha a expiré. Veuillez réessayer en rejoignant à nouveau le serveur."
+  max_attempts_message: "❌ Trop de tentatives incorrectes. Veuillez quitter et rejoindre le serveur pour réessayer."
+  already_verified: "✅ Tu as déjà été vérifié !"
