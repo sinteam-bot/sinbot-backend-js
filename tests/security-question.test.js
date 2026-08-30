@@ -4,12 +4,18 @@ const { CaptchaRepository } = require('../src/modules/security_captcha/captcha.r
 const { CaptchaService } = require('../src/modules/security_captcha/captcha.service.js');
 const { CaptchaController } = require('../src/modules/security_captcha/captcha.controller.js');
 
+const { ready } = require('../src/db/index.js');
+
 describe('Security Question (Captcha) Module Tests', () => {
 
     const userId = 'test_user_sec_1';
     const username = 'SecTester';
     const guildId = 'test_guild_sec_1';
     const channelId = 'test_chan_sec_1';
+
+    beforeAll(async () => {
+        await ready;
+    });
 
     test('Repository: should create, get and verify captcha in DB', async () => {
         const repo = container.resolve(CaptchaRepository);

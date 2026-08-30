@@ -4,12 +4,15 @@ const { BumpReminderRepository } = require('../src/modules/util_bump-reminder/bu
 const { BumpReminderService } = require('../src/modules/util_bump-reminder/bump-reminder.service.js');
 const { BumpReminderController } = require('../src/modules/util_bump-reminder/bump-reminder.controller.js');
 
+const { ready } = require('../src/db/index.js');
+
 describe('Service: Bump Reminder Module Tests', () => {
 
     const guildId = 'test_guild_bump';
     const channelId = 'test_channel_bump';
 
     beforeAll(async () => {
+        await ready;
         const repo = container.resolve(BumpReminderRepository);
         await repo.deleteTestBumps();
     });

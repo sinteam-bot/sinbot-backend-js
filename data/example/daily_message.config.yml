@@ -1,0 +1,11 @@
+# data/example/daily_message.config.yml
+enabled: true
+channel_id: ""
+role_mention_id: null
+cron: "0 9 * * *"
+color: "#f2c7ce"
+title: "🌅 Pensée du Jour"
+ai_config:
+  model: "openrouter/free"
+  temperature: 0.7
+  prompt: "Génère une pensée inspirante, bienveillante et positive pour la communauté Discord."

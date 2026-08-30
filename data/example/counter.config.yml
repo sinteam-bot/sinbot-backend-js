@@ -1,0 +1,8 @@
+# data/example/counter.config.yml
+enabled: true
+channel_id: ""
+max_errors: 1
+reset_on_error: true
+reactions:
+  success: "✅"
+  error: "❌"

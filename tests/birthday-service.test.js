@@ -73,11 +73,15 @@ class FakeBirthdayRepo {
     }
 }
 
+const { db, schema } = require('../src/db/index.js');
+const origInsert = db.insert;
+const origDelete = db.delete;
+const origSelect = db.select;
+
 /**
  * Mock minimal de la table user_birthdays legacy (via Drizzle)
  */
 function mockLegacyDb(fakes = {}) {
-    const { db, schema } = require('../src/db/index.js');
     // Override les méthodes Drizzle utilisées par birthday.service.js
     db.insert = () => ({
         values: () => ({
@@ -102,6 +106,13 @@ function mockLegacyDb(fakes = {}) {
 
 describe('BirthdayService', () => {
     let svc, repo;
+
+    afterAll(() => {
+        db.insert = origInsert;
+        db.delete = origDelete;
+        db.select = origSelect;
+    });
+
     beforeEach(() => {
         mockLegacyDb();
         repo = new FakeBirthdayRepo();

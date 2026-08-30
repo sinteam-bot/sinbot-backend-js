@@ -55,11 +55,12 @@ function _createPGliteAdapter() {
     const client = new PGlite();
 
     const origQuery = client.query.bind(client);
-    client.query = async function (queryInput, params = []) {
-        if (typeof queryInput === 'object' && queryInput !== null) {
-            return origQuery(queryInput.text, queryInput.values || []);
+    client.query = async function (queryInput, ...args) {
+        if (typeof queryInput === 'object' && queryInput !== null && typeof queryInput.text === 'string') {
+            const values = queryInput.values || [];
+            return origQuery(queryInput.text, values, queryInput);
         }
-        return origQuery(queryInput, params);
+        return origQuery(queryInput, ...args);
     };
 
     client.connect = async function () {

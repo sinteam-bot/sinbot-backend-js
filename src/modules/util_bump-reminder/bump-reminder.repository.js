@@ -57,12 +57,12 @@ class BumpReminderRepository {
         return {
             ...last,
             id: last.id,
-            guild_id: last.guildId,
-            channel_id: last.channelId,
-            bumper_id: last.userId,
+            guild_id: last.guildId ?? last.guild_id,
+            channel_id: last.channelId ?? last.channel_id,
+            bumper_id: last.userId ?? last.user_id,
             bumper_username: last.username,
-            bumped_at: last.bumpedAt,
-            reminder_sent: last.reminderSent
+            bumped_at: last.bumpedAt ?? last.bumped_at,
+            reminder_sent: last.reminderSent ?? last.reminder_sent
         };
     }
 
@@ -91,12 +91,12 @@ class BumpReminderRepository {
         return rows.map(r => ({
             ...r,
             id: r.id,
-            guild_id: r.guildId,
-            channel_id: r.channelId,
-            bumper_id: r.userId,
+            guild_id: r.guildId ?? r.guild_id,
+            channel_id: r.channelId ?? r.channel_id,
+            bumper_id: r.userId ?? r.user_id,
             bumper_username: r.username,
-            bumped_at: r.bumpedAt,
-            reminder_sent: r.reminderSent
+            bumped_at: r.bumpedAt ?? r.bumped_at,
+            reminder_sent: r.reminderSent ?? r.reminder_sent
         }));
     }
 
@@ -112,12 +112,12 @@ class BumpReminderRepository {
         return rows.map(r => ({
             ...r,
             id: r.id,
-            guild_id: r.guildId,
-            channel_id: r.channelId,
-            bumper_id: r.userId,
+            guild_id: r.guildId ?? r.guild_id,
+            channel_id: r.channelId ?? r.channel_id,
+            bumper_id: r.userId ?? r.user_id,
             bumper_username: r.username,
-            bumped_at: r.bumpedAt,
-            reminder_sent: r.reminderSent
+            bumped_at: r.bumpedAt ?? r.bumped_at,
+            reminder_sent: r.reminderSent ?? r.reminder_sent
         }));
     }
 

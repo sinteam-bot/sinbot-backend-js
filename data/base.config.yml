@@ -1,7 +1,6 @@
 database:
   type: postgres
   url: votre_bdd
-
 web:
   port: 3000
   auth:
@@ -22,19 +21,23 @@ web:
     port: 3001
     auth_token: ""
     rate_limit: 100
-
+  node_env: test
 openrouter:
   default_model: openrouter/free
   max_tokens: 500
   temperature: 0.7
   fallback_models: []
   retry_policy: {}
-
 discord:
   token: ""
   client_id: ""
   default_color: "#000000"
-
+  commands:
+    enabled: true
+    allowed_roles: []
+    allowed_users: []
+    allowed_channels: []
+    permissions: {}
 logger:
   level: info
   format: json
@@ -42,7 +45,6 @@ logger:
   file:
     enabled: true
     path: ./data/logs
-
 features:
   afk: false
   autoban: false
@@ -90,7 +92,6 @@ features:
   xp: false
   word_triggers: false
   welcome: false
-
 scheduler:
   enabled: true
   timezone: Europe/Paris
@@ -107,3 +108,57 @@ scheduler:
     daily_autovalidate:
       enabled: true
       cron: 0 11 * * *
+startup_notifier:
+  github: {}
+daily_message:
+  ai_config: {}
+captcha: {}
+welcome: {}
+xp: {}
+counter:
+  emojis: {}
+  messages: {}
+countdown:
+  emojis: {}
+  messages: {}
+bump_reminder:
+  messages:
+    content: 🔔 {role}
+    title: ⏰ C'est l'heure du Bump personnalisé !
+    description: 2 heures se sont écoulées, merci {user} ! Tapez {command}
+    color: "#ff66aa"
+    thumbnail: null
+    image: null
+    footer: Mon Footer Custom
+  enabled: true
+  channel_id: "123456789012345678"
+  role_id: "987654321098765432"
+  reminder_cooldown_hours: 2
+  mention_here: true
+  use_embed: false
+  message: "{role} c'est l'heure de bumper {server}
+    <:Obsydemoncouverture:1488145689916473544> (Dernier bump par {user})"
+bump_reminders:
+  messages:
+    content: 🔔 {role}
+    title: ⏰ C'est l'heure du Bump personnalisé !
+    description: 2 heures se sont écoulées, merci {user} ! Tapez {command}
+    color: "#ff66aa"
+    thumbnail: null
+    image: null
+    footer: Mon Footer Custom
+  enabled: true
+  channel_id: "123456789012345678"
+  role_id: "987654321098765432"
+  reminder_cooldown_hours: 2
+  mention_here: true
+  use_embed: false
+  message: "{role} c'est l'heure de bumper {server}
+    <:Obsydemoncouverture:1488145689916473544> (Dernier bump par {user})"
+database_url: votre_bdd
+port: 3000
+node_env: test
+"":
+  vfox_pid: 1821
+  vfox_shell: fish
+  vfox_curtmppath: /home/nosi/.vfox/tmp/20260802-2951

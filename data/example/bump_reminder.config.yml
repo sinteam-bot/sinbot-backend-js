@@ -1,0 +1,8 @@
+# data/example/bump_reminder.config.yml
+enabled: true
+channel_id: ""
+role_id: ""
+interval_minutes: 120
+reminder_message: "⏰ C'est l'heure de bumper le serveur avec </bump:947088344167366698> !"
+thank_message: "Merci d'avoir bump le serveur !"
+bump_channel_name: "bump"

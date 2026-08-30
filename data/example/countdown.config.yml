@@ -1,0 +1,10 @@
+# data/example/countdown.config.yml
+enabled: true
+channel_id: ""
+start_number: 900
+traps_enabled: true
+reset_on_error: true
+reactions:
+  success: "⏳"
+  trap: "💣"
+  error: "❌"

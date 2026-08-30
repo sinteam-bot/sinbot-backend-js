@@ -1,0 +1,12 @@
+# data/example/xp.config.yml
+enabled: true
+min_xp_per_message: 15
+max_xp_per_message: 25
+cooldown_seconds: 60
+xp_rate: 1.0
+voice_xp_per_minute: 5
+announcement_channel_id: ""
+card_style: "default"
+level_roles: []
+ignored_channels: []
+ignored_roles: []

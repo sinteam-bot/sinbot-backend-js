@@ -4,9 +4,15 @@ const { RoadToInfiniteRepository } = require('../src/modules/game_road-to-infini
 const { RoadToInfiniteService } = require('../src/modules/game_road-to-infinite/road-to-infinite.service.js');
 const { RoadToInfiniteController } = require('../src/modules/game_road-to-infinite/road-to-infinite.controller.js');
 
+const { ready } = require('../src/db/index.js');
+
 describe('Game: Road to Infinite Module Tests', () => {
 
     const channelId = '1533492692825276598';
+
+    beforeAll(async () => {
+        await ready;
+    });
 
     test('Repository: should set and get counter state', async () => {
         const repo = container.resolve(RoadToInfiniteRepository);

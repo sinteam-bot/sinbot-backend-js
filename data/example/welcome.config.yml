@@ -1,0 +1,28 @@
+# data/example/welcome.config.yml
+enabled: true
+channel_id: ""
+welcome_channel_name: "bienvenue"
+welcome_color: "#f2c7ce"
+auto_roles: []
+welcome_message:
+  title: "🎉 Bienvenue sur {server} !"
+  description: "Bienvenue {user} !\n\nNous sommes ravis de t'accueillir parmi nous ! 🎊"
+  color: "#f2c7ce"
+  footer: "Membre #{memberCount}"
+  thumbnail: "user"
+  fields:
+    - name: "📚 Pour commencer"
+      value: "• Lis les règles dans <#CHANNEL_REGLES_ID>\n• Présente-toi dans <#CHANNEL_PRESENTATION_ID>\n• N'hésite pas à poser des questions !"
+      inline: false
+    - name: "🎮 Commandes utiles"
+      value: "`/help` - Liste des commandes\n`/rank` - Voir ton niveau"
+      inline: true
+dm_message:
+  enabled: true
+  title: "👋 Bienvenue !"
+  description: "Salut {username} !\n\nBienvenue sur **{server}** ! Nous espérons que tu vas t'amuser avec nous. 😊"
+  color: "#f2c7ce"
+  fields:
+    - name: "💡 Conseil"
+      value: "N'oublie pas de te présenter pour que la communauté apprenne à te connaître !"
+      inline: false
