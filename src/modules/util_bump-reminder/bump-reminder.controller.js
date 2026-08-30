@@ -5,7 +5,7 @@ const { saveModuleConfig, getConfig } = require('../../config/index.js');
 class BumpReminderController {
     static inject = [BumpReminderService];
 
-    constructor(service) {
+    constructor (service) {
         this.service = service;
     }
 
@@ -29,12 +29,12 @@ class BumpReminderController {
                 reminder_cooldown_hours: body.reminder_cooldown_hours !== undefined ? Number(body.reminder_cooldown_hours) : (currentBump.reminder_cooldown_hours || 2),
                 mention_here: body.mention_here !== undefined ? !!body.mention_here : (currentBump.mention_here !== false),
                 use_embed: body.use_embed !== undefined ? !!body.use_embed : (currentBump.use_embed === true),
-                message: body.message !== undefined ? String(body.message) : (currentBump.message || "{role} c'est l'heure de bumper {server} <:Obsydemoncouverture:1488145689916473544> (Dernier bump par {user})"),
+                message: body.message !== undefined ? String(body.message) : (currentBump.message || "{role} c'est l'heure de bumper {server} (Dernier bump par {user})"),
                 messages: {
                     ...(currentBump.messages || {}),
                     content: body.messages?.content !== undefined ? body.messages.content : (currentBump.messages?.content ?? "{role}"),
                     title: body.messages?.title || currentBump.messages?.title || "⏰ C'est l'heure du Bump !",
-                    description: body.messages?.description || currentBump.messages?.description || "{role} c'est l'heure de bumper {server} <:Obsydemoncouverture:1488145689916473544> !\n(Dernier bump par {user})",
+                    description: body.messages?.description || currentBump.messages?.description || "{role} c'est l'heure de bumper {server}! (Dernier bump par {user})",
                     color: body.messages?.color || currentBump.messages?.color || "#f2c7ce",
                     thumbnail: body.messages?.thumbnail !== undefined ? body.messages.thumbnail : (currentBump.messages?.thumbnail || null),
                     image: body.messages?.image !== undefined ? body.messages.image : (currentBump.messages?.image || null),

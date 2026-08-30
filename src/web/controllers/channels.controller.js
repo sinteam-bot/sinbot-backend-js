@@ -44,8 +44,18 @@ function createChannelsRouter(client) {
             const categories = [];
             const uncatChannels = [];
 
-            if (guild) {
-                const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+            let channels = null;
+            if (guild && guild.channels) {
+                if (typeof guild.channels.fetch === 'function') {
+                    channels = await guild.channels.fetch().catch(() => guild.channels?.cache || new Map());
+                } else if (guild.channels.cache) {
+                    channels = guild.channels.cache;
+                } else if (Array.isArray(guild.channels) || guild.channels instanceof Map) {
+                    channels = guild.channels;
+                }
+            }
+
+            if (channels && (channels.size > 0 || (Array.isArray(channels) && channels.length > 0))) {
                 const categoriesMap = new Map();
 
                 channels.forEach(ch => {

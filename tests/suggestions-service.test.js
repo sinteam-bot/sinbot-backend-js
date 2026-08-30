@@ -3,7 +3,7 @@ import { container } from '../src/core/container.js';
 import { SuggestionsService } from '../src/modules/community_suggestions/services/suggestions.service.js';
 import { SuggestionsRepository } from '../src/modules/community_suggestions/services/suggestions.repository.js';
 import { SuggestionsController } from '../src/modules/community_suggestions/controllers/suggestions.controller.js';
-import { db } from '../src/db/index.js';
+import { db, ready } from '../src/db/index.js';
 
 describe('Feature G12: Suggestions Module Tests', () => {
     let service;
@@ -15,6 +15,7 @@ describe('Feature G12: Suggestions Module Tests', () => {
     const userId = 'user_author_789';
 
     beforeEach(async () => {
+        await ready;
         repo = container.resolve(SuggestionsRepository);
         service = container.resolve(SuggestionsService);
         controller = container.resolve(SuggestionsController);

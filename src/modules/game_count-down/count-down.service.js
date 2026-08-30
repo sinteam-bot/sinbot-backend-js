@@ -6,7 +6,7 @@ const { config, getConfig } = require('../../config/index.js');
 class CountDownService {
     static inject = [CountDownRepository];
 
-    constructor(repository) {
+    constructor (repository) {
         this.repo = repository;
     }
 
@@ -100,7 +100,7 @@ class CountDownService {
                 }
 
                 const doublePostMsg = this.formatMessage(
-                    messages.double_post_message || "<@{userId}>, **vous ne pouvez pas partager deux nombres à la suite** <:Obsydemoncouverture:{emojiObsydemon}>",
+                    messages.double_post_message || "<@{userId}>, **vous ne pouvez pas partager deux nombres à la suite**",
                     {
                         userId: message.author.id,
                         username: message.author.username,
@@ -133,7 +133,7 @@ class CountDownService {
                     }
 
                     const dodgeMsg = this.formatMessage(
-                        messages.trap_dodge_message || "**J’ai cru que j’allais vous avoir <:Obsydemoncouverture:{emojiObsydemon}>**",
+                        messages.trap_dodge_message || "**J’ai cru que j’allais vous avoir**",
                         {
                             userId: message.author.id,
                             username: message.author.username,
@@ -166,7 +166,7 @@ class CountDownService {
                         await this.repo.updateState(COUNTDOWN_CHANNEL_ID, currentNumber, 0, null, state.last_user_id, newErrorCount);
 
                         const trapFailMsg = this.formatMessage(
-                            messages.trap_failed_message || "<@{userId}>**, Je t’ai eu !** (**{errorsCount}/{maxErrors} erreurs** tolérées) <:Obsydemoncouverture:{emojiObsydemon}>. Le prochain nombre attendu est **{expectedNumber}**.",
+                            messages.trap_failed_message || "<@{userId}>**, Je t’ai eu !** (**{errorsCount}/{maxErrors} erreurs** tolérées). Le prochain nombre attendu est **{expectedNumber}**.",
                             {
                                 userId: message.author.id,
                                 username: message.author.username,
@@ -209,7 +209,7 @@ class CountDownService {
                 // 4. Arrivée à 0 : Victoire & Réinitialisation
                 if (expectedNumber === 0) {
                     const finishMsg = this.formatMessage(
-                        messages.finish_message || "**Je suis émue, vous ne vous êtes pas trompés mais ce n’est pas fini <:Obsydemoncouverture:{emojiObsydemon}>**",
+                        messages.finish_message || "**Je suis émue, vous ne vous êtes pas trompés mais ce n’est pas fini.**",
                         {
                             userId: message.author.id,
                             username: message.author.username,

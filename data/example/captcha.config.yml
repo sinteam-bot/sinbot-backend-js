@@ -28,7 +28,7 @@ messages:
   captcha_question: "Combien font {num1} {operator} {num2} ?"
   instructions: "Réponds avec le résultat **en chiffres** (exemple: 18) dans ce canal."
   success_message: "✅ Bravo ! Ta réponse est correcte. Tu as maintenant accès au serveur !"
-  fail_message: "Mauvaise réponse, tu n'as plus que {attempts} tentative(s) <:Obsydemoncouverture:1488145689916473544>."
+  fail_message: "Mauvaise réponse, tu n'as plus que {attempts} tentative(s)."
   timeout_message: "⏰ Temps écoulé ! Le captcha a expiré. Veuillez réessayer en rejoignant à nouveau le serveur."
   max_attempts_message: "❌ Trop de tentatives incorrectes. Veuillez quitter et rejoindre le serveur pour réessayer."
   already_verified: "✅ Tu as déjà été vérifié !"

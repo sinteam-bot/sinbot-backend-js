@@ -37,7 +37,7 @@ function getCaptchaConfig() {
         CAPTCHA_QUESTION: msgs.captcha_question ?? msgs.CAPTCHA_QUESTION ?? 'Combien font {num1} {operator} {num2} ?',
         INSTRUCTIONS: msgs.instructions ?? msgs.INSTRUCTIONS ?? 'Réponds avec le résultat **en chiffres** (exemple: 18) dans ce canal.',
         SUCCESS_MESSAGE: msgs.success_message ?? msgs.SUCCESS_MESSAGE ?? '✅ Bravo ! Ta réponse est correcte. Tu as maintenant accès au serveur !',
-        FAIL_MESSAGE: msgs.fail_message ?? msgs.FAIL_MESSAGE ?? 'Mauvaise réponse, tu n\'as plus que {attempts} tentative(s) <:Obsydemoncouverture:1488145689916473544>.',
+        FAIL_MESSAGE: msgs.fail_message ?? msgs.FAIL_MESSAGE ?? 'Mauvaise réponse, tu n\'as plus que {attempts} tentative(s).',
         TIMEOUT_MESSAGE: msgs.timeout_message ?? msgs.TIMEOUT_MESSAGE ?? '⏰ Temps écoulé ! Le captcha a expiré. Veuillez réessayer en rejoignant à nouveau le serveur.',
         MAX_ATTEMPTS_MESSAGE: msgs.max_attempts_message ?? msgs.MAX_ATTEMPTS_MESSAGE ?? '❌ Trop de tentatives incorrectes. Veuillez quitter et rejoindre le serveur pour réessayer.',
         ALREADY_VERIFIED: msgs.already_verified ?? msgs.ALREADY_VERIFIED ?? '✅ Tu as déjà été vérifié !',
@@ -45,7 +45,7 @@ function getCaptchaConfig() {
         captcha_question: msgs.captcha_question ?? 'Combien font {num1} {operator} {num2} ?',
         instructions: msgs.instructions ?? 'Réponds avec le résultat **en chiffres** (exemple: 18) dans ce canal.',
         success_message: msgs.success_message ?? '✅ Bravo ! Ta réponse est correcte. Tu as maintenant accès au serveur !',
-        fail_message: msgs.fail_message ?? 'Mauvaise réponse, tu n\'as plus que {attempts} tentative(s) <:Obsydemoncouverture:1488145689916473544>.',
+        fail_message: msgs.fail_message ?? 'Mauvaise réponse, tu n\'as plus que {attempts} tentative(s).',
         timeout_message: msgs.timeout_message ?? '⏰ Temps écoulé ! Le captcha a expiré. Veuillez réessayer en rejoignant à nouveau le serveur.',
         max_attempts_message: msgs.max_attempts_message ?? '❌ Trop de tentatives incorrectes. Veuillez quitter et rejoindre le serveur pour réessayer.',
         already_verified: msgs.already_verified ?? '✅ Tu as déjà été vérifié !'

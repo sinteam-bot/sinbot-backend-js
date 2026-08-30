@@ -9,8 +9,14 @@ async function getGuild(client) {
     const guildId = process.env.GUILD_ID;
     const getFirstFromCache = () => {
         if (!client.guilds?.cache) return null;
-        if (typeof client.guilds.cache.first === 'function') return client.guilds.cache.first();
-        if (typeof client.guilds.cache.values === 'function') return client.guilds.cache.values().next()?.value || null;
+        if (typeof client.guilds.cache.first === 'function') {
+            const g = client.guilds.cache.first();
+            if (g) return g;
+        }
+        if (typeof client.guilds.cache.values === 'function') {
+            const g = client.guilds.cache.values().next()?.value;
+            if (g) return g;
+        }
         return null;
     };
 
@@ -18,30 +24,39 @@ async function getGuild(client) {
         try {
             if (typeof client.guilds.fetch === 'function') {
                 const g = await client.guilds.fetch(guildId).catch(() => client.guilds?.cache?.get?.(guildId));
-                if (g) return g;
+                if (g && (g.channels || !g.fetch)) return g;
             }
         } catch {
-            return client.guilds?.cache?.get?.(guildId) || getFirstFromCache();
+            const cached = client.guilds?.cache?.get?.(guildId) || getFirstFromCache();
+            if (cached) return cached;
         }
     }
+
+    const cached = getFirstFromCache();
+    if (cached && (cached.channels || !cached.fetch)) return cached;
 
     if (typeof client.guilds?.fetch === 'function') {
         try {
             const fetched = await client.guilds.fetch().catch(() => null);
             if (fetched) {
-                if (typeof fetched.first === 'function') return fetched.first();
-                if (typeof fetched.values === 'function') {
-                    const firstVal = fetched.values().next()?.value;
-                    if (firstVal) return firstVal;
+                let target = null;
+                if (typeof fetched.first === 'function') target = fetched.first();
+                else if (typeof fetched.values === 'function') target = fetched.values().next()?.value;
+                else if (fetched.id) target = fetched;
+
+                if (target?.id && !target.channels) {
+                    // Si c'est un OAuth2Guild sans salon, fetch la Guilde complète par son ID
+                    const fullGuild = await client.guilds.fetch(target.id).catch(() => target);
+                    if (fullGuild) return fullGuild;
                 }
-                if (fetched.id && fetched.name) return fetched;
+                if (target) return target;
             }
         } catch {
             // ignore
         }
     }
 
-    return getFirstFromCache();
+    return cached;
 }
 
 function getUserAvatar(user, member = null) {

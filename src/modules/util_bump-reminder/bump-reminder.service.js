@@ -7,7 +7,7 @@ const { toDateSafe } = require('../../utils/dateUtils.js');
 class BumpReminderService {
     static inject = [BumpReminderRepository];
 
-    constructor(repository) {
+    constructor (repository) {
         this.repo = repository;
     }
 
@@ -17,11 +17,11 @@ class BumpReminderService {
         const taskConf = schedulerConf.tasks?.bump_reminders || {};
         const bumpConf = currentConfig.bump_reminder || currentConfig.bump_reminders || currentConfig.bump || {};
 
-        const isEnabled = bumpConf.enabled !== undefined 
-            ? bumpConf.enabled !== false 
+        const isEnabled = bumpConf.enabled !== undefined
+            ? bumpConf.enabled !== false
             : (schedulerConf.enabled !== false && taskConf.enabled !== false);
 
-        const defaultSimpleMsg = "{role} c'est l'heure de bumper {server} <:Obsydemoncouverture:1488145689916473544> (Dernier bump par {user})";
+        const defaultSimpleMsg = "{role} c'est l'heure de bumper {server} (Dernier bump par {user})";
 
         return {
             enabled: isEnabled,
@@ -34,7 +34,7 @@ class BumpReminderService {
             messages: {
                 content: bumpConf.messages?.content !== undefined ? bumpConf.messages.content : (taskConf.messages?.content ?? "{role}"),
                 title: bumpConf.messages?.title || taskConf.messages?.title || "⏰ C'est l'heure du Bump !",
-                description: bumpConf.messages?.description || taskConf.messages?.description || "{role} c'est l'heure de bumper {server} <:Obsydemoncouverture:1488145689916473544> !\n(Dernier bump par {user})",
+                description: bumpConf.messages?.description || taskConf.messages?.description || "{role} c'est l'heure de bumper {server}! (Dernier bump par {user})",
                 color: bumpConf.messages?.color || bumpConf.color || taskConf.messages?.color || taskConf.color || "#f2c7ce",
                 thumbnail: bumpConf.messages?.thumbnail || taskConf.messages?.thumbnail || null,
                 image: bumpConf.messages?.image || taskConf.messages?.image || null,
@@ -208,9 +208,9 @@ class BumpReminderService {
 
             if (conf.use_embed) {
                 const defaultTitle = "⏰ C'est l'heure du Bump !";
-                const defaultDescription = "{role} c'est l'heure de bumper {server} <:Obsydemoncouverture:1488145689916473544> !\n(Dernier bump par {user})";
+                const defaultDescription = "{role} c'est l'heure de bumper {server}! (Dernier bump par {user})";
 
-                const rawContent = conf.messages?.content !== undefined 
+                const rawContent = conf.messages?.content !== undefined
                     ? this.formatMessageText(conf.messages.content, vars)
                     : (roleMention ? `🔔 ${roleMention}` : undefined);
 
@@ -236,7 +236,7 @@ class BumpReminderService {
                     embeds: [embed]
                 });
             } else {
-                const defaultSimpleMsg = "{role} c'est l'heure de bumper {server} <:Obsydemoncouverture:1488145689916473544> (Dernier bump par {user})";
+                const defaultSimpleMsg = "{role} c'est l'heure de bumper {server} (Dernier bump par {user})";
                 const simpleText = this.formatMessageText(conf.message || defaultSimpleMsg, vars);
 
                 await channel.send({

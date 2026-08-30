@@ -5,6 +5,7 @@
  */
 
 const { db } = require('../../../db/index.js');
+const { Injectable } = require('../../../core/index.js');
 const crypto = require('crypto');
 
 function newId() { return crypto.randomUUID(); }
@@ -148,5 +149,7 @@ class SuggestionsRepository {
         };
     }
 }
+
+Injectable()(SuggestionsRepository);
 
 module.exports = { SuggestionsRepository };

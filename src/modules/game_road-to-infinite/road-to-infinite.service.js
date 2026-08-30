@@ -6,7 +6,7 @@ const { config, getConfig } = require('../../config/index.js');
 class RoadToInfiniteService {
     static inject = [RoadToInfiniteRepository];
 
-    constructor(repository) {
+    constructor (repository) {
         this.repo = repository;
     }
 
@@ -80,7 +80,7 @@ class RoadToInfiniteService {
                 }
 
                 const doublePostMsg = this.formatMessage(
-                    messages.double_post_message || "<@{userId}>, **vous ne pouvez pas partager deux nombres à la suite** <:Obsydemoncouverture:{emojiObsydemon}>",
+                    messages.double_post_message || "<@{userId}>, **vous ne pouvez pas partager deux nombres à la suite**",
                     {
                         userId: message.author.id,
                         username: message.author.username,
