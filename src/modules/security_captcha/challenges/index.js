@@ -1,5 +1,10 @@
 /**
  * challenges/index.js — Registre central des générateurs de challenges.
+ *
+ * Chaque challenge expose : { type, label, generate({ captchaConfig, userId, guildId }), verify(...) }
+ *
+ * Le helper `tts.js` permet d'ajouter une version audio WAV pour
+ * l'accessibilité (cf. option `audio_accessibility` dans la config).
  */
 
 const math = require('./math.js');

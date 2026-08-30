@@ -257,6 +257,19 @@ describe('Captcha Challenges — Integration (full pipeline)', () => {
         assert.strictEqual(bad, false);
     });
 
+    test('math: payload exposes numeric num1Value/num2Value for TTS', async () => {
+        const ch = getChallenge('math');
+        const generated = await ch.generate({
+            captchaConfig: {
+                math_questions: { operations: ['+'], min_number: 5, max_number: 5, operation_weights: { '+': 1 } }
+            }
+        });
+        assert.strictEqual(generated.payload.num1Value, 5);
+        assert.strictEqual(generated.payload.num2Value, 5);
+        assert.strictEqual(generated.payload.operator, '+');
+        assert.strictEqual(generated.answer, '10');
+    });
+
     test('image: generate → verify success path (case-insensitive)', async () => {
         const ch = getChallenge('image');
         let canvasFound = true;
@@ -299,5 +312,106 @@ describe('Captcha Challenges — Integration (full pipeline)', () => {
         } finally {
             global.fetch = originalFetch;
         }
+    });
+});
+
+describe('Captcha — TTS Accessibilité (helper)', () => {
+    const tts = require('../src/modules/security_captcha/challenges/tts.js');
+
+    test('numberToFrench handles basic numbers', () => {
+        assert.strictEqual(tts.numberToFrench(0), 'zéro');
+        assert.strictEqual(tts.numberToFrench(1), 'un');
+        assert.strictEqual(tts.numberToFrench(15), 'quinze');
+        assert.strictEqual(tts.numberToFrench(20), 'vingt');
+        assert.strictEqual(tts.numberToFrench(67), 'soixante-sept');
+        assert.strictEqual(tts.numberToFrench(100), 'cent');
+        assert.strictEqual(tts.numberToFrench(200), 'deux cents');
+    });
+
+    test('toPhonetic formats math question as French spoken text', () => {
+        const p = tts.toPhonetic(7, 8, '*');
+        assert.ok(p.includes('sept'));
+        assert.ok(p.includes('fois'));
+        assert.ok(p.includes('huit'));
+        assert.ok(!p.includes('7'));
+        assert.ok(!p.includes('*'));
+    });
+
+    test('synthesizeWav produces a valid WAV header', () => {
+        const buf = tts.synthesizeWav('un plus un');
+        // Vérifie le magic number "RIFF"
+        assert.strictEqual(buf.slice(0, 4).toString(), 'RIFF');
+        assert.strictEqual(buf.slice(8, 12).toString(), 'WAVE');
+        // Chunk fmt
+        assert.strictEqual(buf.slice(12, 16).toString(), 'fmt ');
+        // Chunk data
+        assert.strictEqual(buf.slice(36, 40).toString(), 'data');
+        // Le buffer contient au moins les 44 octets d'en-tête + des samples
+        assert.ok(buf.length > 44);
+    });
+
+    test('synthesizeWav duration scales with phoneme count', () => {
+        const short = tts.synthesizeWav('un');
+        const long = tts.synthesizeWav('un deux trois quatre cinq six sept huit neuf dix');
+        assert.ok(long.length > short.length, 'longer text → bigger WAV');
+    });
+
+    test('generateTtsAttachment writes a wav file on disk', () => {
+        const att = tts.generateTtsAttachment({
+            num1: 12,
+            num2: 5,
+            operator: '+',
+            guildId: 'test_guild_tts'
+        });
+        assert.ok(att.wavBuffer);
+        assert.ok(att.wavBuffer.length > 44);
+        assert.ok(att.filePath.endsWith('.wav'));
+        assert.ok(fs.existsSync(att.filePath), 'WAV file should exist on disk');
+        assert.ok(att.phonetic.includes('douze'));
+        assert.ok(att.phonetic.includes('plus'));
+        assert.ok(att.phonetic.includes('cinq'));
+
+        // Cleanup
+        try { fs.unlinkSync(att.filePath); } catch {}
+    });
+
+    test('generateTtsAttachment throws on invalid numbers', () => {
+        assert.throws(() => tts.generateTtsAttachment({ num1: 'abc', num2: 5, operator: '+' }));
+        assert.throws(() => tts.generateTtsAttachment({ num1: NaN, num2: 5, operator: '+' }));
+    });
+
+    test('cleanupOldTts removes stale TTS files', () => {
+        const tmpDir = tts.TMP_DIR;
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        const oldFile = require('path').join(tmpDir, 'tts-test_guild_cleanup-old.wav');
+        fs.writeFileSync(oldFile, 'fake-wav-content');
+        const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+        fs.utimesSync(oldFile, tenMinAgo, tenMinAgo);
+
+        const removed = tts.cleanupOldTts(5 * 60 * 1000);
+        assert.ok(removed >= 1);
+        assert.ok(!fs.existsSync(oldFile));
+    });
+
+    test('TTS attachment can be plugged into math payload (e2e)', () => {
+        const { getChallenge } = require('../src/modules/security_captcha/challenges/index.js');
+        const ch = getChallenge('math');
+        return ch.generate({
+            captchaConfig: {
+                math_questions: { operations: ['*'], min_number: 2, max_number: 9, operation_weights: { '*': 1 } }
+            }
+        }).then((gen) => {
+            const att = tts.generateTtsAttachment({
+                num1: gen.payload.num1Value,
+                num2: gen.payload.num2Value,
+                operator: gen.payload.operator,
+                guildId: 'test_e2e'
+            });
+            // Vérifie cohérence : la réponse du WAV doit matcher l'answer math
+            const expectedResult = parseInt(gen.payload.num1Value, 10) * parseInt(gen.payload.num2Value, 10);
+            assert.strictEqual(parseInt(gen.answer, 10), expectedResult);
+            assert.ok(att.phonetic.length > 0);
+            try { fs.unlinkSync(att.filePath); } catch {}
+        });
     });
 });

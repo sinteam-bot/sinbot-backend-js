@@ -17,8 +17,12 @@ max_attempts: 3
 #   - math   : calcul arithmétique en texte (défaut, comportement actuel)
 #   - image  : reconnaissance de texte sur une image (PNG générée par canvas)
 #   - web    : page HTML externe avec hCaptcha (variable HCAPTCHA_SITE_KEY requise)
-#   - audio  : TTS audio (math vocal) — implémenté en phase 2
 captcha_type: math
+# Accessibilité audio : si true et captcha_type == math, un fichier WAV
+# TTS est attaché au message d'accueil en plus de la question texte.
+# Le membre peut l'écouter localement pour entendre la question.
+# Valeurs : true | false (défaut false).
+audio_accessibility: false
 use_word_operators: false
 math_questions:
   min_number: 1

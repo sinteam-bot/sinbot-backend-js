@@ -5,7 +5,7 @@
  * Chaque type expose : { id, label, generate(guildId, ctx), verify(answer, expected, ctx) }
  */
 
-const TYPES = ['math', 'image', 'web', 'audio'];
+const TYPES = ['math', 'image', 'web'];
 
 /**
  * Vérifie qu'un type est supporté. Renvoie 'math' par défaut.

@@ -4,6 +4,7 @@ const { CaptchaRepository } = require('./captcha.repository.js');
 const { config, getConfig } = require('../../config/index.js');
 const { sendCaptchaLog } = require('./captcha-logger.js');
 const { getChallenge, listAvailable } = require('./challenges/index.js');
+const { generateTtsAttachment } = require('./challenges/tts.js');
 const DiscordCacheService = require('../../services/discordCacheService.js');
 const logger = require('../../utils/logger.js');
 
@@ -308,6 +309,31 @@ class CaptchaService {
                 content = `${member.user}, ${welcomeMsg}\n\n**${challengeResult.question}**\n\n${instructions}\n\n🔗 **Lien de vérification :** ${verifyUrl}`;
             } else {
                 content = `${member.user}, ${welcomeMsg}\n\n**${challengeResult.question}**\n\n${instructions}`;
+            }
+
+            // Accessibilité audio : attache un WAV TTS pour le mode math
+            // (le membre peut l'écouter localement s'il a des difficultés
+            // de lecture). Pour les autres modes, le WAV n'est pas
+            // pertinent (image = OCR visuel, web = page web).
+            if (captchaConfig.audio_accessibility === true && challenge.type === 'math') {
+                const payload = challengeResult.payload || {};
+                const n1 = payload.num1Value;
+                const n2 = payload.num2Value;
+                const op = payload.operator;
+                if (n1 !== undefined && n2 !== undefined && op) {
+                    try {
+                        const tts = generateTtsAttachment({
+                            num1: n1,
+                            num2: n2,
+                            operator: op,
+                            guildId: member.guild.id
+                        });
+                        files.push(new AttachmentBuilder(tts.filePath, { name: tts.filename }));
+                        content += `\n\n🔊 *Accessibilité audio : le fichier joint prononce la question.*`;
+                    } catch (ttsErr) {
+                        console.warn('[Captcha] Erreur génération TTS accessibilité:', ttsErr.message);
+                    }
+                }
             }
 
             const sentMsg = await channel.send({

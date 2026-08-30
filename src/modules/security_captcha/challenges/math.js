@@ -79,7 +79,10 @@ function generateMathQuestion(captchaConfig = {}) {
         num2: num2Str,
         operator,
         displayOperator,
-        useWordOperators
+        useWordOperators,
+        // Valeurs numériques brutes pour accessibilité TTS (math.js)
+        num1Value: num1,
+        num2Value: num2
     };
 }
 
@@ -91,7 +94,14 @@ module.exports = {
         return {
             question: q.question,
             answer: q.answer,
-            payload: { type: 'math', num1: q.num1, num2: q.num2, operator: q.operator }
+            payload: {
+                type: 'math',
+                num1: q.num1,
+                num2: q.num2,
+                operator: q.operator,
+                num1Value: q.num1Value,
+                num2Value: q.num2Value
+            }
         };
     },
     async verify({ userAnswer, expectedAnswer }) {
