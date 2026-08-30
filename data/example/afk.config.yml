@@ -1,0 +1,7 @@
+# data/example/afk.config.yml
+#
+# Template de configuration pour la feature "afk" (Phase 9 G06).
+#
+enabled: true
+auto_remove_on_message: true
+notify_on_mention: true

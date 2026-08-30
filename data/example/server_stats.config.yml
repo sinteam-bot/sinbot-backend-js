@@ -1,0 +1,6 @@
+# data/example/server_stats.config.yml
+#
+# Template de configuration pour la feature "server_stats" (Phase 9 G08).
+#
+enabled: true
+update_interval_minutes: 10

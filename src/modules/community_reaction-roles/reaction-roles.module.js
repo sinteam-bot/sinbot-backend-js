@@ -10,6 +10,7 @@ const { ReactionRolesRepository } = require('./services/reaction-roles.repositor
 const { ReactionRolesService } = require('./services/reaction-roles.service.js');
 const { ReactionListener } = require('./events/reaction-listener.js');
 const { ReactionRoleCommands } = require('./commands/reaction-commands.js');
+const { RoleColorCommands } = require('./commands/role-color.cmd.js');
 const { ReactionRolesController } = require('./controllers/reaction-roles.controller.js');
 
 featureRegistry.define('reaction-roles', {
@@ -37,7 +38,7 @@ Module({
     ],
     controllers: [ReactionRolesController],
     events: [ReactionListener],
-    commands: [ReactionRoleCommands]
+    commands: [ReactionRoleCommands, RoleColorCommands]
 })(ReactionRolesModule);
 
 module.exports = { ReactionRolesModule };

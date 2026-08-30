@@ -1,0 +1,7 @@
+# data/example/tags.config.yml
+#
+# Template de configuration pour la feature "tags" (Phase 9 G41).
+#
+enabled: true
+allow_prefix: true
+max_tags_per_guild: 100

@@ -43,6 +43,10 @@ const { CustomCommandsModule } = require('./util_custom_commands/custom-commands
 const { StarboardModule } = require('./community_starboard/starboard.module.js');
 const { SuggestionsModule } = require('./community_suggestions/suggestions.module.js');
 const { SchedulerModule } = require('./automation_scheduler/scheduler.module.js');
+const { FunModule } = require('./util_fun/fun.module.js');
+const { AfkModule } = require('./util_afk/afk.module.js');
+const { ServerStatsModule } = require('./util_server_stats/server-stats.module.js');
+const { TagsModule } = require('./util_tags/tags.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -82,7 +86,11 @@ const MODULE_FEATURE_MAP = {
     [CustomCommandsModule.name]: 'custom_commands',
     [StarboardModule.name]: 'starboard',
     [SuggestionsModule.name]: 'suggestions',
-    [SchedulerModule.name]: 'scheduler'
+    [SchedulerModule.name]: 'scheduler',
+    [FunModule.name]: 'fun',
+    [AfkModule.name]: 'afk',
+    [ServerStatsModule.name]: 'server_stats',
+    [TagsModule.name]: 'tags'
 };
 
 const ALL_MODULES = [
@@ -113,7 +121,11 @@ const ALL_MODULES = [
     CustomCommandsModule,
     StarboardModule,
     SuggestionsModule,
-    SchedulerModule
+    SchedulerModule,
+    FunModule,
+    AfkModule,
+    ServerStatsModule,
+    TagsModule
 ];
 
 /**

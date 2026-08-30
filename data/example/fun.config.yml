@@ -1,0 +1,8 @@
+# data/example/fun.config.yml
+#
+# Template de configuration pour la feature "fun" (Phase 9 G04, G27).
+#
+enabled: true
+allow_zalgo: true
+max_roll_dice: 100
+max_roll_sides: 1000
