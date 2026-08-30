@@ -282,6 +282,62 @@ class CaptchaRepository {
     }
 
     /**
+     * Récupère les captchas expirés mais non vérifiés (à kicker)
+     */
+    async getExpiredCaptchas(now = new Date(), limit = 50) {
+        const nowIso = now.toISOString();
+        const rows = await this.db.select({
+            captcha: this.schema.userCaptchas,
+            channelName: this.schema.discordChannels.name,
+            channelDeletedAt: this.schema.discordChannels.deletedAt
+        })
+        .from(this.schema.userCaptchas)
+        .leftJoin(
+            this.schema.discordChannels,
+            eq(this.schema.userCaptchas.channelId, this.schema.discordChannels.channelId)
+        )
+        .where(
+            and(
+                eq(this.schema.userCaptchas.isVerified, 0),
+                sql`${this.schema.userCaptchas.expiresAt} IS NOT NULL`,
+                sql`${this.schema.userCaptchas.expiresAt} <= ${nowIso}`
+            )
+        )
+        .orderBy(asc(this.schema.userCaptchas.expiresAt))
+        .limit(limit);
+
+        return rows.map(r => ({
+            ...r.captcha,
+            user_id: r.captcha.userId,
+            guild_id: r.captcha.guildId,
+            channel_id: r.captcha.channelId,
+            channel_name: r.channelName,
+            channel_deleted_at: r.channelDeletedAt,
+            is_verified: r.captcha.isVerified,
+            created_at: r.captcha.createdAt,
+            expires_at: r.captcha.expiresAt,
+            verified_at: r.captcha.verifiedAt
+        }));
+    }
+
+    /**
+     * Marque un captcha comme expiré (timestamp expiredAt)
+     */
+    async markExpired(userId, guildId) {
+        await this.db.update(this.schema.userCaptchas)
+            .set({
+                expiredAt: sql`CURRENT_TIMESTAMP`,
+                updatedAt: sql`CURRENT_TIMESTAMP`
+            })
+            .where(
+                and(
+                    eq(this.schema.userCaptchas.userId, userId),
+                    eq(this.schema.userCaptchas.guildId, guildId)
+                )
+            );
+    }
+
+    /**
      * Supprime un enregistrement de captcha
      */
     async deleteCaptcha(userId, guildId) {

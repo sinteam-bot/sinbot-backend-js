@@ -416,6 +416,92 @@ class CaptchaService {
     }
 
     /**
+     * Traite les captchas expirés mais non vérifiés :
+     * kick le membre, supprime le salon dédié, journalise l'événement.
+     * Appelé par le cron `captcha-cleanup.cron.js` toutes les minutes.
+     *
+     * @param {import('discord.js').Client} client
+     * @returns {Promise<number>} nombre de captchas expirés traités
+     */
+    async processExpiredCaptchas(client) {
+        if (!client) {
+            console.warn('[Captcha] processExpiredCaptchas appelé sans client Discord');
+            return 0;
+        }
+
+        let processed = 0;
+        let expired;
+        try {
+            expired = await this.repo.getExpiredCaptchas(new Date(), 50);
+        } catch (err) {
+            console.error('[Captcha] Erreur récupération captchas expirés:', err.message);
+            return 0;
+        }
+
+        if (!expired || expired.length === 0) return 0;
+
+        for (const captcha of expired) {
+            try {
+                const guild = await client.guilds.fetch(captcha.guildId).catch(() => null);
+                if (!guild) {
+                    await this.repo.markExpired(captcha.userId, captcha.guildId).catch(() => {});
+                    continue;
+                }
+
+                const captchaConfig = await this.getConfig(captcha.guildId);
+                if (captchaConfig.enabled === false) {
+                    await this.repo.markExpired(captcha.userId, captcha.guildId).catch(() => {});
+                    continue;
+                }
+
+                const logChannelId = captchaConfig.log_channel_id || captchaConfig.channel_id;
+
+                let member = null;
+                try {
+                    member = await guild.members.fetch(captcha.userId).catch(() => null);
+                } catch {}
+
+                if (member && member.kickable) {
+                    await member.kick(`Captcha expiré après ${captchaConfig.timeout_minutes || captchaConfig.captcha_timeout || 10} minutes sans réponse`).catch(err => {
+                        console.warn(`[Captcha] Échec kick ${captcha.userId} (expiré):`, err.message);
+                    });
+                } else if (member) {
+                    console.warn(`[Captcha] Membre ${captcha.userId} non kickable (rôle supérieur ?). Salon supprimé sans kick.`);
+                }
+
+                if (captcha.channelId) {
+                    const channel = await guild.channels.fetch(captcha.channelId).catch(() => null);
+                    if (channel && channel.deletable) {
+                        await channel.delete('Captcha expiré').catch(err => {
+                            console.warn(`[Captcha] Échec suppression salon ${captcha.channelId} (expiré):`, err.message);
+                        });
+                    }
+                }
+
+                await sendCaptchaLog(guild, 'Captcha expiré', `**${captcha.username || captcha.userId}** a été expulsé suite à l'expiration du captcha (${captchaConfig.timeout_minutes || captchaConfig.captcha_timeout || 10} min sans réponse).`, '#ED4245', {
+                    userId: captcha.userId,
+                    username: captcha.username,
+                    channelId: captcha.channelId,
+                    channelName: captcha.channel_name,
+                    question: captcha.question,
+                    timeoutMinutes: captchaConfig.timeout_minutes || captchaConfig.captcha_timeout || 10,
+                    reason: 'Temps imparti écoulé',
+                    logChannelId
+                });
+
+                await this.repo.markExpired(captcha.userId, captcha.guildId);
+                processed++;
+
+                console.log(`⏰ [Captcha] Captcha expiré traité pour ${captcha.username || captcha.userId} (guild ${captcha.guildId})`);
+            } catch (err) {
+                console.error(`[Captcha] Erreur traitement captcha expiré ${captcha.id}:`, err.message);
+            }
+        }
+
+        return processed;
+    }
+
+    /**
      * Récupère l'historique et les statistiques pour le Dashboard
      */
     async getCaptchaOverview() {

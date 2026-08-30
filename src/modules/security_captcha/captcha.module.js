@@ -4,6 +4,7 @@ const { CaptchaService } = require('./captcha.service.js');
 const { CaptchaController } = require('./captcha.controller.js');
 const { CaptchaEvent } = require('./captcha.event.js');
 const { CaptchaCommand } = require('./captcha.cmd.js');
+const { CaptchaCleanup } = require('./captcha-cleanup.cron.js');
 
 class CaptchaModule {}
 
@@ -16,7 +17,8 @@ Module({
         CaptchaController
     ],
     events: [
-        CaptchaEvent
+        CaptchaEvent,
+        CaptchaCleanup
     ],
     commands: [
         CaptchaCommand
