@@ -1,7 +1,7 @@
 /**
  * src/modules/util_server_stats/server-stats.module.js
  *
- * Module Server Stats (Phase 9 G08).
+ * Module Server Stats (P5 - Statbot).
  */
 
 const { Module } = require('../../core/index.js');
@@ -12,6 +12,7 @@ const { ServerStatsRepository } = require('./services/server-stats.repository.js
 const { ServerStatsService } = require('./services/server-stats.service.js');
 const { MemberCountListener } = require('./events/member-count.listener.js');
 const { ServerStatsCommands } = require('./commands/server-stats.cmd.js');
+const { ServerStatsController } = require('./controllers/server-stats.controller.js');
 
 featureRegistry.define('server_stats', {
     defaults,
@@ -27,6 +28,7 @@ Module({
         ServerStatsService,
         ServerStatsModule
     ],
+    controllers: [ServerStatsController],
     events: [MemberCountListener],
     commands: [ServerStatsCommands]
 })(ServerStatsModule);

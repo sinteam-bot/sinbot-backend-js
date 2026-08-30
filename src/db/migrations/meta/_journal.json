@@ -99,6 +99,13 @@
       "when": 1788015000000,
       "tag": "0013_ticket_enhancements",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788020000000,
+      "tag": "0014_statcounters_statroles",
+      "breakpoints": true
     }
   ]
 }
