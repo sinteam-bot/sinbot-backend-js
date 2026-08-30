@@ -1,17 +1,17 @@
 /**
- * economy.service.js — gestion de la monnaie virtuelle
+ * economy.service.js — gestion de la monnaie virtuelle & boosts (Phase 13 G11, G29)
  *
  * - getBalance(guildId, userId)
  * - add(guildId, userId, amount, { type, reason, counterpartyId })
  * - remove(guildId, userId, amount, { type, reason, counterpartyId })
  * - transfer(fromGuild, fromUser, toUser, amount, reason)
- * - claimDaily(guildId, userId)       : /daily avec cooldown
+ * - claimDaily(guildId, userId, config) : /daily avec cooldown & boost
+ * - claimWork(guildId, userId, config)  : /work avec cooldown & boost
+ * - addBoost(guildId, userId, multiplier, durationSeconds)
+ * - getActiveBoost(guildId, userId)
+ * - getEconomyProfile(guildId, userId)
  * - leaderboard(guildId, limit)
  * - listTransactions(guildId, userId)
- *
- * Toutes les mutations sont des paires (balance, total_*) mises à jour
- * ensemble dans upsertBalance, et chaque mutation enregistre une
- * economy_transactions.
  */
 
 const { Injectable } = require('../../../core/index.js');
@@ -95,33 +95,55 @@ class EconomyService {
             guildId: fromGuildId, userId: toUserId, amount: net,
             type: 'pay', counterpartyId: fromUserId, reason: opts.reason
         });
-        if (tax > 0) {
-            // La taxe reste "détruite" (pas créditée à un user) pour l'instant
-        }
         return { ok: true, net, tax };
     }
 
-    /**
-     * /daily : claim journalier
-     */
-    async claimDaily(guildId, userId, config) {
+    // ============== BOOSTS (G11) ==============
+
+    async addBoost(guildId, userId, multiplier, durationSeconds) {
+        if (multiplier <= 0 || durationSeconds <= 0) {
+            return { ok: false, error: 'Multiplicateur et durée doivent être positifs.' };
+        }
+        const boost = await this.repo.addBoost({ guildId, userId, multiplier, durationSeconds });
+        return { ok: true, data: boost };
+    }
+
+    async getActiveBoost(guildId, userId) {
+        return this.repo.getActiveBoost(guildId, userId);
+    }
+
+    // ============== DAILY & WORK ==============
+
+    async claimDaily(guildId, userId, config = {}) {
         const cooldownMs = (config.cooldown_hours || 22) * 3600 * 1000;
         const current = await this.getOrInitBalance(guildId, userId);
         if (current.lastDailyClaimAt && (Date.now() - current.lastDailyClaimAt) < cooldownMs) {
             const nextAt = current.lastDailyClaimAt + cooldownMs;
             return { ok: false, error: 'cooldown', nextAt };
         }
-        const result = await this.add(guildId, userId, config.daily_reward || 100, {
-            type: 'daily', reason: 'Daily reward'
+
+        const baseReward = config.daily_reward || 100;
+        const activeBoost = await this.repo.getActiveBoost(guildId, userId);
+        const multiplier = activeBoost ? activeBoost.multiplier : 1.0;
+        const finalReward = Math.round(baseReward * multiplier);
+
+        const result = await this.add(guildId, userId, finalReward, {
+            type: 'daily',
+            reason: activeBoost ? `Daily reward (Boost x${multiplier})` : 'Daily reward'
         });
         if (!result.ok) return result;
+
         await this.repo.upsertBalance(guildId, userId, { lastDailyClaimAt: Date.now() });
-        return { ok: true, balance: result.balance, reward: config.daily_reward || 100 };
+        return {
+            ok: true,
+            balance: result.balance,
+            reward: finalReward,
+            baseReward,
+            multiplier,
+            boostActive: Boolean(activeBoost)
+        };
     }
 
-    /**
-     * /work : récompense de travail horaire (Phase 7 G09)
-     */
     async claimWork(guildId, userId, config = {}) {
         const cooldownHours = config.work_cooldown_hours ?? 1;
         const cooldownMs = cooldownHours * 3600 * 1000;
@@ -134,7 +156,11 @@ class EconomyService {
 
         const minReward = Math.max(config.work_min_reward ?? 100, 1);
         const maxReward = Math.max(config.work_max_reward ?? 300, minReward);
-        const reward = Math.floor(Math.random() * (maxReward - minReward + 1)) + minReward;
+        const baseReward = Math.floor(Math.random() * (maxReward - minReward + 1)) + minReward;
+
+        const activeBoost = await this.repo.getActiveBoost(guildId, userId);
+        const multiplier = activeBoost ? activeBoost.multiplier : 1.0;
+        const finalReward = Math.round(baseReward * multiplier);
 
         const jobs = [
             'Tu as développé une nouvelle fonctionnalité pour le bot',
@@ -149,13 +175,39 @@ class EconomyService {
         ];
         const job = jobs[Math.floor(Math.random() * jobs.length)];
 
-        const result = await this.add(guildId, userId, reward, {
-            type: 'work', reason: `Work: ${job}`
+        const result = await this.add(guildId, userId, finalReward, {
+            type: 'work',
+            reason: activeBoost ? `Work: ${job} (Boost x${multiplier})` : `Work: ${job}`
         });
         if (!result.ok) return result;
 
         await this.repo.upsertBalance(guildId, userId, { lastWorkClaimAt: Date.now() });
-        return { ok: true, balance: result.balance, reward, job };
+        return {
+            ok: true,
+            balance: result.balance,
+            reward: finalReward,
+            baseReward,
+            multiplier,
+            boostActive: Boolean(activeBoost),
+            job
+        };
+    }
+
+    // ============== PROFILE INFO (G29) ==============
+
+    async getEconomyProfile(guildId, userId) {
+        const balance = await this.getOrInitBalance(guildId, userId);
+        const activeBoost = await this.repo.getActiveBoost(guildId, userId);
+        return {
+            wallet: balance.balance,
+            bank: balance.bankBalance,
+            total: balance.balance + balance.bankBalance,
+            totalEarned: balance.totalEarned || 0,
+            totalSpent: balance.totalSpent || 0,
+            lastDailyClaimAt: balance.lastDailyClaimAt,
+            lastWorkClaimAt: balance.lastWorkClaimAt,
+            activeBoost
+        };
     }
 
     async leaderboard(guildId, limit = 50) {

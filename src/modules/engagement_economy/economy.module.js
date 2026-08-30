@@ -17,6 +17,7 @@ const {
     EconomyCommands, ShopCommands, InventoryCommands, DropButtonHandler,
     AdminEconomyCommands
 } = require('./commands/economy-commands.js');
+const { EconomyInfoCommands } = require('./commands/economy-info.cmd.js');
 
 featureRegistry.define('economy', {
     defaults,
@@ -63,7 +64,7 @@ Module({
     events: [DropReactionListener, DropCron],
     commands: [
         EconomyCommands, ShopCommands, InventoryCommands, DropButtonHandler,
-        AdminEconomyCommands
+        AdminEconomyCommands, EconomyInfoCommands
     ]
 })(EconomyModule);
 

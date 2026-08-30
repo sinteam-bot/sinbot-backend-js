@@ -396,6 +396,55 @@ class EconomyRepository {
             status: row.status
         };
     }
+
+    // ============== BOOSTS ==============
+
+    async addBoost({ guildId, userId, multiplier, durationSeconds }) {
+        const id = newId();
+        const now = Date.now();
+        const expiresAt = now + (durationSeconds * 1000);
+
+        await db.pool.query(
+            `INSERT INTO economy_boosts (id, guild_id, user_id, multiplier, expires_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [id, guildId, userId, multiplier, expiresAt, now]
+        );
+
+        return { id, guildId, userId, multiplier: Number(multiplier), expiresAt, createdAt: now };
+    }
+
+    async getActiveBoost(guildId, userId) {
+        const now = Date.now();
+        const res = await db.pool.query(
+            `SELECT * FROM economy_boosts 
+             WHERE guild_id = $1 AND user_id = $2 AND expires_at > $3 
+             ORDER BY multiplier DESC LIMIT 1`,
+            [guildId, userId, now]
+        );
+        return res.rows?.[0] ? this._mapBoost(res.rows[0]) : null;
+    }
+
+    async listActiveBoosts(guildId, userId) {
+        const now = Date.now();
+        const res = await db.pool.query(
+            `SELECT * FROM economy_boosts 
+             WHERE guild_id = $1 AND user_id = $2 AND expires_at > $3 
+             ORDER BY expires_at ASC`,
+            [guildId, userId, now]
+        );
+        return (res.rows || []).map(r => this._mapBoost(r));
+    }
+
+    _mapBoost(row) {
+        return {
+            id: row.id,
+            guildId: row.guild_id,
+            userId: row.user_id,
+            multiplier: Number(row.multiplier || 1),
+            expiresAt: Number(row.expires_at || 0),
+            createdAt: Number(row.created_at || 0)
+        };
+    }
 }
 
 function safeJson(str) {

@@ -55,7 +55,8 @@ class EconomyCommands {
             }
             return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
         }
-        return interaction.reply({ content: `✅ Tu as reçu **${r.reward}** 🪙 ! Solde : **${r.balance}**` });
+        const boostNote = r.boostActive ? ` *(Boost x${r.multiplier} inclus)*` : '';
+        return interaction.reply({ content: `✅ Tu as reçu **${r.reward}** 🪙${boostNote} ! Solde : **${r.balance}**` });
     }
 
     async executeWork(interaction) {
@@ -67,7 +68,8 @@ class EconomyCommands {
             }
             return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
         }
-        return interaction.reply({ content: `💼 ${r.job} et tu as gagné **${r.reward}** 🪙 ! Solde : **${r.balance}**` });
+        const boostNote = r.boostActive ? ` *(Boost x${r.multiplier} inclus)*` : '';
+        return interaction.reply({ content: `💼 ${r.job} et tu as gagné **${r.reward}** 🪙${boostNote} ! Solde : **${r.balance}**` });
     }
 
     async executePay(interaction) {

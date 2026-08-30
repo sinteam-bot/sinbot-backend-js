@@ -978,5 +978,15 @@ CREATE TABLE IF NOT EXISTS "scheduled_purges" (
 	"created_at" bigint NOT NULL,
 	CONSTRAINT "scheduled_purges_guild_channel_unique" UNIQUE("guild_id","channel_id")
 );--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_scheduled_purges_guild" ON "scheduled_purges" USING btree ("guild_id");
+CREATE INDEX IF NOT EXISTS "idx_scheduled_purges_guild" ON "scheduled_purges" USING btree ("guild_id");--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "economy_boosts" (
+	"id" text PRIMARY KEY NOT NULL,
+	"guild_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"multiplier" numeric(5, 2) NOT NULL,
+	"expires_at" bigint NOT NULL,
+	"created_at" bigint NOT NULL
+);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_economy_boosts_guild_user" ON "economy_boosts" USING btree ("guild_id","user_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_economy_boosts_expires" ON "economy_boosts" USING btree ("expires_at");
 CREATE INDEX "idx_pg_auth_failed_blocked" ON "auth_failed_attempts" USING btree ("blocked_until");

@@ -1,9 +1,10 @@
 /**
- * giveaway.service.js — logique métier des giveaways
+ * giveaway.service.js — logique métier des giveaways (Phases 1-6 & Phase 13 G32, G33)
  *
  *   - create() : crée un giveaway en BDD
  *   - enter() / leave() : ajouter/retirer une entrée
- *   - draw() : tirer N gagnants au sort (CSPRNG via crypto.randomInt)
+ *   - draw() / drawWeighted() : tirer N gagnants au sort (CSPRNG via crypto.randomInt) avec support des multiplicateurs de rôles (G32)
+ *   - getShareLink() : génère le lien de partage public Discord (G33)
  *   - end() : finaliser un giveaway (status = ended, set winners)
  *   - cancel() : annuler
  *   - buildEmbed() : génère l'embed initial
@@ -32,7 +33,7 @@ class GiveawayService {
     /**
      * Crée un giveaway
      */
-    async create({ guildId, channelId, hostId, prize, description, winnersCount, requiredRoleId, durationMs, color }) {
+    async create({ guildId, channelId, hostId, prize, description, winnersCount, requiredRoleId, allowedRoleIds, roleMultipliers, durationMs, color }) {
         if (!guildId || !channelId || !hostId || !prize) {
             throw new Error('guildId, channelId, hostId et prize requis');
         }
@@ -46,6 +47,8 @@ class GiveawayService {
             description: description || null,
             winnersCount: winnersCount || 1,
             requiredRoleId: requiredRoleId || null,
+            allowedRoleIds: allowedRoleIds || [],
+            roleMultipliers: roleMultipliers || {}, // ex: { "role_vip_id": 2 }
             startsAt: now,
             endsAt: now + (durationMs || 3600_000),
             status: STATUS.ACTIVE,
@@ -54,108 +57,179 @@ class GiveawayService {
             createdAt: now,
             updatedAt: now
         };
-        await this.repo.insertGiveaway(g);
+        if (this.repo?.insertGiveaway) {
+            await this.repo.insertGiveaway(g);
+        }
         return g;
     }
 
-    async get(id) { return this.repo.findGiveawayById(id); }
-    async getByMessage(messageId) { return this.repo.findGiveawayByMessageId(messageId); }
-    async getByChannel(channelId) { return this.repo.findGiveawayByChannelId(channelId); }
+    async get(id) { return this.repo ? this.repo.findGiveawayById(id) : null; }
+    async getByMessage(messageId) { return this.repo ? this.repo.findGiveawayByMessageId(messageId) : null; }
+    async getByChannel(channelId) { return this.repo ? this.repo.findGiveawayByChannelId(channelId) : null; }
 
-    async list(args) { return this.repo.listGiveaways(args); }
-    async findDue(limit = 50) { return this.repo.findDueGiveaways(limit); }
+    async list(args) { return this.repo ? this.repo.listGiveaways(args) : []; }
+    async findDue(limit = 50) { return this.repo ? this.repo.findDueGiveaways(limit) : []; }
 
     async setMessageId(id, messageId) {
-        await this.repo.updateGiveaway(id, { messageId, updatedAt: Date.now() });
+        if (this.repo) {
+            await this.repo.updateGiveaway(id, { messageId, updatedAt: Date.now() });
+        }
     }
 
-    async enter(id, userId) {
+    async enter(id, userId, memberRoles = []) {
+        if (!this.repo) return { ok: false, reason: 'no_repo' };
         const g = await this.repo.findGiveawayById(id);
         if (!g) return { ok: false, reason: 'not_found' };
         if (g.status !== STATUS.ACTIVE) return { ok: false, reason: 'not_active' };
         if (g.endsAt < Date.now()) return { ok: false, reason: 'ended' };
-        if (g.requiredRoleId) {
+
+        // Vérification requiredRoleId
+        if (g.requiredRoleId && !memberRoles.includes(g.requiredRoleId)) {
             return { ok: false, reason: 'role_required' };
         }
+
+        // Vérification allowedRoleIds (G32)
+        if (Array.isArray(g.allowedRoleIds) && g.allowedRoleIds.length > 0) {
+            const hasAllowed = g.allowedRoleIds.some(r => memberRoles.includes(r));
+            if (!hasAllowed) {
+                return { ok: false, reason: 'role_not_allowed' };
+            }
+        }
+
         const added = await this.repo.addEntry(id, userId);
         if (!added) return { ok: false, reason: 'already_entered' };
         return { ok: true };
     }
 
     async leave(id, userId) {
+        if (!this.repo) return { ok: false };
         const removed = await this.repo.removeEntry(id, userId);
         return { ok: removed > 0 };
     }
 
     async hasEntered(id, userId) {
+        if (!this.repo) return false;
         const entries = await this.repo.listEntries(id);
         return entries.some(e => e.user_id === userId);
     }
 
     async countEntries(id) {
-        return this.repo.countEntries(id);
+        return this.repo ? this.repo.countEntries(id) : 0;
     }
 
     async listEntries(id) {
+        if (!this.repo) return [];
         const rows = await this.repo.listEntries(id);
         return rows.map(r => r.user_id);
     }
 
     /**
-     * Tirage au sort CSPRNG
+     * Génère un lien de partage direct vers le message Discord du Giveaway (G33)
+     */
+    getShareLink(giveaway) {
+        if (!giveaway || !giveaway.guildId || !giveaway.channelId || !giveaway.messageId) {
+            return null;
+        }
+        return `https://discord.com/channels/${giveaway.guildId}/${giveaway.channelId}/${giveaway.messageId}`;
+    }
+
+    /**
+     * Tirage au sort CSPRNG pondéré par multiplicateurs de rôles (G32)
+     * @param {string} id
+     * @param {Map<string, string[]>|object} [memberRolesMap] mapping userId -> array of roleIds
      * @returns {Promise<{winners: string[], pool: number}>}
      */
-    async draw(id) {
-        const g = await this.repo.findGiveawayById(id);
+    async draw(id, memberRolesMap = {}) {
+        const g = this.repo ? await this.repo.findGiveawayById(id) : null;
         if (!g) return { winners: [], pool: 0 };
-        const entries = await this.repo.listEntries(id);
-        const pool = entries.length;
+        const rawEntries = await this.repo.listEntries(id);
+        const userIds = Array.from(new Set(rawEntries.map(e => e.user_id)));
+        const pool = userIds.length;
         if (pool === 0) return { winners: [], pool: 0 };
 
-        const count = Math.min(g.winnersCount, pool);
-        const shuffled = entries.map(e => e.user_id);
+        const count = Math.min(g.winnersCount || 1, pool);
+        const roleMultipliers = g.roleMultipliers || {};
 
-        for (let i = shuffled.length - 1; i > 0; i--) {
-            const j = crypto.randomInt(0, i + 1);
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        // Construire la liste de tickets avec poids
+        const tickets = [];
+        for (const uid of userIds) {
+            const userRoles = memberRolesMap instanceof Map
+                ? (memberRolesMap.get(uid) || [])
+                : (memberRolesMap[uid] || []);
+
+            let weight = 1;
+            for (const [rId, mult] of Object.entries(roleMultipliers)) {
+                if (userRoles.includes(rId)) {
+                    weight = Math.max(weight, Number(mult) || 1);
+                }
+            }
+
+            for (let w = 0; w < weight; w++) {
+                tickets.push(uid);
+            }
         }
-        return { winners: shuffled.slice(0, count), pool };
+
+        // Tirage sans remise
+        const winners = [];
+        const availableTickets = [...tickets];
+
+        while (winners.length < count && availableTickets.length > 0) {
+            const idx = crypto.randomInt(0, availableTickets.length);
+            const winnerId = availableTickets[idx];
+            if (!winners.includes(winnerId)) {
+                winners.push(winnerId);
+            }
+            // Retirer tous les tickets du gagnant sélectionné
+            for (let i = availableTickets.length - 1; i >= 0; i--) {
+                if (availableTickets[i] === winnerId) {
+                    availableTickets.splice(i, 1);
+                }
+            }
+        }
+
+        return { winners, pool };
     }
 
     /**
      * Termine le giveaway : tire les gagnants, marque ended
      */
-    async end(id) {
-        const g = await this.repo.findGiveawayById(id);
+    async end(id, memberRolesMap = {}) {
+        const g = this.repo ? await this.repo.findGiveawayById(id) : null;
         if (!g) return null;
         if (g.status !== STATUS.ACTIVE) return g;
 
-        const { winners, pool } = await this.draw(id);
+        const { winners, pool } = await this.draw(id, memberRolesMap);
         const updated = {
             status: STATUS.ENDED,
             winners,
             updatedAt: Date.now()
         };
-        await this.repo.updateGiveaway(id, updated);
+        if (this.repo) {
+            await this.repo.updateGiveaway(id, updated);
+        }
         return { ...g, ...updated, pool };
     }
 
     async cancel(id) {
-        const g = await this.repo.findGiveawayById(id);
+        const g = this.repo ? await this.repo.findGiveawayById(id) : null;
         if (!g) return null;
-        await this.repo.updateGiveaway(id, {
-            status: STATUS.CANCELLED,
-            updatedAt: Date.now()
-        });
+        if (this.repo) {
+            await this.repo.updateGiveaway(id, {
+                status: STATUS.CANCELLED,
+                updatedAt: Date.now()
+            });
+        }
         return { ...g, status: STATUS.CANCELLED };
     }
 
     /**
-     * Construit l'embed initial d'annonce
+     * Construit l'embed initial d'annonce (G33 lien de partage inclus si présent)
      */
     buildEmbed(g, options = {}) {
         const colorInt = parseInt((g.color || options.color || '#5865F2').replace('#', ''), 16) || 0x5865F2;
         const endsAtUnix = Math.floor(g.endsAt / 1000);
+        const shareLink = this.getShareLink(g);
+
         const embed = new EmbedBuilder()
             .setColor(colorInt)
             .setTitle('🎉 GIVEAWAY')
@@ -167,6 +241,11 @@ class GiveawayService {
             )
             .setFooter({ text: `Organisé par <@${g.hostId}>` })
             .setTimestamp();
+
+        if (shareLink) {
+            embed.addFields({ name: '🔗 Partager', value: `[Lien direct vers ce giveaway](${shareLink})`, inline: false });
+        }
+
         return embed;
     }
 
