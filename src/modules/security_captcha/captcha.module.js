@@ -11,14 +11,14 @@ class CaptchaModule {}
 Module({
     providers: [
         CaptchaRepository,
-        CaptchaService
+        CaptchaService,
+        CaptchaCleanup
     ],
     controllers: [
         CaptchaController
     ],
     events: [
-        CaptchaEvent,
-        CaptchaCleanup
+        CaptchaEvent
     ],
     commands: [
         CaptchaCommand
