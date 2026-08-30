@@ -12,8 +12,11 @@ const defaults = require('./config/defaults.js');
 const { AutomodEngine } = require('./services/automod-engine.service.js');
 const { Sanctions } = require('./services/sanctions.service.js');
 const { ModLog } = require('./services/mod-log.service.js');
+const { ScheduledPurgeRepository } = require('./services/scheduled-purge.repository.js');
+const { ScheduledPurgeService } = require('./services/scheduled-purge.service.js');
 const { AutomodMessageCreateListener } = require('./events/message-create.listener.js');
 const { ModCommands } = require('./commands/mod-commands.js');
+const { PurgeScheduleCommands } = require('./commands/purge-schedule.cmd.js');
 const { AutomodController } = require('./controllers/automod.controller.js');
 
 featureRegistry.define('automod', {
@@ -26,13 +29,39 @@ featureRegistry.define('automod', {
     }
 });
 
-class AutoModModule {}
+class AutoModModule {
+    constructor(purgeService) {
+        this.purgeService = purgeService;
+        this._initialized = false;
+    }
+
+    init() {
+        if (this._initialized) return;
+        try {
+            const { container } = require('../../core/index.js');
+            const client = container.has('Client') ? container.resolve('Client') : null;
+            if (client && this.purgeService) {
+                this.purgeService.start(client);
+            }
+        } catch (err) {
+            console.warn('[AutoModModule] Erreur init ScheduledPurge:', err.message);
+        }
+        this._initialized = true;
+    }
+}
 
 Module({
-    providers: [AutomodEngine, Sanctions, ModLog],
+    providers: [
+        AutomodEngine,
+        Sanctions,
+        ModLog,
+        ScheduledPurgeRepository,
+        ScheduledPurgeService,
+        AutoModModule
+    ],
     controllers: [AutomodController],
     events: [AutomodMessageCreateListener],
-    commands: [ModCommands]
+    commands: [ModCommands, PurgeScheduleCommands]
 })(AutoModModule);
 
 module.exports = { AutoModModule };

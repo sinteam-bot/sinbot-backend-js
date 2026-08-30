@@ -36,15 +36,20 @@ class LogsService extends EventEmitter {
      * Récupère le channel Discord cible pour un type d'event
      */
     _channelForType(eventType) {
-        if (!this._config?.channels) return null;
-        if (eventType.startsWith('member_')) return this._config.channels.members;
-        if (eventType.startsWith('message_')) return this._config.channels.messages;
-        if (eventType.startsWith('role_')) return this._config.channels.roles;
-        if (eventType.startsWith('channel_')) return this._config.channels.channels_log;
-        if (eventType.startsWith('voice_')) return this._config.channels.voice;
-        if (eventType === 'guild_update' || eventType.startsWith('emoji_')) return this._config.channels.server;
-        if (eventType.startsWith('ban_')) return this._config.channels.moderation;
-        return this._config.channels.server;
+        const fallback = this._config?.channel_id || this._config?.channels?.server || null;
+        if (!this._config?.channels) return fallback;
+
+        const ch = this._config.channels;
+        if (eventType.startsWith('member_')) return ch.members || ch.member || fallback;
+        if (eventType.startsWith('message_')) return ch.messages || ch.message || fallback;
+        if (eventType.startsWith('role_')) return ch.roles || ch.role || fallback;
+        if (eventType.startsWith('channel_')) return ch.channels_log || ch.channels || ch.channel || fallback;
+        if (eventType.startsWith('voice_')) return ch.voice || fallback;
+        if (eventType === 'guild_update' || eventType.startsWith('emoji_')) return ch.server || fallback;
+        if (eventType.startsWith('ban_') || eventType.startsWith('sanction_') || eventType.startsWith('unban_') || eventType.startsWith('kick_') || eventType.startsWith('mute_')) {
+            return ch.moderation || ch.mod || fallback;
+        }
+        return ch.server || fallback;
     }
 
     /**

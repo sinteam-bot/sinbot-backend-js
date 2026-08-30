@@ -1,0 +1,6 @@
+# data/example/embed_builder.config.yml
+#
+# Template de configuration pour la feature "embed_builder" (Phase 12 G40).
+#
+enabled: true
+max_embeds_per_guild: 100
