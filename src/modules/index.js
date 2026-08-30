@@ -58,6 +58,7 @@ const { AutofeedsModule } = require('./util_autofeeds/autofeeds.module.js');
 const { TimersModule } = require('./util_timers/timers.module.js');
 const { StickyMessagesModule } = require('./util_sticky_messages/sticky.module.js');
 const { ConfessionsModule } = require('./community_confessions/confessions.module.js');
+const { AutoThreadModule } = require('./automation_autothread/autothread.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -112,7 +113,8 @@ const MODULE_FEATURE_MAP = {
     [AutofeedsModule.name]: 'autofeeds',
     [TimersModule.name]: 'timers',
     [StickyMessagesModule.name]: 'sticky_messages',
-    [ConfessionsModule.name]: 'confessions'
+    [ConfessionsModule.name]: 'confessions',
+    [AutoThreadModule.name]: 'autothread'
 };
 
 const ALL_MODULES = [
@@ -158,7 +160,8 @@ const ALL_MODULES = [
     AutofeedsModule,
     TimersModule,
     StickyMessagesModule,
-    ConfessionsModule
+    ConfessionsModule,
+    AutoThreadModule
 ];
 
 /**

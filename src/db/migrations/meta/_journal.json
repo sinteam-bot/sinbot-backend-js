@@ -78,6 +78,13 @@
       "when": 1788000000000,
       "tag": "0010_confessions_module",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788005000000,
+      "tag": "0011_autothread_module",
+      "breakpoints": true
     }
   ]
 }
