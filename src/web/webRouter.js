@@ -19,7 +19,6 @@ const {
     createTemplatesRouter,
     createGamesRouter,
     createDailyMessagesRouter,
-    createCaptchaRouter,
     createBumpRouter,
     createLeaderboardRouter
 } = require('./controllers/index.js');
@@ -86,7 +85,6 @@ function createWebRouter(client) {
 
     // 11. Modules métier (Daily Messages, Captcha, Bump)
     router.use('/daily-messages', createDailyMessagesRouter(client));
-    router.use('/', createCaptchaRouter());
     router.use('/bump', createBumpRouter(client));
 
     // 12. Classement public (XP & Économie)
