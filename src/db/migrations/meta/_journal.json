@@ -85,6 +85,13 @@
       "when": 1788005000000,
       "tag": "0011_autothread_module",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788010000000,
+      "tag": "0012_modmail_module",
+      "breakpoints": true
     }
   ]
 }

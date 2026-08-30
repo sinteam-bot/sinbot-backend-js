@@ -1,0 +1,10 @@
+module.exports = {
+    enabled: true,
+    guild_id: null,
+    category_id: null,
+    log_channel_id: null,
+    staff_roles: [],
+    anonymous_replies_by_default: false,
+    greeting_message: '👋 Bonjour ! Votre message a bien été reçu par l’équipe de modération. Un modérateur vous répondra dès que possible.',
+    closing_message: '🔒 Ce fil d’assistance ModMail a été clôturé. N’hésitez pas à renvoyer un message si vous avez une autre question.'
+};

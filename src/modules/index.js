@@ -59,6 +59,7 @@ const { TimersModule } = require('./util_timers/timers.module.js');
 const { StickyMessagesModule } = require('./util_sticky_messages/sticky.module.js');
 const { ConfessionsModule } = require('./community_confessions/confessions.module.js');
 const { AutoThreadModule } = require('./automation_autothread/autothread.module.js');
+const { ModMailModule } = require('./community_modmail/modmail.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -114,7 +115,8 @@ const MODULE_FEATURE_MAP = {
     [TimersModule.name]: 'timers',
     [StickyMessagesModule.name]: 'sticky_messages',
     [ConfessionsModule.name]: 'confessions',
-    [AutoThreadModule.name]: 'autothread'
+    [AutoThreadModule.name]: 'autothread',
+    [ModMailModule.name]: 'modmail'
 };
 
 const ALL_MODULES = [
@@ -161,7 +163,8 @@ const ALL_MODULES = [
     TimersModule,
     StickyMessagesModule,
     ConfessionsModule,
-    AutoThreadModule
+    AutoThreadModule,
+    ModMailModule
 ];
 
 /**
