@@ -11,6 +11,9 @@ enabled: false
 allowed_roles: []
 daily_reward: 100
 cooldown_hours: 22
+work_cooldown_hours: 1
+work_min_reward: 100
+work_max_reward: 300
 starting_balance: 0
 tax_percent: 0
 max_balance: 999999999

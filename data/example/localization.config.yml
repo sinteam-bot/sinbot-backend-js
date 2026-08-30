@@ -1,3 +1,15 @@
 # data/example/localization.config.yml
+#
+# Template de configuration pour la feature "localization".
+# Généré automatiquement depuis src/modules/feature_localization/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/localization.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/localization.config.yml  (override par guilde, gitignore).
 enabled: true
 default_language: fr
+supported_languages:
+  - fr
+  - en
+  - es

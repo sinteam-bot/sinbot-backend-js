@@ -1,13 +1,16 @@
 # data/example/autoban.config.yml
 #
-# Template de configuration pour la feature "autoban" (Phase 11 G17).
+# Template de configuration pour la feature "autoban".
+# Généré automatiquement depuis src/modules/feature_autoban/config/defaults.js.
 #
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/autoban.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/autoban.config.yml  (override par guilde, gitignore).
 enabled: false
 min_account_age_hours: 24
 block_default_avatar: false
-username_blacklist_regex:
-  - ".*discord.*nitro.*"
-  - ".*steam.*gift.*"
-action: "ban" # ban | kick | quarantine
+username_blacklist_regex: []
+action: ban
 quarantine_role_id: null
 dm_reason: true

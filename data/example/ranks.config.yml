@@ -1,6 +1,11 @@
 # data/example/ranks.config.yml
 #
-# Template de configuration pour la feature "ranks" (Phase 10 G26).
+# Template de configuration pour la feature "ranks".
+# Généré automatiquement depuis src/modules/feature_ranks/config/defaults.js.
 #
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/ranks.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/ranks.config.yml  (override par guilde, gitignore).
 enabled: true
 max_ranks_per_guild: 50

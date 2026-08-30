@@ -1,6 +1,11 @@
 # data/example/embed_builder.config.yml
 #
-# Template de configuration pour la feature "embed_builder" (Phase 12 G40).
+# Template de configuration pour la feature "embed_builder".
+# Généré automatiquement depuis src/modules/feature_embed-builder/config/defaults.js.
 #
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/embed_builder.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/embed_builder.config.yml  (override par guilde, gitignore).
 enabled: true
 max_embeds_per_guild: 100

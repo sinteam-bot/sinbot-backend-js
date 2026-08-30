@@ -1,3 +1,11 @@
 # data/example/highlights.config.yml
+#
+# Template de configuration pour la feature "highlights".
+# Généré automatiquement depuis src/modules/feature_highlights/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/highlights.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/highlights.config.yml  (override par guilde, gitignore).
 enabled: true
 max_keywords_per_user: 15

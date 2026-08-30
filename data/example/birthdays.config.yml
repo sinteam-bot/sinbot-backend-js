@@ -16,7 +16,7 @@ announce:
   hour: 9
   timezone: Europe/Paris
   ping_role_id: null
-  message_template: 🎂 Joyeux anniversaire {user} ! {% if age %} Tu fêtes tes **{age} ans** aujourd'hui ! {% endif %} 🎉
+  message_template: 🎂 Joyeux anniversaire {user} ! Tu fêtes tes **{age} ans** aujourd'hui ! 🎉
 temp_role:
   enabled: true
   role_id: null

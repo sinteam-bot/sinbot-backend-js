@@ -1,3 +1,11 @@
 # data/example/sticky_messages.config.yml
+#
+# Template de configuration pour la feature "sticky_messages".
+# Généré automatiquement depuis src/modules/feature_sticky-messages/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/sticky_messages.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/sticky_messages.config.yml  (override par guilde, gitignore).
 enabled: true
 cooldown_messages: 1

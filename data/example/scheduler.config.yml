@@ -1,7 +1,12 @@
 # data/example/scheduler.config.yml
 #
-# Template de configuration pour la feature "scheduler" (Phase 8 G03).
+# Template de configuration pour la feature "scheduler".
+# Généré automatiquement depuis src/modules/feature_scheduler/config/defaults.js.
 #
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/scheduler.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/scheduler.config.yml  (override par guilde, gitignore).
 enabled: true
 check_interval_seconds: 30
 max_messages_per_guild: 25

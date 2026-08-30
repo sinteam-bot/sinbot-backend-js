@@ -71,14 +71,62 @@ async function getGlobalConfig(options = {}) {
     if (_globalConfigPromise) return _globalConfigPromise;
 
     _globalConfigPromise = (async () => {
-        // c12 cherche base.config.{yml,yaml,...} dans _dataDir() + surcharge
-        // par env (production.config.yml, dev.config.yml, test.config.yml).
-        const result = await loadConfig({
-            cwd: _dataDir(),
-            name: 'base',
-            envName: process.env.NODE_ENV || undefined
-        });
-        _globalConfigCache = result.config || {};
+        const dataDir = _dataDir();
+        let config = {};
+
+        // 1. data/base.config.yml
+        const basePath = path.join(dataDir, 'base.config.yml');
+        if (fs.existsSync(basePath)) {
+            const baseResult = await loadConfig({
+                cwd: dataDir,
+                configFile: 'base.config.yml'
+            });
+            config = _deepMerge(config, baseResult.config || {});
+        } else {
+            // Fallback c12 loadConfig name: 'base'
+            const baseResult = await loadConfig({
+                cwd: dataDir,
+                name: 'base'
+            });
+            config = _deepMerge(config, baseResult.config || {});
+        }
+
+        // 2. data/{NODE_ENV}.config.yml
+        const env = process.env.NODE_ENV;
+        if (env) {
+            const envPath = path.join(dataDir, `${env}.config.yml`);
+            if (fs.existsSync(envPath)) {
+                const envResult = await loadConfig({
+                    cwd: dataDir,
+                    configFile: `${env}.config.yml`
+                });
+                config = _deepMerge(config, envResult.config || {});
+            }
+        }
+
+        // 3. data/local.config.yml
+        const localPath = path.join(dataDir, 'local.config.yml');
+        if (fs.existsSync(localPath)) {
+            const localResult = await loadConfig({
+                cwd: dataDir,
+                configFile: 'local.config.yml'
+            });
+            config = _deepMerge(config, localResult.config || {});
+        }
+
+        // 4. CONFIG_PATH si défini
+        if (process.env.CONFIG_PATH && fs.existsSync(process.env.CONFIG_PATH)) {
+            const customResult = await loadConfig({
+                configFile: path.resolve(process.env.CONFIG_PATH)
+            });
+            config = _deepMerge(config, customResult.config || {});
+        }
+
+        // 5. Application des overrides d'environnement et synchro process.env
+        const { applyEnvironmentOverrides } = require('./index.js');
+        config = applyEnvironmentOverrides(config);
+
+        _globalConfigCache = config;
         return _globalConfigCache;
     })();
 

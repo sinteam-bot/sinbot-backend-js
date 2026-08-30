@@ -30,9 +30,12 @@ let _ready = null;
 const dialect = 'postgres';
 
 function _resolveCredentials() {
-    const dbUrl = config.database_url || process.env.DATABASE_URL || process.env.DB_URL;
     const isTest = process.env.NODE_ENV === 'test';
-    if (dbUrl) {
+    if (isTest && !process.env.TEST_DATABASE_URL) {
+        return { kind: 'pglite' };
+    }
+    const dbUrl = config.database_url || config.database?.url || process.env.DATABASE_URL || process.env.DB_URL;
+    if (dbUrl && dbUrl !== 'votre_bdd') {
         return { kind: 'pg', connectionString: dbUrl };
     }
     if (isTest || !process.env.PG_HOST) {

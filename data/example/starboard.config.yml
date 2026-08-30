@@ -1,12 +1,17 @@
 # data/example/starboard.config.yml
 #
-# Template de configuration pour la feature "starboard" (Phase 7 G05).
+# Template de configuration pour la feature "starboard".
+# Généré automatiquement depuis src/modules/feature_starboard/config/defaults.js.
 #
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/starboard.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/starboard.config.yml  (override par guilde, gitignore).
 enabled: false
 channel_id: null
 threshold: 3
-emoji: '⭐'
+emoji: ⭐
 self_star: false
-color: '#FEE75C'
+color: "#FEE75C"
 ignored_channels: []
 allow_nsfw: false

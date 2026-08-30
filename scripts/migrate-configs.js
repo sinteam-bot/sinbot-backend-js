@@ -52,7 +52,7 @@ function migrate() {
     }
 
     const modules = fs.readdirSync(MODULES_DIR, { withFileTypes: true })
-        .filter(d => d.isDirectory() && d.name.startsWith('feature_'));
+        .filter(d => d.isDirectory());
 
     let count = 0;
 
@@ -60,8 +60,8 @@ function migrate() {
         const defaultsPath = path.join(MODULES_DIR, m.name, 'config/defaults.js');
         if (!fs.existsSync(defaultsPath)) continue;
 
-        // Extraire le nom de feature du dossier (ex: feature_invites → invites)
-        const featureName = m.name.replace(/^feature_/, '').replace(/-/g, '_');
+        // Extraire le nom de feature du dossier (ex: security_automod → automod, util_temp-voice → temp_voice)
+        const featureName = m.name.replace(/^[a-z]+_/, '').replace(/-/g, '_');
 
         // Charger le defaults.js (CommonJS) en purgeant le cache
         delete require.cache[require.resolve(defaultsPath)];

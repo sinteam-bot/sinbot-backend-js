@@ -1,14 +1,19 @@
 # data/example/suggestions.config.yml
 #
-# Template de configuration pour la feature "suggestions" (Phase 7 G12).
+# Template de configuration pour la feature "suggestions".
+# Généré automatiquement depuis src/modules/feature_suggestions/config/defaults.js.
 #
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/suggestions.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/suggestions.config.yml  (override par guilde, gitignore).
 enabled: false
 channel_id: null
 approved_channel_id: null
 rejected_channel_id: null
 auto_reactions:
-  - '👍'
-  - '👎'
+  - 👍
+  - 👎
 dm_notification: true
 anonymous_allowed: false
 staff_roles: []

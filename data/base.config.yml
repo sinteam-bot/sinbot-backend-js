@@ -1,24 +1,7 @@
-# data/base.config.yml
-#
-# Configuration globale par défaut (infrastructure).
-# Ce fichier est VERSIONNÉ dans git et sert de base commune.
-# Les overrides se font dans <env>.config.yml (gitignore)
-#
-# Hiérarchie c12 :
-#   1. data/base.config.yml       (ce fichier, infra)
-#   2. data/{NODE_ENV}.config.yml   (production.config.yml, test.config.yml, etc.)
-#   3. env vars (CONFIG_*)
-#
-# ⚠️ NOTE MIGRATION : ce fichier est généré depuis config.yml (racine).
-# Les sections "features.*" ont été retirées — elles sont maintenant dans
-# data/{guildId}/<feature>.config.yml (cf. plan migrate-to-c12.md).
-
-# === Database ===
 database:
   type: postgres
   url: votre_bdd
 
-# === Web server ===
 web:
   port: 3000
   auth:
@@ -37,28 +20,9 @@ web:
   webhook:
     enabled: false
     port: 3001
-    auth_token: ''
+    auth_token: ""
     rate_limit: 100
 
-# === Scheduler ===
-scheduler:
-  enabled: true
-  timezone: Europe/Paris
-  tasks:
-    bump_reminders:
-      enabled: false
-      cron: '* * * * *'
-    daily_preview:
-      enabled: true
-      cron: 0 21 * * *
-    daily_publish:
-      enabled: true
-      cron: 0 9 * * *
-    daily_autovalidate:
-      enabled: true
-      cron: 0 11 * * *
-
-# === OpenRouter (IA) ===
 openrouter:
   default_model: openrouter/free
   max_tokens: 500
@@ -66,13 +30,11 @@ openrouter:
   fallback_models: []
   retry_policy: {}
 
-# === Discord ===
 discord:
-  token: ''
-  client_id: ''
-  default_color: '#000000'
+  token: ""
+  client_id: ""
+  default_color: "#000000"
 
-# === Logger ===
 logger:
   level: info
   format: json
@@ -81,14 +43,41 @@ logger:
     enabled: true
     path: ./data/logs
 
-# === Features ===
 features:
+  afk: false
+  autoban: false
+  autofeeds: false
   automod: false
+  autothread: false
   birthdays: false
+  confessions: false
+  custom_commands: false
   economy: false
   engagement: false
+  embed_builder: false
+  forms: false
+  fun: false
   giveaways: false
+  highlights: false
+  info: false
+  invites: false
+  localization: false
+  logs: false
+  modmail: false
   polls: false
+  rank: false
+  reaction_roles: false
   reminders: false
+  reports: false
+  scheduler: false
+  server_stats: false
+  starboard: false
+  sticky_messages: false
+  sticky_roles: false
+  suggestion: false
+  tags: false
+  temps_voice: false
+  tickets: false
+  timed_roles: false
+  timers: false
   word_triggers: false
-  custom_commands: false

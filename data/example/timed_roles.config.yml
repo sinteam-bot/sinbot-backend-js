@@ -1,6 +1,11 @@
 # data/example/timed_roles.config.yml
 #
-# Template de configuration pour la feature "timed_roles" (Phase 10 G07).
+# Template de configuration pour la feature "timed_roles".
+# Généré automatiquement depuis src/modules/feature_timed-roles/config/defaults.js.
 #
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/timed_roles.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/timed_roles.config.yml  (override par guilde, gitignore).
 enabled: true
 check_interval_seconds: 30

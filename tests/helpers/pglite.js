@@ -1,9 +1,11 @@
-const { rawClient } = require('../../src/db/index.js');
+const db = require('../../src/db/index.js');
 
 async function ensureTestDbReady() {
-    if (rawClient && rawClient.ready) {
-        await rawClient.ready;
+    if (db && db.ready) {
+        await db.ready;
     }
 }
 
 module.exports = { ensureTestDbReady };
+
+

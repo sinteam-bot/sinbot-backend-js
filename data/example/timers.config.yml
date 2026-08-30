@@ -1,3 +1,11 @@
 # data/example/timers.config.yml
+#
+# Template de configuration pour la feature "timers".
+# Généré automatiquement depuis src/modules/feature_timers/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/timers.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/timers.config.yml  (override par guilde, gitignore).
 enabled: true
 max_timers_per_user: 10

@@ -1,9 +1,17 @@
 # data/example/confessions.config.yml
+#
+# Template de configuration pour la feature "confessions".
+# Généré automatiquement depuis src/modules/feature_confessions/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/confessions.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/confessions.config.yml  (override par guilde, gitignore).
 enabled: true
 channel_id: null
 review_channel_id: null
 require_approval: false
-color: '#FF69B4'
+color: "#FF69B4"
 allow_replies: true
 allow_images: true
 blocked_words: []

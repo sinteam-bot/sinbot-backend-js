@@ -1,0 +1,20 @@
+# data/example/custom_commands.config.yml
+#
+# Template de configuration pour la feature "custom_commands".
+# Généré automatiquement depuis src/modules/feature_custom-commands/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/custom_commands.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/custom_commands.config.yml  (override par guilde, gitignore).
+enabled: true
+allowed_roles: []
+reminders:
+  default_cooldown_seconds: 5
+  max_per_user: 20
+word_triggers:
+  default_cooldown_seconds: 10
+  default_match_type: exact
+custom_commands:
+  default_cooldown_seconds: 5
+  prefix: "!"

@@ -1,4 +1,12 @@
 # data/example/autofeeds.config.yml
+#
+# Template de configuration pour la feature "autofeeds".
+# Généré automatiquement depuis src/modules/feature_autofeeds/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/autofeeds.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/autofeeds.config.yml  (override par guilde, gitignore).
 enabled: true
 check_interval_minutes: 15
 max_feeds_per_guild: 10

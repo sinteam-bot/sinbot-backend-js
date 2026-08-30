@@ -1,3 +1,11 @@
 # data/example/forms.config.yml
+#
+# Template de configuration pour la feature "forms".
+# Généré automatiquement depuis src/modules/feature_forms/config/defaults.js.
+#
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/forms.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/forms.config.yml  (override par guilde, gitignore).
 enabled: true
 max_forms_per_guild: 20

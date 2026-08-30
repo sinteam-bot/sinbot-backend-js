@@ -1,7 +1,12 @@
 # data/example/fun.config.yml
 #
-# Template de configuration pour la feature "fun" (Phase 9 G04, G27).
+# Template de configuration pour la feature "fun".
+# Généré automatiquement depuis src/modules/feature_fun/config/defaults.js.
 #
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/fun.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/fun.config.yml  (override par guilde, gitignore).
 enabled: true
 allow_zalgo: true
 max_roll_dice: 100

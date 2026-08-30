@@ -1,7 +1,12 @@
 # data/example/tags.config.yml
 #
-# Template de configuration pour la feature "tags" (Phase 9 G41).
+# Template de configuration pour la feature "tags".
+# Généré automatiquement depuis src/modules/feature_tags/config/defaults.js.
 #
+# Ne PAS modifier manuellement ici : c'est un exemple versionné.
+# Pour modifier la config par défaut, édite plutôt :
+#   data/default/tags.config.yml  (modifiable par l'admin, gitignore)
+#   data/{guildId}/tags.config.yml  (override par guilde, gitignore).
 enabled: true
 allow_prefix: true
 max_tags_per_guild: 100
