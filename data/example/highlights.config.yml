@@ -1,0 +1,3 @@
+# data/example/highlights.config.yml
+enabled: true
+max_keywords_per_user: 15

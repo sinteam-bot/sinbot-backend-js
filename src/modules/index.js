@@ -51,6 +51,12 @@ const { TimedRolesModule } = require('./community_timed_roles/timed-roles.module
 const { RanksModule } = require('./community_ranks/ranks.module.js');
 const { AutobanModule } = require('./security_autoban/autoban.module.js');
 const { EmbedBuilderModule } = require('./util_embed_builder/embed-builder.module.js');
+const { LocalizationModule } = require('./util_localization/localization.module.js');
+const { FormsModule } = require('./util_forms/forms.module.js');
+const { HighlightsModule } = require('./util_highlights/highlights.module.js');
+const { AutofeedsModule } = require('./util_autofeeds/autofeeds.module.js');
+const { TimersModule } = require('./util_timers/timers.module.js');
+const { StickyMessagesModule } = require('./util_sticky_messages/sticky.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -98,7 +104,13 @@ const MODULE_FEATURE_MAP = {
     [TimedRolesModule.name]: 'timed_roles',
     [RanksModule.name]: 'ranks',
     [AutobanModule.name]: 'autoban',
-    [EmbedBuilderModule.name]: 'embed_builder'
+    [EmbedBuilderModule.name]: 'embed_builder',
+    [LocalizationModule.name]: 'localization',
+    [FormsModule.name]: 'forms',
+    [HighlightsModule.name]: 'highlights',
+    [AutofeedsModule.name]: 'autofeeds',
+    [TimersModule.name]: 'timers',
+    [StickyMessagesModule.name]: 'sticky_messages'
 };
 
 const ALL_MODULES = [
@@ -137,7 +149,13 @@ const ALL_MODULES = [
     TimedRolesModule,
     RanksModule,
     AutobanModule,
-    EmbedBuilderModule
+    EmbedBuilderModule,
+    LocalizationModule,
+    FormsModule,
+    HighlightsModule,
+    AutofeedsModule,
+    TimersModule,
+    StickyMessagesModule
 ];
 
 /**

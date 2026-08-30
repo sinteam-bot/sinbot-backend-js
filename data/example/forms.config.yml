@@ -1,0 +1,3 @@
+# data/example/forms.config.yml
+enabled: true
+max_forms_per_guild: 20

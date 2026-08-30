@@ -1,0 +1,3 @@
+# data/example/sticky_messages.config.yml
+enabled: true
+cooldown_messages: 1

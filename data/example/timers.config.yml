@@ -1,0 +1,3 @@
+# data/example/timers.config.yml
+enabled: true
+max_timers_per_user: 10
