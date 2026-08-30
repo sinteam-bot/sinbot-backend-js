@@ -1,3 +1,4 @@
+const { Controller, Get, Post } = require('../../../core/index.js');
 const { PollService } = require('../services/poll.service.js');
 
 class PollsController {
@@ -69,3 +70,12 @@ class PollsController {
         }
     }
 }
+
+Controller('/api/polls')(PollsController);
+Get('/')(PollsController.prototype, 'listPolls');
+Get('/:id')(PollsController.prototype, 'getPoll');
+Post('/')(PollsController.prototype, 'createPoll');
+Post('/:id/end')(PollsController.prototype, 'endPoll');
+Get('/:id/results')(PollsController.prototype, 'pollResults');
+
+module.exports = { PollsController };

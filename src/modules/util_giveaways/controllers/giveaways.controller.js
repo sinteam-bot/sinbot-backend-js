@@ -101,3 +101,13 @@ class GiveawaysController {
         }
     }
 }
+
+Controller('/api/giveaways')(GiveawaysController);
+Get('/')(GiveawaysController.prototype, 'listGiveaways');
+Get('/:id')(GiveawaysController.prototype, 'getGiveaway');
+Post('/')(GiveawaysController.prototype, 'createGiveaway');
+Post('/:id/end')(GiveawaysController.prototype, 'endGiveaway');
+Post('/:id/cancel')(GiveawaysController.prototype, 'cancelGiveaway');
+Get('/:id/entries')(GiveawaysController.prototype, 'listEntries');
+
+module.exports = { GiveawaysController };
