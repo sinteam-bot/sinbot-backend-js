@@ -50,8 +50,14 @@ features:
   automod: false
   autothread: false
   birthdays: false
+  bump_reminder: false
+  cards: false
+  captcha: false
   confessions: false
+  game_counter: false
+  game_countdown: false
   custom_commands: false
+  daily_message: false
   economy: false
   engagement: false
   embed_builder: false
@@ -65,19 +71,23 @@ features:
   logs: false
   modmail: false
   polls: false
-  rank: false
+  ranks: false
   reaction_roles: false
   reminders: false
   reports: false
   scheduler: false
   server_stats: false
   starboard: false
+  startup_notifier: false
   sticky_messages: false
   sticky_roles: false
+  scheduler: false
   suggestion: false
   tags: false
-  temps_voice: false
+  temp_voice: false
   tickets: false
   timed_roles: false
   timers: false
+  xp: false
   word_triggers: false
+  welcome: false

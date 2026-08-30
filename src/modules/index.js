@@ -72,8 +72,8 @@ declareExistingFeatures();
  * (fail-open : on ne bloque pas un module inconnu de la config).
  */
 const MODULE_FEATURE_MAP = {
-    [RoadToInfiniteModule.name]: 'counter',
-    [CountDownModule.name]: 'countdown',
+    [RoadToInfiniteModule.name]: 'game_counter',
+    [CountDownModule.name]: 'game_countdown',
     [CaptchaModule.name]: 'captcha',
     [StartupNotifierModule.name]: 'startup_notifier',
     [BumpReminderModule.name]: 'bump_reminder',
@@ -87,7 +87,7 @@ const MODULE_FEATURE_MAP = {
     [GiveawaysModule.name]: 'giveaways',
     [PollsModule.name]: 'polls',
     [BirthdaysModule.name]: 'birthdays',
-    [ReactionRolesModule.name]: 'reaction-roles',
+    [ReactionRolesModule.name]: 'reaction_roles',
     [ReportsModule.name]: 'reports',
     [TempVoiceModule.name]: 'temp_voice',
     [EconomyModule.name]: 'economy',
