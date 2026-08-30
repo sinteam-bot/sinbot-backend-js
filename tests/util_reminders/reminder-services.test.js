@@ -4,8 +4,8 @@
  * Couvre : createReminder, listByUser, cancel, get, tick, dispatch
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert');
+import { test, describe } from 'vitest';
+import assert from 'node:assert';
 const { ReminderService } = require('../../src/modules/util_reminders/services/reminder.service.js');
 
 function makeService({ repo } = {}) {

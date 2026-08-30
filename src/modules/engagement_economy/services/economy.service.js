@@ -123,7 +123,9 @@ class EconomyService {
         }
 
         const baseReward = config.daily_reward || 100;
-        const activeBoost = await this.repo.getActiveBoost(guildId, userId);
+        const activeBoost = typeof this.repo?.getActiveBoost === 'function'
+            ? await this.repo.getActiveBoost(guildId, userId)
+            : null;
         const multiplier = activeBoost ? activeBoost.multiplier : 1.0;
         const finalReward = Math.round(baseReward * multiplier);
 
@@ -158,7 +160,9 @@ class EconomyService {
         const maxReward = Math.max(config.work_max_reward ?? 300, minReward);
         const baseReward = Math.floor(Math.random() * (maxReward - minReward + 1)) + minReward;
 
-        const activeBoost = await this.repo.getActiveBoost(guildId, userId);
+        const activeBoost = typeof this.repo?.getActiveBoost === 'function'
+            ? await this.repo.getActiveBoost(guildId, userId)
+            : null;
         const multiplier = activeBoost ? activeBoost.multiplier : 1.0;
         const finalReward = Math.round(baseReward * multiplier);
 

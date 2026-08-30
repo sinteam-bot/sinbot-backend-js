@@ -1,11 +1,11 @@
 /**
  * src/modules/community_tickets/commands/ticket-tag.cmd.js
  *
- * Commandes Slash /ticket-tag, stats et handler des avis étoiles (Module P4).
+ * Commandes Slash /ticket-tag pour les réponses prédéfinies (Module P4).
  */
 
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { Command, Button } = require('../../../core/index.js');
+const { Command } = require('../../../core/index.js');
 const { TicketService } = require('../services/ticket.service.js');
 
 class TicketTagCommands {
@@ -74,28 +74,6 @@ class TicketTagCommands {
                 return interaction.reply({ content: '❌ Sous-commande inconnue', ephemeral: true });
         }
     }
-
-    // =================== RATINGS BUTTON HANDLER ===================
-
-    async handleRateButton(interaction) {
-        // customId format: ticket:rate:<ticketId>:<score>
-        const parts = interaction.customId.split(':');
-        const ticketId = parts[2];
-        const score = parseInt(parts[3], 10) || 5;
-
-        await this.service.addRating({
-            ticketId,
-            guildId: interaction.guild?.id || 'dm',
-            userId: interaction.user.id,
-            rating: score
-        });
-
-        const stars = '⭐'.repeat(score);
-        return interaction.update({
-            content: `🙏 Merci pour votre retour ! Votre note de **${score}/5** (${stars}) a bien été enregistrée.`,
-            components: []
-        });
-    }
 }
 
 const tagBuilder = new SlashCommandBuilder()
@@ -123,7 +101,5 @@ const tagBuilder = new SlashCommandBuilder()
     );
 
 Command({ name: 'ticket-tag', builder: tagBuilder })(TicketTagCommands.prototype, 'executeMain');
-
-Button('ticket:rate')(TicketTagCommands.prototype, 'handleRateButton');
 
 module.exports = { TicketTagCommands };

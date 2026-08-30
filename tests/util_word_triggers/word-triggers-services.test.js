@@ -10,8 +10,8 @@
  *  - loadCache
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert');
+import { test, describe } from 'vitest';
+import assert from 'node:assert';
 const { WordTriggerService } = require('../../src/modules/util_word_triggers/services/word-trigger.service.js');
 
 function makeService({ repo } = {}) {
@@ -53,11 +53,10 @@ describe('WordTriggerService', () => {
             assert.strictEqual(r.error, 'missing_params');
         });
 
-        test('rejette regex matchType', async () => {
+        test('accepte regex matchType valide', async () => {
             const svc = makeService({ repo: makeMockRepo() });
-            const r = await svc.create({ guildId: 'g1', triggerText: 'a', matchType: 'regex', responseText: 'A' });
-            assert.strictEqual(r.ok, false);
-            assert.strictEqual(r.error, 'regex_not_supported_yet');
+            const r = await svc.create({ guildId: 'g1', triggerText: '^ping.*', matchType: 'regex', responseText: 'A' });
+            assert.strictEqual(r.ok, true);
         });
 
         test('rejette sans responseText ni responseEmbed', async () => {

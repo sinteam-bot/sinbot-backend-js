@@ -68,6 +68,25 @@ class TicketInteractionListener {
         if (customId === 'ticket:claim') {
             return this._handleClaimButton(interaction, config);
         }
+
+        if (customId.startsWith('ticket:rate:')) {
+            const parts = customId.split(':');
+            const ticketId = parts[2];
+            const score = parseInt(parts[3], 10) || 5;
+
+            await this.ticketService.addRating({
+                ticketId,
+                guildId: interaction.guild?.id || 'dm',
+                userId: interaction.user.id,
+                rating: score
+            });
+
+            const stars = '⭐'.repeat(score);
+            return interaction.update({
+                content: `🙏 Merci pour votre retour ! Votre note de **${score}/5** (${stars}) a bien été enregistrée.`,
+                components: []
+            });
+        }
     }
 
     async _handleModal(interaction, config) {

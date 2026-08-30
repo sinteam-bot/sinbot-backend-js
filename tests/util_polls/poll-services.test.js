@@ -12,8 +12,8 @@
  *  - buildEmbed : embed avec question, options, résultats si showResults
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert');
+import { test, describe } from 'vitest';
+import assert from 'node:assert';
 const { PollService } = require('../../src/modules/util_polls/services/poll.service.js');
 
 function makeService({ repo } = {}) {
@@ -236,9 +236,5 @@ describe('PollService', () => {
             assert.strictEqual(t.perOption[1].count, 1); // option 1 : 1 vote
             assert.strictEqual(t.perOption[2].count, 0); // option 2 : 0 vote
         });
-    });
-
-    describe('buildEmbed', () => {
-        // test skip (EmbedBuilder data instable en environnement node:test isolé)
     });
 });

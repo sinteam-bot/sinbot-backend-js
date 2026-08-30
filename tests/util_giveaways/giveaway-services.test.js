@@ -12,8 +12,8 @@
  *  - buildUpdatedEmbed : embed avec compteur d'entrées
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert');
+import { test, describe } from 'vitest';
+import assert from 'node:assert';
 const { GiveawayService } = require('../../src/modules/util_giveaways/services/giveaway.service.js');
 
 function makeService({ repo } = {}) {

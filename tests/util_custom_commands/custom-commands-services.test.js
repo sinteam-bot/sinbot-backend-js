@@ -9,8 +9,8 @@
  *  - loadCache
  */
 
-const { test, describe } = require('node:test');
-const assert = require('node:assert');
+import { test, describe } from 'vitest';
+import assert from 'node:assert';
 const { CustomCommandService } = require('../../src/modules/util_custom_commands/services/custom-command.service.js');
 
 function makeService({ repo } = {}) {
