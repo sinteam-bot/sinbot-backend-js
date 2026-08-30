@@ -101,7 +101,8 @@ class CaptchaRepository {
             is_verified: r.captcha.isVerified,
             created_at: r.captcha.createdAt,
             expires_at: r.captcha.expiresAt,
-            verified_at: r.captcha.verifiedAt
+            verified_at: r.captcha.verifiedAt,
+            expired_at: r.captcha.expiredAt
         }));
     }
 

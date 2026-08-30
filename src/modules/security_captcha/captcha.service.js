@@ -510,11 +510,14 @@ class CaptchaService {
         const maxAttempts = captchaConfig.max_attempts || 3;
 
         const captchas = rawCaptchas.map(c => {
-            const isExpired = c.expires_at ? new Date() > new Date(c.expires_at) : false;
+            const isExpired = c.expired_at
+                || (c.expires_at ? new Date() > new Date(c.expires_at) : false);
             let status = 'pending';
             if (c.is_verified === 1) status = 'verified';
             else if (c.attempts >= maxAttempts) status = 'failed';
             else if (isExpired) status = 'expired';
+
+            const isChannelDeleted = !!(c.channel_deleted_at || c.expired_at);
 
             return {
                 id: `${c.user_id}_${c.guild_id}`,
@@ -529,10 +532,11 @@ class CaptchaService {
                 channelId: c.channel_id,
                 channelName: c.channel_name || (c.username ? `captcha-${c.username.toLowerCase()}` : `captcha-${c.user_id}`),
                 channelDeletedAt: c.channel_deleted_at || null,
-                isChannelDeleted: !!c.channel_deleted_at,
+                isChannelDeleted,
                 createdAt: c.created_at,
                 expiresAt: c.expires_at,
-                verifiedAt: c.verified_at
+                verifiedAt: c.verified_at,
+                expiredAt: c.expired_at || null
             };
         });
 
