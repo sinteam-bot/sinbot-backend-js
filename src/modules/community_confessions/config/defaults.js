@@ -1,0 +1,10 @@
+module.exports = {
+    enabled: true,
+    channel_id: null,
+    review_channel_id: null,
+    require_approval: false,
+    color: '#FF69B4',
+    allow_replies: true,
+    allow_images: true,
+    blocked_words: []
+};

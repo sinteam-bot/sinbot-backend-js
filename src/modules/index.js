@@ -57,6 +57,7 @@ const { HighlightsModule } = require('./util_highlights/highlights.module.js');
 const { AutofeedsModule } = require('./util_autofeeds/autofeeds.module.js');
 const { TimersModule } = require('./util_timers/timers.module.js');
 const { StickyMessagesModule } = require('./util_sticky_messages/sticky.module.js');
+const { ConfessionsModule } = require('./community_confessions/confessions.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -110,7 +111,8 @@ const MODULE_FEATURE_MAP = {
     [HighlightsModule.name]: 'highlights',
     [AutofeedsModule.name]: 'autofeeds',
     [TimersModule.name]: 'timers',
-    [StickyMessagesModule.name]: 'sticky_messages'
+    [StickyMessagesModule.name]: 'sticky_messages',
+    [ConfessionsModule.name]: 'confessions'
 };
 
 const ALL_MODULES = [
@@ -155,7 +157,8 @@ const ALL_MODULES = [
     HighlightsModule,
     AutofeedsModule,
     TimersModule,
-    StickyMessagesModule
+    StickyMessagesModule,
+    ConfessionsModule
 ];
 
 /**
