@@ -46,7 +46,7 @@ class TicketManagerService {
             channel = await guild.channels.create({
                 name: baseName,
                 type: ChannelType.GuildText,
-                parent: await this._resolveCategory(guild, categoryConfig),
+                parent: await this._resolveCategory(guild, categoryConfig, config),
                 permissionOverwrites: overwrites,
                 topic: `Ticket de ${user.tag} (${user.id}) — ${subject || category}`,
                 reason: `Ticket ouvert par ${user.tag} (${user.id})`
@@ -99,14 +99,16 @@ class TicketManagerService {
     }
 
     async _resolveParent(guild, config) {
-        const id = config?.panel?.channel_id;
+        const id = config?.panel?.channel_id || config?.channel_id;
         if (!id) return null;
         return await guild.channels.fetch(id).catch(() => null);
     }
 
-    async _resolveCategory(guild, categoryConfig) {
-        if (!categoryConfig?.category_id) return null;
-        return await guild.channels.fetch(categoryConfig.category_id).catch(() => null);
+    async _resolveCategory(guild, categoryConfig, config = null) {
+        const catId = categoryConfig?.category_id || categoryConfig?.categoryId || config?.category_id || config?.categoryId;
+        if (!catId) return null;
+        const cat = await guild.channels.fetch(catId).catch(() => null);
+        return cat && cat.type === ChannelType.GuildCategory ? cat : null;
     }
 
     /**
