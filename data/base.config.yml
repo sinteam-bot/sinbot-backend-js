@@ -81,7 +81,6 @@ features:
   startup_notifier: false
   sticky_messages: false
   sticky_roles: false
-  scheduler: false
   suggestion: false
   tags: false
   temp_voice: false
