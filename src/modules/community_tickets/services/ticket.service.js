@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 const { Injectable } = require('../../../core/index.js');
 const logger = require('../../../utils/logger.js');
+const { TicketRepository } = require('./ticket.repository.js');
 
 function newId() {
     return crypto.randomUUID();
@@ -17,14 +18,21 @@ const STATUS = {
 };
 
 class TicketService {
-    static inject = [];
+    static inject = [TicketRepository];
 
-    constructor() {
-        this.repo = null;
+    constructor(repo = null) {
+        this.repo = repo || new TicketRepository();
     }
 
     setRepo(repo) {
         this.repo = repo;
+    }
+
+    getRepo() {
+        if (!this.repo) {
+            this.repo = new TicketRepository();
+        }
+        return this.repo;
     }
 
     /**
@@ -36,7 +44,7 @@ class TicketService {
         }
         const now = Date.now();
         const id = newId();
-        await this.repo.insert({
+        await this.getRepo().insert({
             id, guildId, channelId, userId,
             category: category || 'support',
             subject: subject || null,
@@ -49,58 +57,58 @@ class TicketService {
     }
 
     async get(id) {
-        return this.repo.findById(id);
+        return this.getRepo().findById(id);
     }
 
     async getByChannel(channelId) {
-        return this.repo.findByChannelId(channelId);
+        return this.getRepo().findByChannelId(channelId);
     }
 
     async list({ guildId, status, userId, limit = 50, offset = 0 } = {}) {
-        return this.repo.list({ guildId, status, userId, limit, offset });
+        return this.getRepo().list({ guildId, status, userId, limit, offset });
     }
 
     async count({ guildId, status, userId } = {}) {
-        return this.repo.count({ guildId, status, userId });
+        return this.getRepo().count({ guildId, status, userId });
     }
 
     async claim(id, modUserId) {
-        await this.repo.update(id, { status: STATUS.CLAIMED, claimedBy: modUserId, updatedAt: Date.now() });
-        return this.repo.findById(id);
+        await this.getRepo().update(id, { status: STATUS.CLAIMED, claimedBy: modUserId, updatedAt: Date.now() });
+        return this.getRepo().findById(id);
     }
 
     async unclaim(id) {
-        await this.repo.update(id, { status: STATUS.OPEN, claimedBy: null, updatedAt: Date.now() });
-        return this.repo.findById(id);
+        await this.getRepo().update(id, { status: STATUS.OPEN, claimedBy: null, updatedAt: Date.now() });
+        return this.getRepo().findById(id);
     }
 
     async close(id, closerUserId) {
         const now = Date.now();
-        await this.repo.update(id, {
+        await this.getRepo().update(id, {
             status: STATUS.CLOSED,
             closedBy: closerUserId,
             closedAt: now,
             updatedAt: now
         });
-        return this.repo.findById(id);
+        return this.getRepo().findById(id);
     }
 
     async reopen(id) {
-        await this.repo.update(id, {
+        await this.getRepo().update(id, {
             status: STATUS.OPEN,
             closedBy: null,
             closedAt: null,
             updatedAt: Date.now()
         });
-        return this.repo.findById(id);
+        return this.getRepo().findById(id);
     }
 
     async deleteByChannelId(channelId) {
-        return this.repo.deleteByChannelId(channelId);
+        return this.getRepo().deleteByChannelId(channelId);
     }
 
     async countOpenByUser(guildId, userId) {
-        const result = await this.repo.count({ guildId, userId, status: STATUS.OPEN });
+        const result = await this.getRepo().count({ guildId, userId, status: STATUS.OPEN });
         return result;
     }
 
@@ -110,7 +118,7 @@ class TicketService {
     async logMessage({ ticketId, authorId, content, attachments = [], isStaff = false }) {
         if (!ticketId) return null;
         const id = newId();
-        await this.repo.insertMessage({
+        await this.getRepo().insertMessage({
             id, ticketId, authorId,
             content: content || null,
             attachments: JSON.stringify(attachments),
@@ -121,7 +129,7 @@ class TicketService {
     }
 
     async getMessages(ticketId, limit = 500) {
-        const rows = await this.repo.findMessages(ticketId, limit);
+        const rows = await this.getRepo().findMessages(ticketId, limit);
         return rows.map(r => ({
             ...r,
             attachments: r.attachments ? safeParse(r.attachments, []) : []
@@ -132,7 +140,7 @@ class TicketService {
 
     async addRating({ ticketId, guildId, userId, staffId = null, rating, feedback = null }) {
         const score = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
-        return this.repo.addRating({
+        return this.getRepo().addRating({
             ticketId,
             guildId,
             userId,
@@ -143,52 +151,52 @@ class TicketService {
     }
 
     async getRatingStats(guildId) {
-        return this.repo.getRatingStats(guildId);
+        return this.getRepo().getRatingStats(guildId);
     }
 
     async listRatings(guildId, limit = 50) {
-        return this.repo.listRatings(guildId, limit);
+        return this.getRepo().listRatings(guildId, limit);
     }
 
     // =================== PANELS ===================
 
     async createPanel(data) {
-        return this.repo.createPanel(data);
+        return this.getRepo().createPanel(data);
     }
 
     async getPanel(guildId, name) {
-        return this.repo.getPanel(guildId, name);
+        return this.getRepo().getPanel(guildId, name);
     }
 
     async getPanelById(id) {
-        return this.repo.getPanelById(id);
+        return this.getRepo().getPanelById(id);
     }
 
     async listPanels(guildId) {
-        return this.repo.listPanels(guildId);
+        return this.getRepo().listPanels(guildId);
     }
 
     async deletePanel(guildId, name) {
-        await this.repo.deletePanel(guildId, name);
+        await this.getRepo().deletePanel(guildId, name);
         return { ok: true };
     }
 
     // =================== TAGS ===================
 
     async setTag(data) {
-        return this.repo.setTag(data);
+        return this.getRepo().setTag(data);
     }
 
     async getTag(guildId, name) {
-        return this.repo.getTag(guildId, name);
+        return this.getRepo().getTag(guildId, name);
     }
 
     async listTags(guildId) {
-        return this.repo.listTags(guildId);
+        return this.getRepo().listTags(guildId);
     }
 
     async deleteTag(guildId, name) {
-        await this.repo.deleteTag(guildId, name);
+        await this.getRepo().deleteTag(guildId, name);
         return { ok: true };
     }
 
@@ -202,9 +210,9 @@ class TicketService {
         const now = Date.now();
         let closedCount = 0;
 
-        const openTickets = await this.repo.list({ status: STATUS.OPEN, limit: 100 });
+        const openTickets = await this.getRepo().list({ status: STATUS.OPEN, limit: 100 });
         for (const t of openTickets) {
-            const messages = await this.repo.findMessages(t.id, 1);
+            const messages = await this.getRepo().findMessages(t.id, 1);
             const lastMsg = messages[messages.length - 1];
             const lastActive = lastMsg ? Number(lastMsg.created_at) : t.updatedAt;
 

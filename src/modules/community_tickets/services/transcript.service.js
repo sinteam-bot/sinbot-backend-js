@@ -7,22 +7,33 @@
 
 const { EmbedBuilder } = require('discord.js');
 const { Injectable } = require('../../../core/index.js');
+const { TicketService } = require('./ticket.service.js');
 
 class TranscriptService {
-    constructor() {
-        this.ticketService = null;
+    static inject = [TicketService];
+
+    constructor(ticketService = null) {
+        this.ticketService = ticketService || new TicketService();
     }
 
     setTicketService(svc) {
         this.ticketService = svc;
     }
 
+    getTicketService() {
+        if (!this.ticketService) {
+            this.ticketService = new TicketService();
+        }
+        return this.ticketService;
+    }
+
     /**
      * Génère un transcript HTML pour un ticket
      */
     async generateHTML(ticketId) {
-        const messages = await this.ticketService.getMessages(ticketId, 1000);
-        const ticket = await this.ticketService.get(ticketId);
+        const ticketSvc = this.getTicketService();
+        const messages = await ticketSvc.getMessages(ticketId, 1000);
+        const ticket = await ticketSvc.get(ticketId);
         if (!ticket) return null;
 
         const escape = (s) => String(s || '')
@@ -95,7 +106,8 @@ ${rows || '<em>Aucun message.</em>'}
      */
     async publishToTranscriptChannel(guild, ticketId, transcriptChannelId) {
         if (!transcriptChannelId) return null;
-        const ticket = await this.ticketService.get(ticketId);
+        const ticketSvc = this.getTicketService();
+        const ticket = await ticketSvc.get(ticketId);
         if (!ticket) return null;
         const channel = await guild.channels.fetch(transcriptChannelId).catch(() => null);
         if (!channel || !channel.isTextBased()) return null;
@@ -110,6 +122,6 @@ ${rows || '<em>Aucun message.</em>'}
     }
 }
 
-module.exports = { TranscriptService };
-
 Injectable()(TranscriptService);
+
+module.exports = { TranscriptService };
