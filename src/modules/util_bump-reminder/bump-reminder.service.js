@@ -11,11 +11,31 @@ class BumpReminderService {
         this.repo = repository;
     }
 
-    getConfig() {
+    getConfig(guildId = null) {
+        if (!guildId && typeof process !== 'undefined') {
+            guildId = process.env.GUILD_ID || '1543570824542298122';
+        }
+        let bumpConf = {};
+        if (guildId) {
+            try {
+                const fs = require('fs');
+                const path = require('path');
+                const yaml = require('yaml');
+                const guildPath = path.resolve(__dirname, `../../../data/${guildId}/bump_reminder.config.yml`);
+                const guildPathHyphen = path.resolve(__dirname, `../../../data/${guildId}/bump-reminder.config.yml`);
+                if (fs.existsSync(guildPath)) {
+                    bumpConf = yaml.parse(fs.readFileSync(guildPath, 'utf8')) || {};
+                } else if (fs.existsSync(guildPathHyphen)) {
+                    bumpConf = yaml.parse(fs.readFileSync(guildPathHyphen, 'utf8')) || {};
+                }
+            } catch (_) {}
+        }
         const currentConfig = getConfig ? getConfig() : config;
         const schedulerConf = currentConfig.scheduler || {};
         const taskConf = schedulerConf.tasks?.bump_reminders || {};
-        const bumpConf = currentConfig.bump_reminder || currentConfig.bump_reminders || currentConfig.bump || {};
+        if (!bumpConf || Object.keys(bumpConf).length === 0) {
+            bumpConf = currentConfig.bump_reminder || currentConfig.bump_reminders || currentConfig.bump || {};
+        }
 
         const isEnabled = bumpConf.enabled !== undefined
             ? bumpConf.enabled !== false
@@ -260,9 +280,12 @@ class BumpReminderService {
      * Retourne l'état actuel du prochain bump pour l'API / Dashboard
      */
     async getBumpStatus(guildId = null) {
+        if (!guildId && typeof process !== 'undefined') {
+            guildId = process.env.GUILD_ID || '1543570824542298122';
+        }
         const lastBump = await this.repo.getLastBump(guildId);
         const history = await this.repo.getHistory(20);
-        const conf = this.getConfig();
+        const conf = this.getConfig(guildId);
 
         const cooldownHours = Number(conf.reminder_cooldown_hours) || 2;
 

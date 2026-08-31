@@ -54,8 +54,14 @@ class FeatureRegistry {
             onDisable: definition.onDisable || null,
             requires: definition.requires || []
         });
+        const autoHyphen = name.replace(/_/g, '-');
+        const autoUnder = name.replace(/-/g, '_');
+        this._aliases.set(autoHyphen, name);
+        this._aliases.set(autoUnder, name);
         for (const alias of (definition.aliases || [])) {
             this._aliases.set(alias, name);
+            this._aliases.set(alias.replace(/_/g, '-'), name);
+            this._aliases.set(alias.replace(/-/g, '_'), name);
         }
         console.log(`📌 [FeatureRegistry] Feature déclarée: ${name}`);
     }
@@ -64,11 +70,28 @@ class FeatureRegistry {
      * Résout un nom de feature (potentiellement alias) vers le nom canonique.
      */
     _resolveName(name) {
-        const resolved = this._aliases.get(name) || name;
-        if (resolved !== name) {
-            console.log(`🔁 [FeatureRegistry] Alias résolu: '${name}' → '${resolved}'`);
+        if (!name || typeof name !== 'string') return name;
+        if (this._aliases.has(name)) {
+            return this._aliases.get(name);
         }
-        return resolved;
+        if (this.features.has(name)) {
+            return name;
+        }
+        const hyphen = name.replace(/_/g, '-');
+        if (this.features.has(hyphen)) {
+            return hyphen;
+        }
+        if (this._aliases.has(hyphen)) {
+            return this._aliases.get(hyphen);
+        }
+        const under = name.replace(/-/g, '_');
+        if (this.features.has(under)) {
+            return under;
+        }
+        if (this._aliases.has(under)) {
+            return this._aliases.get(under);
+        }
+        return name;
     }
 
     /**
