@@ -228,6 +228,18 @@ async function verifyChannelBelongsToGuild(client, channelId) {
 
 const rateLimit = require('express-rate-limit');
 
+function getClientIp(req) {
+    try {
+        const xff = req.headers && req.headers['x-forwarded-for'];
+        if (xff) {
+            const first = String(xff).split(',')[0].trim();
+            if (first) return first;
+        }
+        if (req.ip && typeof req.ip === 'string') return req.ip;
+    } catch (_) {}
+    return req.socket?.remoteAddress || req.connection?.remoteAddress || '127.0.0.1';
+}
+
 /**
  * Crée les middlewares de rate limiting pour les différentes zones de l'API.
  * @returns {object} Un objet contenant les middlewares nommés
@@ -250,6 +262,8 @@ function createRateLimiters() {
             max: 120,
             standardHeaders: true,
             legacyHeaders: false,
+            keyGenerator: (req) => getClientIp(req),
+            validate: { trustProxy: false },
             handler: rateLimitResponse,
             skip: (req) => req.path === '/health'
         }),
@@ -261,6 +275,8 @@ function createRateLimiters() {
             max: 5,
             standardHeaders: true,
             legacyHeaders: false,
+            keyGenerator: (req) => getClientIp(req),
+            validate: { trustProxy: false },
             handler: rateLimitResponse,
             skipSuccessfulRequests: true
         }),
@@ -272,6 +288,8 @@ function createRateLimiters() {
             max: 10,
             standardHeaders: true,
             legacyHeaders: false,
+            keyGenerator: (req) => getClientIp(req),
+            validate: { trustProxy: false },
             handler: rateLimitResponse
         }),
 
@@ -282,6 +300,8 @@ function createRateLimiters() {
             max: 20,
             standardHeaders: true,
             legacyHeaders: false,
+            keyGenerator: (req) => getClientIp(req),
+            validate: { trustProxy: false },
             handler: rateLimitResponse
         }),
 
@@ -292,6 +312,8 @@ function createRateLimiters() {
             max: 5,
             standardHeaders: true,
             legacyHeaders: false,
+            keyGenerator: (req) => getClientIp(req),
+            validate: { trustProxy: false },
             handler: rateLimitResponse
         }),
 
@@ -302,6 +324,8 @@ function createRateLimiters() {
             max: 10,
             standardHeaders: true,
             legacyHeaders: false,
+            keyGenerator: (req) => getClientIp(req),
+            validate: { trustProxy: false },
             handler: rateLimitResponse
         })
     };

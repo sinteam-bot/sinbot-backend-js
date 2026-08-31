@@ -20,11 +20,23 @@ const { requireRole } = require('../utils/security.js');
 const logger = require('../utils/logger.js');
 
 function resolveGuildId(req) {
-    return (req.body && req.body.guildId)
+    let gid = (req.body && req.body.guildId)
+        || (req.body && req.body.guild_id)
         || (req.query && req.query.guild_id)
         || (req.query && req.query.guildId)
+        || (req.headers && req.headers['x-guild-id'])
+        || (req.headers && req.headers['x-guild'])
         || process.env.GUILD_ID
         || null;
+
+    if (!gid || gid === ':guild()' || gid === ':guild' || gid === 'default') {
+        try {
+            const { container } = require('../core/index.js');
+            const client = container.has('Client') ? container.resolve('Client') : null;
+            gid = client?.guilds?.cache?.first()?.id || null;
+        } catch (_) {}
+    }
+    return gid;
 }
 
 function createFeaturesRouter() {
