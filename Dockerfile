@@ -1,46 +1,41 @@
 # ==============================================================================
-# STAGE 1 : Compilation du Frontend Nuxt (Vue.js) en Statique
-# ==============================================================================
-FROM node:24-alpine AS frontend-builder
-
-WORKDIR /app
-
-# Copie des dépendances du frontend
-COPY frontend/package*.json ./frontend/
-
-# Installation des dépendances Nuxt
-RUN cd frontend && npm install
-
-# Copie des sources du frontend
-COPY frontend/ ./frontend/
-
-# Génération statique du frontend Nuxt vers public/
-RUN cd frontend && npm run generate
-
-# ==============================================================================
-# STAGE 2 : Construction de l'Image de Production du Bot
+# Image de Production du Bot Discord & API Express
 # ==============================================================================
 FROM node:24-alpine
 
 WORKDIR /app
 
-# Outils de compilation nécessaires pour better-sqlite3 (module C++ natif)
-RUN apk add --no-cache python3 make g++
+# Dépendances système d'exécution et outils de compilation pour canvas / modules natifs
+RUN apk add --no-cache \
+    cairo \
+    pango \
+    jpeg \
+    giflib \
+    librsvg \
+    pixman \
+    && apk add --no-cache --virtual .build-deps \
+    python3 \
+    make \
+    g++ \
+    cairo-dev \
+    pango-dev \
+    jpeg-dev \
+    giflib-dev \
+    librsvg-dev \
+    pixman-dev
 
-# Copie des fichiers de dépendances du bot
-COPY package*.json ./
+# Activation de corepack et installation de pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Copie des fichiers de dépendances
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
 
 # Installation des dépendances de production uniquement
-RUN npm ci --only=production
+RUN pnpm install --frozen-lockfile --prod \
+    && apk del .build-deps
 
-# Suppression des outils de compilation pour alléger l'image
-RUN apk del python3 make g++
-
-# Copie du code source backend et de la configuration
+# Copie du code source backend et des données de configuration de base
 COPY . .
-
-# Copie des fichiers statiques compilés depuis l'étape frontend-builder
-COPY --from=frontend-builder /app/public ./public
 
 # Variables de build pour le suivi de version Git
 ARG GIT_COMMIT_SHA="dev"
@@ -48,14 +43,14 @@ ARG BUILD_DATE=""
 ARG GITHUB_REPO="sinteam-bot/chienne-bot"
 
 # Variables d'environnement par défaut
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
-ENV BUILD_DATE=${BUILD_DATE}
-ENV GITHUB_REPO=${GITHUB_REPO}
+ENV NODE_ENV=production \
+    PORT=3000 \
+    GIT_COMMIT_SHA=${GIT_COMMIT_SHA} \
+    BUILD_DATE=${BUILD_DATE} \
+    GITHUB_REPO=${GITHUB_REPO}
 
-# Exposition du port du serveur Express (Webhooks / API / Dashboard)
+# Exposition du port API Webhook & REST
 EXPOSE 3000
 
-# Commande de démarrage du bot Discord
+# Commande de démarrage
 CMD ["node", "src/index.js"]

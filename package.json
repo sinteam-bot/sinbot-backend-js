@@ -1,13 +1,12 @@
 {
-  "name": "bot",
+  "name": "bot-backend",
   "version": "1.0.0",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
     "deploy": "node src/deploy-commands.js",
     "dump": "node src/dumpDiscord.js",
-    "build:ui": "cd frontend && npm install && npm run generate",
-    "dev:ui": "cd frontend && npm run dev",
     "migrate:sqlite-to-pg": "node scripts/migrate-sqlite-to-postgres.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -45,8 +44,5 @@
     "@vitest/coverage-v8": "^3.2.7",
     "drizzle-kit": "^0.31.10",
     "vitest": "^3.2.7"
-  },
-  "allowScripts": {
-    "esbuild@0.28.2": true
   }
 }
