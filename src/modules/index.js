@@ -60,6 +60,7 @@ const { StickyMessagesModule } = require('./util_sticky_messages/sticky.module.j
 const { ConfessionsModule } = require('./community_confessions/confessions.module.js');
 const { AutoThreadModule } = require('./automation_autothread/autothread.module.js');
 const { ModMailModule } = require('./community_modmail/modmail.module.js');
+const { TeamSpeakModule } = require('./util_teamspeak/teamspeak.module.js');
 
 const { declareExistingFeatures } = require('./feature-declarations.js');
 declareExistingFeatures();
@@ -116,7 +117,8 @@ const MODULE_FEATURE_MAP = {
     [TimersModule.name]: 'timers',
     [StickyMessagesModule.name]: 'sticky_messages',
     [WelcomeModule.name]: 'welcome',
-    [WordTriggersModule.name]: 'word_triggers'
+    [WordTriggersModule.name]: 'word_triggers',
+    [TeamSpeakModule.name]: 'teamspeak'
 };
 
 const ALL_MODULES = [
@@ -164,7 +166,8 @@ const ALL_MODULES = [
     StickyMessagesModule,
     ConfessionsModule,
     AutoThreadModule,
-    ModMailModule
+    ModMailModule,
+    TeamSpeakModule
 ];
 
 /**
@@ -238,5 +241,6 @@ module.exports = {
     InvitesModule,
     RemindersModule,
     WordTriggersModule,
-    CustomCommandsModule
+    CustomCommandsModule,
+    TeamSpeakModule
 };

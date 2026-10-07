@@ -91,6 +91,7 @@ features:
   timers: false
   xp: false
   word_triggers: false
+  teamspeak: false
   welcome: false
 scheduler:
   enabled: true

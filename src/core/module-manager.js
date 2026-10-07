@@ -28,6 +28,7 @@ class ModuleManager {
         this.eventBus.init(client);
 
         if (client) {
+            this.container.register('Client', client);
             if (!client.commands) {
                 client.commands = new Map();
             }

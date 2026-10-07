@@ -95,6 +95,13 @@ function declareExistingFeatures() {
             aliases: ['startup-notifier', 'notifier'],
             onEnable: async (guildId) => console.log(`🚀 [startup_notifier] enabled on ${guildId}`),
             onDisable: async (guildId) => console.log(`💤 [startup_notifier] disabled on ${guildId}`)
+        },
+        {
+            name: 'teamspeak',
+            defaults: defaultFor('teamspeak'),
+            aliases: ['teamspeak3', 'ts3', 'team-speak'],
+            onEnable: async (guildId) => console.log(`🔊 [teamspeak] enabled on ${guildId}`),
+            onDisable: async (guildId) => console.log(`💤 [teamspeak] disabled on ${guildId}`)
         }
     ];
 
