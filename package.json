@@ -38,6 +38,7 @@
     "node-cron": "^4.6.0",
     "openai": "^7.8.0",
     "pg": "^8.23.0",
+    "rss-parser": "^3.13.0",
     "ts3-nodejs-library": "^3.5.3",
     "yaml": "^2.9.0"
   },

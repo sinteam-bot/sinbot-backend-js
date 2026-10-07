@@ -102,6 +102,13 @@ function declareExistingFeatures() {
             aliases: ['teamspeak3', 'ts3', 'team-speak'],
             onEnable: async (guildId) => console.log(`🔊 [teamspeak] enabled on ${guildId}`),
             onDisable: async (guildId) => console.log(`💤 [teamspeak] disabled on ${guildId}`)
+        },
+        {
+            name: 'autofeeds',
+            defaults: defaultFor('autofeeds'),
+            aliases: ['feeds', 'rss', 'rss-feeds', 'lootscraper'],
+            onEnable: async (guildId) => console.log(`📰 [autofeeds] enabled on ${guildId}`),
+            onDisable: async (guildId) => console.log(`💤 [autofeeds] disabled on ${guildId}`)
         }
     ];
 
