@@ -11,7 +11,7 @@ import { AutofeedsSubscriptionService } from '../src/modules/util_autofeeds/serv
 import { AutofeedsService } from '../src/modules/util_autofeeds/services/autofeeds.service.js';
 import { providerRegistry } from '../src/modules/util_autofeeds/services/providers/provider-registry.js';
 import { PRESETS } from '../src/modules/util_autofeeds/config/presets.js';
-import { AutofeedsController } from '../src/modules/util_autofeeds/controllers/autofeeds.controller.js';
+import { AutofeedsController, AutofeedsWebhooksController } from '../src/modules/util_autofeeds/controllers/autofeeds.controller.js';
 
 describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => {
     let repo;
@@ -36,6 +36,7 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
         await db.pool.query(`DELETE FROM autofeeds WHERE guild_id = $1`, [guildId]);
         await db.pool.query(`DELETE FROM autofeed_subscriptions WHERE guild_id = $1`, [guildId]);
         await db.pool.query(`DELETE FROM autofeed_history WHERE feed_id LIKE 'feed_test_%'`);
+        await db.pool.query(`DELETE FROM autofeed_live_sessions WHERE feed_id LIKE '%test%'`);
     });
 
     // ---------------------------------------------------------------
@@ -349,12 +350,13 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
     // 8. Social Feed Providers & Resolution
     // ---------------------------------------------------------------
     describe('Social Feed Providers (Twitter, TikTok, Twitch, Kick, Bridges)', () => {
-        it('registers all 11 providers in registry', () => {
+        it('registers all 12 providers in registry', () => {
             const list = providerRegistry.list();
-            expect(list.length).toBe(11);
+            expect(list.length).toBe(12);
             const names = list.map(p => p.name);
             expect(names).toContain('rss');
             expect(names).toContain('youtube');
+            expect(names).toContain('youtube_live');
             expect(names).toContain('reddit');
             expect(names).toContain('google_news');
             expect(names).toContain('twitch');
@@ -461,4 +463,320 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
             expect(matches.matchedTags).toContain('live');
         });
     });
+
+    // ---------------------------------------------------------------
+    // 9. Live Stream Sessions Lifecycle & In-place Offline Editing
+    // ---------------------------------------------------------------
+    describe('Live Stream Sessions Lifecycle & In-place Offline Editing', () => {
+        it('saves and retrieves active live sessions in repository', async () => {
+            const feedId = 'feed_test_live_twitch';
+            const streamId = 'stream_live_12345';
+
+            const saved = await repo.saveLiveSession({
+                feedId,
+                streamId,
+                streamerName: 'ZeratoR',
+                channelId: 'chan_live_99',
+                messageId: 'msg_discord_111',
+                title: 'Découverte de nouveaux jeux',
+                game: 'Trackmania',
+                url: 'https://www.twitch.tv/zerator',
+                startedAt: Date.now() - 3600000 // 1 heure plus tôt
+            });
+
+            expect(saved.status).toBe('live');
+            expect(saved.streamerName).toBe('ZeratoR');
+
+            const active = await repo.getActiveLiveSession(feedId);
+            expect(active).not.toBeNull();
+            expect(active.streamId).toBe(streamId);
+            expect(active.game).toBe('Trackmania');
+
+            // Fermeture de session
+            await repo.closeLiveSession(active.id, { game: 'Trackmania Cup' });
+            const afterClose = await repo.getActiveLiveSession(feedId);
+            expect(afterClose).toBeNull();
+        });
+
+        it('handles stream online by posting message with custom placeholders and saving live session', async () => {
+            const feed = {
+                id: 'feed_test_streamer',
+                guildId,
+                channelId: 'chan_stream_alerts',
+                feedUrl: 'https://www.twitch.tv/zerator',
+                name: 'ZeratoR Twitch',
+                feedType: 'twitch',
+                category: 'gaming',
+                tags: ['stream', 'live'],
+                filters: {},
+                customMessage: '🔴 ALERTE LIVE ! {streamer} joue à {game} pour {viewers} spectateurs ! Regarde ici: {url} {mentions}',
+                color: '#9146FF',
+                pingRoleId: 'role_stream_ping'
+            };
+
+            const twitchProv = providerRegistry.get('twitch');
+            const streamItem = {
+                id: 'twitch:zerator:stream_unique_001',
+                title: '🔴 [LIVE] ZeratoR est en direct sur Twitch !',
+                content: 'Tournoi Trackmania Cup',
+                link: 'https://www.twitch.tv/zerator',
+                author: 'ZeratoR',
+                publishedAt: Date.now(),
+                tags: ['twitch', 'live', 'stream', 'zerator'],
+                extra: {
+                    game: 'Trackmania',
+                    viewers: 15420
+                }
+            };
+
+            let sentPayload = null;
+            const mockChannel = {
+                send: async (payload) => {
+                    sentPayload = payload;
+                    return { id: 'discord_msg_live_777' };
+                }
+            };
+
+            const mockClient = {
+                channels: {
+                    cache: new Map([['chan_stream_alerts', mockChannel]]),
+                    fetch: async () => mockChannel
+                },
+                users: {
+                    fetch: async () => null
+                }
+            };
+
+            await service._handleLiveStreamOnline(feed, mockClient, twitchProv, streamItem);
+
+            expect(sentPayload).not.toBeNull();
+            expect(sentPayload.content).toContain('ZeratoR');
+            expect(sentPayload.content).toContain('Trackmania');
+            expect(sentPayload.content).toContain('15420');
+            expect(sentPayload.content).toContain('<@&role_stream_ping>');
+            expect(sentPayload.embeds.length).toBe(1);
+
+            // Vérifier que la session live a été enregistrée
+            const active = await repo.getActiveLiveSession(feed.id);
+            expect(active).not.toBeNull();
+            expect(active.messageId).toBe('discord_msg_live_777');
+            expect(active.streamerName).toBe('ZeratoR');
+        });
+
+        it('handles stream offline by updating Discord message in-place to OFFLINE without ghost-ping', async () => {
+            const feed = {
+                id: 'feed_test_offline_flow',
+                guildId,
+                channelId: 'chan_stream_alerts',
+                feedUrl: 'https://www.twitch.tv/zerator',
+                feedType: 'twitch'
+            };
+
+            const startedAt = Date.now() - (2 * 3600000 + 15 * 60000); // 2h 15m
+            await repo.saveLiveSession({
+                feedId: feed.id,
+                streamId: 'twitch:zerator:stream_unique_002',
+                streamerName: 'ZeratoR',
+                channelId: 'chan_stream_alerts',
+                messageId: 'discord_msg_live_888',
+                title: 'Session Trackmania',
+                game: 'Trackmania',
+                url: 'https://www.twitch.tv/zerator',
+                startedAt
+            });
+
+            let editedPayload = null;
+            const mockMsg = {
+                edit: async (payload) => {
+                    editedPayload = payload;
+                    return mockMsg;
+                }
+            };
+
+            const mockChannel = {
+                messages: {
+                    fetch: async (id) => (id === 'discord_msg_live_888' ? mockMsg : null)
+                }
+            };
+
+            const mockClient = {
+                channels: {
+                    cache: new Map([['chan_stream_alerts', mockChannel]]),
+                    fetch: async () => mockChannel
+                }
+            };
+
+            const twitchProv = providerRegistry.get('twitch');
+            await service._handleLiveStreamOffline(feed, mockClient, twitchProv);
+
+            expect(editedPayload).not.toBeNull();
+            // Le texte de mention est vidé pour supprimer le ghost-ping
+            expect(editedPayload.content.trim()).toBe('');
+            expect(editedPayload.embeds.length).toBe(1);
+            expect(editedPayload.embeds[0].data.title).toContain('⚫ [OFFLINE]');
+            expect(editedPayload.embeds[0].data.title).toContain('ZeratoR');
+
+            // Vérification des champs de durée et jeu
+            const fields = editedPayload.embeds[0].data.fields || [];
+            const durationField = fields.find(f => f.name.includes('Durée'));
+            expect(durationField).toBeDefined();
+            expect(durationField.value).toContain('2h 15min');
+
+            // Bouton replay
+            expect(editedPayload.components.length).toBe(1);
+
+            // Vérifier que la session a été fermée en base
+            const active = await repo.getActiveLiveSession(feed.id);
+            expect(active).toBeNull();
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // 10. Webhooks: Twitch EventSub & YouTube WebSub
+    // ---------------------------------------------------------------
+    describe('Twitch EventSub & YouTube WebSub Webhooks', () => {
+        let webhooksCtrl;
+
+        beforeEach(() => {
+            webhooksCtrl = new AutofeedsWebhooksController(service);
+        });
+
+        it('validates Twitch EventSub webhook challenge verification', async () => {
+            const req = {
+                headers: {
+                    'twitch-eventsub-message-type': 'webhook_callback_verification'
+                },
+                body: {
+                    challenge: 'test_twitch_challenge_xyz_999',
+                    subscription: {
+                        type: 'stream.online',
+                        condition: { broadcaster_user_id: '123456' }
+                    }
+                }
+            };
+
+            let sentText = null;
+            let sentStatus = null;
+            const res = {
+                status: (code) => {
+                    sentStatus = code;
+                    return {
+                        send: (txt) => {
+                            sentText = txt;
+                            return txt;
+                        }
+                    };
+                }
+            };
+
+            const result = await controller.handleTwitchWebhook(req, res);
+            expect(sentStatus).toBe(200);
+            expect(sentText).toBe('test_twitch_challenge_xyz_999');
+
+            // Via le contrôleur dédié /api/webhooks
+            const webhooksResult = await webhooksCtrl.handleTwitchWebhook(req, res);
+            expect(sentText).toBe('test_twitch_challenge_xyz_999');
+        });
+
+        it('dispatches Twitch EventSub notification for stream.online and stream.offline', async () => {
+            // Créer un feed Twitch pour zerator
+            await repo.addFeed({
+                guildId,
+                channelId: 'chan_twitch_eventsub',
+                feedUrl: 'https://www.twitch.tv/zerator',
+                name: 'ZeratoR',
+                feedType: 'twitch',
+                intervalMinutes: 2
+            });
+
+            let eventSubResult = null;
+            service.handleTwitchEventSub = async (type, event) => {
+                eventSubResult = { type, event };
+                return { ok: true, matched: 1 };
+            };
+
+            const req = {
+                headers: {
+                    'twitch-eventsub-message-type': 'notification'
+                },
+                body: {
+                    subscription: {
+                        type: 'stream.online'
+                    },
+                    event: {
+                        broadcaster_user_login: 'zerator',
+                        broadcaster_user_name: 'ZeratoR',
+                        title: 'Soirée spéciale',
+                        started_at: new Date().toISOString()
+                    }
+                }
+            };
+
+            const res = await controller.handleTwitchWebhook(req);
+            expect(res.success).toBe(true);
+            expect(eventSubResult).not.toBeNull();
+            expect(eventSubResult.type).toBe('stream.online');
+            expect(eventSubResult.event.broadcaster_user_login).toBe('zerator');
+        });
+
+        it('validates YouTube WebSub GET hub.challenge', async () => {
+            const req = {
+                query: {
+                    'hub.mode': 'subscribe',
+                    'hub.topic': 'https://www.youtube.com/xml/feeds/videos.xml?channel_id=UCxxxx',
+                    'hub.challenge': 'youtube_challenge_token_456'
+                }
+            };
+
+            let sentText = null;
+            let sentStatus = null;
+            const res = {
+                status: (code) => {
+                    sentStatus = code;
+                    return {
+                        send: (txt) => {
+                            sentText = txt;
+                            return txt;
+                        }
+                    };
+                }
+            };
+
+            await controller.handleYouTubeChallenge(req, res);
+            expect(sentStatus).toBe(200);
+            expect(sentText).toBe('youtube_challenge_token_456');
+
+            await webhooksCtrl.handleYouTubeChallenge(req, res);
+            expect(sentText).toBe('youtube_challenge_token_456');
+        });
+
+        it('processes YouTube WebSub POST notification XML payload', async () => {
+            let processedXml = null;
+            service.handleYouTubeWebSub = async (xml) => {
+                processedXml = xml;
+                return { ok: true, matched: 1 };
+            };
+
+            const xmlNotification = `
+                <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
+                    <title>YouTube video feed</title>
+                    <entry>
+                        <yt:videoId>dQw4w9WgXcQ</yt:videoId>
+                        <yt:channelId>UCuAXFkgsw1L7xaCfnd5JJOw</yt:channelId>
+                        <title>Never Gonna Give You Up</title>
+                        <link rel="alternate" href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"/>
+                    </entry>
+                </feed>
+            `;
+
+            const req = {
+                body: xmlNotification
+            };
+
+            const res = await controller.handleYouTubeNotification(req);
+            expect(res.success).toBe(true);
+            expect(processedXml).toContain('dQw4w9WgXcQ');
+        });
+    });
 });
+

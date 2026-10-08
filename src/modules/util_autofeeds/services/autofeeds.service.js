@@ -69,6 +69,29 @@ class AutofeedsService {
             parsedTags = tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
         }
 
+        // Résolution de l'intervalle selon le type de plateforme (Grill-me décision 1)
+        let resolvedInterval = parseInt(intervalMinutes, 10);
+        if (isNaN(resolvedInterval) || resolvedInterval <= 0) {
+            if (provider?.isLive) {
+                resolvedInterval = 2; // Lives : 2 minutes
+            } else if (['youtube', 'tiktok', 'social_bridge'].includes(providerName)) {
+                resolvedInterval = 15; // Vidéos & réseaux : 15 minutes
+            } else {
+                resolvedInterval = 30; // RSS / Presse : 30 minutes
+            }
+        } else {
+            resolvedInterval = Math.max(provider?.isLive ? 2 : 5, resolvedInterval);
+        }
+
+        // Palette de couleurs par défaut selon la plateforme
+        let resolvedColor = color;
+        if (!resolvedColor || resolvedColor === '#FF4500') {
+            if (providerName === 'twitch') resolvedColor = '#9146FF';
+            else if (providerName === 'kick') resolvedColor = '#53FC18';
+            else if (providerName === 'youtube_live' || providerName === 'youtube') resolvedColor = '#FF0000';
+            else resolvedColor = '#FF4500';
+        }
+
         const feed = await this.repo.addFeed({
             guildId,
             channelId,
@@ -79,9 +102,9 @@ class AutofeedsService {
             tags: parsedTags,
             filters: filters || {},
             customMessage,
-            color: color || '#FF4500',
+            color: resolvedColor,
             pingRoleId,
-            intervalMinutes: Math.max(5, parseInt(intervalMinutes, 10) || 15)
+            intervalMinutes: resolvedInterval
         });
 
         logger.info(`Autofeed ${feed.id} (${providerName}) ajouté pour ${resolvedUrl} sur guilde ${guildId}`, 'AUTOFEEDS');
@@ -174,6 +197,13 @@ class AutofeedsService {
             fields.push({ name: '🏷️ Tags', value: formattedTags, inline: false });
         }
 
+        if (item.extra?.game || item.extra?.category) {
+            fields.push({ name: '🎮 Jeu / Catégorie', value: `\`${item.extra.game || item.extra.category}\``, inline: true });
+        }
+        if (item.extra?.viewers != null) {
+            fields.push({ name: '👥 Spectateurs', value: `\`${Number(item.extra.viewers).toLocaleString('fr-FR')}\``, inline: true });
+        }
+
         if (fields.length > 0) {
             embed.addFields(fields);
         }
@@ -188,13 +218,14 @@ class AutofeedsService {
      */
     buildActionRow(feed, item) {
         const row = new ActionRowBuilder();
+        const provider = providerRegistry.get(feed.feedType);
 
-        // 1. Bouton Lien direct vers l'article
+        // 1. Bouton Lien direct vers le contenu ou live
         if (item.link && (item.link.startsWith('http://') || item.link.startsWith('https://'))) {
             row.addComponents(
                 new ButtonBuilder()
-                    .setLabel("Voir l'article")
-                    .setEmoji('🔗')
+                    .setLabel(provider?.isLive ? "🔴 Regarder le Live" : "Voir l'article")
+                    .setEmoji(provider?.isLive ? '🔴' : '🔗')
                     .setStyle(ButtonStyle.Link)
                     .setURL(item.link)
             );
@@ -243,9 +274,26 @@ class AutofeedsService {
 
         try {
             const provider = providerRegistry.get(feed.feedType);
+            const isLiveFeed = Boolean(provider?.isLive);
             const items = await provider.fetchItems(feed);
+
             if (!items || items.length === 0) {
+                // Si c'est un flux de stream en direct et qu'il était en live, gérer la fin de diffusion
+                if (isLiveFeed) {
+                    await this._handleLiveStreamOffline(feed, client, provider);
+                }
                 await this.repo.recordFeedCheckResult(feed.id, { status: 'ok' });
+                return;
+            }
+
+            // Gestion spécialisée pour les diffusions en direct
+            if (isLiveFeed) {
+                await this._handleLiveStreamOnline(feed, client, provider, items[0]);
+                await this.repo.recordFeedCheckResult(feed.id, {
+                    status: 'ok',
+                    lastItemId: items[0].id,
+                    lastItemPublishedAt: items[0].publishedAt || now
+                });
                 return;
             }
 
@@ -278,7 +326,8 @@ class AutofeedsService {
             const toPost = newItems.slice(-5);
 
             if (client && client.channels) {
-                const channel = client.channels.cache.get(feed.channelId) || await client.channels.fetch(feed.channelId).catch(() => null);
+                const channel = client.channels.cache?.get(feed.channelId) 
+                    || (client.channels.fetch ? await client.channels.fetch(feed.channelId).catch(() => null) : null);
 
                 if (channel && channel.send) {
                     for (const item of toPost) {
@@ -300,9 +349,11 @@ class AutofeedsService {
                         let messageContent = '';
                         if (feed.customMessage) {
                             messageContent = feed.customMessage
-                                .replace('{title}', item.title)
-                                .replace('{link}', item.link || '')
-                                .replace('{mentions}', pings.join(' '));
+                                .replace(/{title}/gi, item.title)
+                                .replace(/{link}/gi, item.link || '')
+                                .replace(/{url}/gi, item.link || '')
+                                .replace(/{author}/gi, item.author || '')
+                                .replace(/{mentions}/gi, pings.join(' '));
                         } else if (pings.length > 0) {
                             messageContent = `🔔 ${pings.join(' ')}`;
                         }
@@ -326,7 +377,7 @@ class AutofeedsService {
                         if (dmUserIds.length > 0) {
                             for (const dmUid of dmUserIds) {
                                 try {
-                                    const user = await client.users.fetch(dmUid).catch(() => null);
+                                    const user = client.users?.fetch ? await client.users.fetch(dmUid).catch(() => null) : null;
                                     if (user && user.send) {
                                         await user.send({
                                             content: `🔔 Nouvel article correspondant à vos abonnements sur le serveur :`,
@@ -356,6 +407,253 @@ class AutofeedsService {
                 error: err.message
             });
         }
+    }
+
+    /**
+     * Traite l'ouverture d'une session de live en direct.
+     */
+    async _handleLiveStreamOnline(feed, client, provider, streamItem) {
+        if (!provider.matchesFilters(streamItem, feed.filters)) {
+            return;
+        }
+
+        const activeSession = await this.repo.getActiveLiveSession(feed.id);
+        const streamerName = streamItem.author || feed.name || 'Streamer';
+        const gameName = streamItem.extra?.game || streamItem.extra?.category || null;
+
+        // Si une session est déjà en cours, on ne reposte pas de nouvelle alerte
+        if (activeSession) {
+            return;
+        }
+
+        // Vérifier si ce live spécifique a déjà été posté
+        const alreadyPosted = await this.repo.hasItemBeenPosted(feed.id, streamItem.id);
+        if (alreadyPosted) {
+            return;
+        }
+
+        if (client && client.channels) {
+            const channel = client.channels.cache?.get(feed.channelId) 
+                || (client.channels.fetch ? await client.channels.fetch(feed.channelId).catch(() => null) : null);
+
+            if (channel && channel.send) {
+                const embed = this.buildDiscordEmbed(feed, streamItem);
+                const actionRow = this.buildActionRow(feed, streamItem);
+
+                // Détecter les souscripteurs
+                const { mentionUserIds, dmUserIds } = await this.subService.findMatchingSubscribers(feed.guildId, feed, streamItem);
+
+                // Mentions et ping
+                const pings = [];
+                if (feed.pingRoleId) {
+                    pings.push(`<@&${feed.pingRoleId}>`);
+                }
+                if (mentionUserIds.length > 0) {
+                    pings.push(mentionUserIds.map(uid => `<@${uid}>`).join(' '));
+                }
+
+                const viewersCount = streamItem.extra?.viewers != null ? String(streamItem.extra.viewers) : 'N/C';
+                let messageContent = '';
+                if (feed.customMessage) {
+                    messageContent = feed.customMessage
+                        .replace(/{streamer}/gi, streamerName)
+                        .replace(/{title}/gi, streamItem.title)
+                        .replace(/{game}/gi, gameName || 'Non spécifié')
+                        .replace(/{viewers}/gi, viewersCount)
+                        .replace(/{url}/gi, streamItem.link || '')
+                        .replace(/{link}/gi, streamItem.link || '')
+                        .replace(/{mentions}/gi, pings.join(' '));
+                } else if (pings.length > 0) {
+                    messageContent = `🔴 ${pings.join(' ')}`;
+                }
+
+                const sendPayload = {
+                    embeds: [embed]
+                };
+                if (messageContent.trim()) {
+                    sendPayload.content = messageContent;
+                }
+                if (actionRow) {
+                    sendPayload.components = [actionRow];
+                }
+
+                const sentMsg = await channel.send(sendPayload).catch(err => {
+                    logger.warn(`[Autofeeds] Erreur envoi live channel ${feed.channelId}: ${err.message}`, 'AUTOFEEDS');
+                    return null;
+                });
+
+                if (sentMsg?.id) {
+                    await this.repo.saveLiveSession({
+                        feedId: feed.id,
+                        streamId: streamItem.id,
+                        streamerName,
+                        channelId: feed.channelId,
+                        messageId: sentMsg.id,
+                        title: streamItem.content || streamItem.title,
+                        game: gameName,
+                        url: streamItem.link,
+                        startedAt: streamItem.publishedAt || Date.now()
+                    });
+                }
+
+                // Notifications DM
+                if (dmUserIds.length > 0) {
+                    for (const dmUid of dmUserIds) {
+                        try {
+                            const user = client.users?.fetch ? await client.users.fetch(dmUid).catch(() => null) : null;
+                            if (user && user.send) {
+                                await user.send({
+                                    content: `🔴 **${streamerName}** est en direct !`,
+                                    embeds: [embed],
+                                    components: actionRow ? [actionRow] : []
+                                }).catch(() => {});
+                            }
+                        } catch {}
+                    }
+                }
+
+                await this.repo.recordPostedItem(feed.id, streamItem.id, streamItem.link, streamItem.title);
+            }
+        }
+    }
+
+    /**
+     * Traite la fin de diffusion (transition offline in-place sans ghost-ping).
+     */
+    async _handleLiveStreamOffline(feed, client, provider) {
+        const activeSession = await this.repo.getActiveLiveSession(feed.id);
+        if (!activeSession) {
+            return;
+        }
+
+        const endedAt = Date.now();
+        const durationMs = Math.max(0, endedAt - activeSession.startedAt);
+        const totalMinutes = Math.floor(durationMs / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        const durationStr = hours > 0 ? `${hours}h ${minutes}min` : `${minutes} min`;
+
+        if (client && client.channels) {
+            try {
+                const channel = client.channels.cache?.get(activeSession.channelId) 
+                    || (client.channels.fetch ? await client.channels.fetch(activeSession.channelId).catch(() => null) : null);
+                if (channel && channel.messages) {
+                    const originalMsg = channel.messages.fetch ? await channel.messages.fetch(activeSession.messageId).catch(() => null) : null;
+                    if (originalMsg && originalMsg.edit) {
+                        const offlineEmbed = new EmbedBuilder()
+                            .setColor(0x747F8D)
+                            .setTitle(`⚫ [OFFLINE] ${activeSession.streamerName} n'est plus en direct`)
+                            .setURL(activeSession.url || feed.feedUrl)
+                            .setDescription(`Le live est maintenant terminé. Merci d'avoir suivi la diffusion !`)
+                            .addFields(
+                                { name: '⏱️ Durée du stream', value: `\`${durationStr}\``, inline: true },
+                                { name: '🎮 Dernier jeu/catégorie', value: `\`${activeSession.game || 'Non spécifié'}\``, inline: true }
+                            )
+                            .setFooter({ text: `${provider?.label || 'Stream'} • Diffusion terminée` })
+                            .setTimestamp(new Date(endedAt));
+
+                        const offlineRow = new ActionRowBuilder();
+                        if (activeSession.url) {
+                            offlineRow.addComponents(
+                                new ButtonBuilder()
+                                    .setLabel('🎬 Voir la chaîne / Replay')
+                                    .setEmoji('🎬')
+                                    .setStyle(ButtonStyle.Link)
+                                    .setURL(activeSession.url)
+                            );
+                        }
+
+                        // Édition in-place sans ghost-ping (content vidé)
+                        await originalMsg.edit({
+                            content: ' ',
+                            embeds: [offlineEmbed],
+                            components: offlineRow.components.length > 0 ? [offlineRow] : []
+                        }).catch(err => {
+                            logger.warn(`[Autofeeds] Erreur edit message offline: ${err.message}`, 'AUTOFEEDS');
+                        });
+                    }
+                }
+            } catch (err) {
+                logger.warn(`[Autofeeds] Erreur clôture session message: ${err.message}`, 'AUTOFEEDS');
+            }
+        }
+
+        await this.repo.closeLiveSession(activeSession.id, {
+            endedAt,
+            game: activeSession.game,
+            title: activeSession.title
+        });
+        logger.info(`Session live terminée pour ${activeSession.streamerName} (${durationStr})`, 'AUTOFEEDS');
+    }
+
+    /**
+     * Traite un événement webhook Twitch EventSub (stream.online / stream.offline).
+     */
+    async handleTwitchEventSub(eventType, eventData, client) {
+        const username = (eventData?.broadcaster_user_login || eventData?.broadcaster_user_name || '').toLowerCase();
+        if (!username) return { ok: false, error: 'Nom de streamer manquant.' };
+
+        const allFeeds = await this.repo.listAllActive();
+        const twitchProv = providerRegistry.get('twitch');
+        const matchingFeeds = allFeeds.filter(f => {
+            if (f.feedType !== 'twitch') return false;
+            return twitchProv.extractUsername(f.feedUrl) === username;
+        });
+
+        if (matchingFeeds.length === 0) {
+            return { ok: true, matched: 0 };
+        }
+
+        for (const feed of matchingFeeds) {
+            if (eventType === 'stream.online') {
+                const streamItem = {
+                    id: `twitch:${username}:${eventData.id || Date.now()}`,
+                    title: `🔴 [LIVE] ${eventData.broadcaster_user_name || username} est en direct sur Twitch !`,
+                    content: eventData.title || 'Diffusion en direct sur Twitch',
+                    link: `https://www.twitch.tv/${username}`,
+                    author: eventData.broadcaster_user_name || username,
+                    imageUrl: null,
+                    publishedAt: eventData.started_at ? new Date(eventData.started_at).getTime() : Date.now(),
+                    tags: ['twitch', 'live', 'stream', username],
+                    extra: {
+                        game: null,
+                        viewers: null
+                    }
+                };
+                await this._handleLiveStreamOnline(feed, client || this._client, twitchProv, streamItem);
+            } else if (eventType === 'stream.offline') {
+                await this._handleLiveStreamOffline(feed, client || this._client, twitchProv);
+            }
+        }
+
+        return { ok: true, matched: matchingFeeds.length };
+    }
+
+    /**
+     * Traite une notification WebSub YouTube (nouveau contenu ou live).
+     */
+    async handleYouTubeWebSub(xmlContent, client) {
+        if (!xmlContent || typeof xmlContent !== 'string') {
+            return { ok: false, error: 'Corps XML vide' };
+        }
+
+        const channelMatch = xmlContent.match(/<yt:channelId>([^<]+)<\/yt:channelId>/i);
+        const channelId = channelMatch ? channelMatch[1] : null;
+
+        if (!channelId) {
+            return { ok: false, error: 'channelId introuvable dans le payload XML.' };
+        }
+
+        const allFeeds = await this.repo.listAllActive();
+        const matchingFeeds = allFeeds.filter(f => {
+            return (f.feedType === 'youtube' || f.feedType === 'youtube_live') && f.feedUrl.includes(channelId);
+        });
+
+        for (const feed of matchingFeeds) {
+            await this._checkSingleFeed(feed, client || this._client, true);
+        }
+
+        return { ok: true, matched: matchingFeeds.length };
     }
 
     /**

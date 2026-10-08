@@ -111,6 +111,30 @@ class AutofeedsRepository {
                 CREATE INDEX IF NOT EXISTS "idx_autofeed_hist_lookup" ON "autofeed_history" ("feed_id", "item_guid");
             `).catch(() => {});
 
+            // 4. Table des sessions de live (Twitch, Kick, YouTube Live)
+            await db.pool.query(`
+                CREATE TABLE IF NOT EXISTS "autofeed_live_sessions" (
+                    "id" text PRIMARY KEY NOT NULL,
+                    "feed_id" text NOT NULL,
+                    "stream_id" text NOT NULL,
+                    "streamer_name" text NOT NULL,
+                    "channel_id" text NOT NULL,
+                    "message_id" text NOT NULL,
+                    "title" text,
+                    "game" text,
+                    "url" text,
+                    "started_at" bigint NOT NULL,
+                    "ended_at" bigint,
+                    "status" text DEFAULT 'live' NOT NULL,
+                    "created_at" bigint NOT NULL
+                );
+            `);
+
+            await db.pool.query(`
+                CREATE INDEX IF NOT EXISTS "idx_live_session_lookup" ON "autofeed_live_sessions" ("feed_id", "stream_id");
+                CREATE INDEX IF NOT EXISTS "idx_live_session_status" ON "autofeed_live_sessions" ("feed_id", "status");
+            `).catch(() => {});
+
             this._initialized = true;
         } catch (err) {
             console.warn('[AutofeedsRepository] Erreur initSchema:', err.message);
@@ -376,6 +400,69 @@ class AutofeedsRepository {
     }
 
     // ==========================================
+    // SESSIONS DE LIVE
+    // ==========================================
+
+    async getActiveLiveSession(feedId) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT * FROM autofeed_live_sessions 
+             WHERE feed_id = $1 AND status = 'live'
+             ORDER BY started_at DESC LIMIT 1`,
+            [feedId]
+        );
+        return res.rows?.[0] ? this._mapLiveSessionRow(res.rows[0]) : null;
+    }
+
+    async saveLiveSession({ feedId, streamId, streamerName, channelId, messageId, title, game, url, startedAt }) {
+        await this.initSchema();
+        const id = newId();
+        const now = Date.now();
+        await db.pool.query(
+            `INSERT INTO autofeed_live_sessions (
+                id, feed_id, stream_id, streamer_name, channel_id, message_id,
+                title, game, url, started_at, status, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'live', $11)`,
+            [id, feedId, streamId, streamerName, channelId, messageId, title || null, game || null, url || null, Number(startedAt || now), now]
+        );
+        return {
+            id,
+            feedId,
+            streamId,
+            streamerName,
+            channelId,
+            messageId,
+            title,
+            game,
+            url,
+            startedAt: Number(startedAt || now),
+            endedAt: null,
+            status: 'live',
+            createdAt: now
+        };
+    }
+
+    async closeLiveSession(id, { endedAt = Date.now(), game = null, title = null } = {}) {
+        await this.initSchema();
+        const params = [endedAt, id];
+        let extra = '';
+        if (game) {
+            extra += `, game = $${params.length + 1}`;
+            params.push(game);
+        }
+        if (title) {
+            extra += `, title = $${params.length + 1}`;
+            params.push(title);
+        }
+        await db.pool.query(
+            `UPDATE autofeed_live_sessions 
+             SET status = 'offline', ended_at = $1 ${extra}
+             WHERE id = $2`,
+            params
+        );
+    }
+
+    // ==========================================
     // MAPPERS
     // ==========================================
 
@@ -430,6 +517,24 @@ class AutofeedsRepository {
             targetValue: row.target_value,
             notifyMode: row.notify_mode || 'mention',
             filters: filters || {},
+            createdAt: Number(row.created_at || 0)
+        };
+    }
+
+    _mapLiveSessionRow(row) {
+        return {
+            id: row.id,
+            feedId: row.feed_id,
+            streamId: row.stream_id,
+            streamerName: row.streamer_name,
+            channelId: row.channel_id,
+            messageId: row.message_id,
+            title: row.title || null,
+            game: row.game || null,
+            url: row.url || null,
+            startedAt: Number(row.started_at || 0),
+            endedAt: row.ended_at ? Number(row.ended_at) : null,
+            status: row.status || 'live',
             createdAt: Number(row.created_at || 0)
         };
     }

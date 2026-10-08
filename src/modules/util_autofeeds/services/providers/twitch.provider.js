@@ -12,7 +12,8 @@ class TwitchFeedProvider extends BaseFeedProvider {
             name: 'twitch',
             label: 'Twitch',
             icon: '🟣',
-            description: 'Alertes de diffusions en direct et replays sur Twitch.'
+            description: 'Alertes de diffusions en direct et replays sur Twitch.',
+            isLive: true
         });
     }
 

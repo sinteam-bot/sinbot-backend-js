@@ -12,7 +12,7 @@ const { AutofeedsRepository } = require('./services/autofeeds.repository.js');
 const { AutofeedsSubscriptionService } = require('./services/autofeeds-subscription.service.js');
 const { AutofeedsService } = require('./services/autofeeds.service.js');
 const { AutofeedCommands } = require('./commands/autofeed.cmd.js');
-const { AutofeedsController } = require('./controllers/autofeeds.controller.js');
+const { AutofeedsController, AutofeedsWebhooksController } = require('./controllers/autofeeds.controller.js');
 const { AutofeedInteractionListener } = require('./events/autofeed-interaction.listener.js');
 
 featureRegistry.define('autofeeds', {
@@ -51,7 +51,7 @@ Module({
         AutofeedInteractionListener,
         AutofeedsModule
     ],
-    controllers: [AutofeedsController],
+    controllers: [AutofeedsController, AutofeedsWebhooksController],
     commands: [AutofeedCommands]
 })(AutofeedsModule);
 

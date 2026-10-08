@@ -5,11 +5,13 @@
  */
 
 class BaseFeedProvider {
-    constructor({ name, label, icon, description }) {
+    constructor({ name, label, icon, description, isLive = false, categoryType = null }) {
         this.name = name;
         this.label = label;
         this.icon = icon;
         this.description = description;
+        this.isLive = Boolean(isLive);
+        this.categoryType = categoryType || (this.isLive ? 'live' : 'feed');
     }
 
     /**

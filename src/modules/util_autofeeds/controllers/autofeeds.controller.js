@@ -303,6 +303,80 @@ class AutofeedsController {
             return { success: false, ok: false, error: err.message };
         }
     }
+
+    /**
+     * POST /api/autofeeds/webhooks/twitch
+     * Twitch EventSub Webhook Handler
+     */
+    async handleTwitchWebhook(req, res) {
+        try {
+            const messageType = req.headers?.['twitch-eventsub-message-type'] || req.headers?.['Twitch-Eventsub-Message-Type'];
+            const body = req.body || {};
+
+            // 1. Validation du challenge Twitch EventSub
+            if (messageType === 'webhook_callback_verification' || body.challenge) {
+                if (res && typeof res.status === 'function') {
+                    const chain = res.status(200);
+                    if (chain && typeof chain.send === 'function') {
+                        return chain.send(body.challenge);
+                    } else if (typeof res.send === 'function') {
+                        return res.send(body.challenge);
+                    }
+                }
+                return body.challenge;
+            }
+
+            // 2. Réception d'une notification (stream.online / stream.offline)
+            if (messageType === 'notification' || body.subscription) {
+                const subType = body.subscription?.type;
+                const event = body.event || {};
+                await this.service.handleTwitchEventSub(subType, event);
+                return { success: true, ok: true, handled: true, event: subType };
+            }
+
+            return { success: true, ok: true, received: true };
+        } catch (err) {
+            return { success: false, ok: false, error: err.message };
+        }
+    }
+
+    /**
+     * GET /api/autofeeds/webhooks/youtube
+     * YouTube WebSub Hub Challenge Verification
+     */
+    async handleYouTubeChallenge(req, res) {
+        try {
+            const challenge = req.query?.['hub.challenge'] || req.query?.challenge;
+            if (challenge) {
+                if (res && typeof res.status === 'function') {
+                    const chain = res.status(200);
+                    if (chain && typeof chain.send === 'function') {
+                        return chain.send(challenge);
+                    } else if (typeof res.send === 'function') {
+                        return res.send(challenge);
+                    }
+                }
+                return challenge;
+            }
+            return { success: true, ok: true };
+        } catch (err) {
+            return { success: false, ok: false, error: err.message };
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/webhooks/youtube
+     * YouTube WebSub Notification Ingestion
+     */
+    async handleYouTubeNotification(req, res) {
+        try {
+            const xmlBody = typeof req.body === 'string' ? req.body : (req.rawBody || JSON.stringify(req.body));
+            await this.service.handleYouTubeWebSub(xmlBody);
+            return { success: true, ok: true, received: true };
+        } catch (err) {
+            return { success: false, ok: false, error: err.message };
+        }
+    }
 }
 
 Controller('/api/autofeeds')(AutofeedsController);
@@ -318,5 +392,35 @@ Get('/:id')(AutofeedsController.prototype, 'getById');
 Patch('/:id')(AutofeedsController.prototype, 'update');
 Delete('/:id')(AutofeedsController.prototype, 'deleteFeed');
 Post('/:id/test')(AutofeedsController.prototype, 'testFeed');
+Post('/webhooks/twitch')(AutofeedsController.prototype, 'handleTwitchWebhook');
+Get('/webhooks/youtube')(AutofeedsController.prototype, 'handleYouTubeChallenge');
+Post('/webhooks/youtube')(AutofeedsController.prototype, 'handleYouTubeNotification');
 
-module.exports = { AutofeedsController };
+class AutofeedsWebhooksController {
+    static inject = [AutofeedsService];
+
+    constructor(service) {
+        this.service = service;
+        this.baseController = new AutofeedsController(service);
+    }
+
+    async handleTwitchWebhook(req, res) {
+        return this.baseController.handleTwitchWebhook(req, res);
+    }
+
+    async handleYouTubeChallenge(req, res) {
+        return this.baseController.handleYouTubeChallenge(req, res);
+    }
+
+    async handleYouTubeNotification(req, res) {
+        return this.baseController.handleYouTubeNotification(req, res);
+    }
+}
+
+Controller('/api/webhooks')(AutofeedsWebhooksController);
+Post('/twitch')(AutofeedsWebhooksController.prototype, 'handleTwitchWebhook');
+Get('/youtube')(AutofeedsWebhooksController.prototype, 'handleYouTubeChallenge');
+Post('/youtube')(AutofeedsWebhooksController.prototype, 'handleYouTubeNotification');
+
+module.exports = { AutofeedsController, AutofeedsWebhooksController };
+

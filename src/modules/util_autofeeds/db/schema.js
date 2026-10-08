@@ -1,7 +1,7 @@
 /**
  * src/modules/util_autofeeds/db/schema.js
  *
- * Schéma Drizzle pour les flux automatiques (Autofeeds), souscriptions et historique.
+ * Schéma Drizzle pour les flux automatiques (Autofeeds), souscriptions, historique et sessions de live.
  */
 
 const { pgTable, text, bigint, integer, boolean, index, unique } = require('../../../db/schemas/_drizzle.js');
@@ -38,10 +38,10 @@ const autofeedSubscriptions = pgTable('autofeed_subscriptions', {
     id: text('id').primaryKey(),
     guildId: text('guild_id').notNull(),
     userId: text('user_id').notNull(),
-    targetType: text('target_type').notNull(), // 'tag', 'category', 'feed', 'keyword', 'account'
-    targetValue: text('target_value').notNull(), // 'steam', 'gaming', 'id_du_feed', 'PlayStation'
+    targetType: text('target_type').notNull(), // 'tag', 'category', 'feed', 'keyword', 'account', 'author'
+    targetValue: text('target_value').notNull(), // 'steam', 'gaming', 'id_du_feed', 'PlayStation', 'zerator'
     notifyMode: text('notify_mode').default('mention').notNull(), // 'mention', 'dm'
-    filters: text('filters').default('{}').notNull(), // JSON: { includeKeywords: [], excludeKeywords: [] }
+    filters: text('filters').default('{}').notNull(), // JSON: { includeKeywords: [], excludeKeywords: [], regexFilter: '' }
     createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     unique('autofeed_subs_unique').on(table.guildId, table.userId, table.targetType, table.targetValue),
@@ -60,8 +60,28 @@ const autofeedHistory = pgTable('autofeed_history', {
     index('idx_autofeed_hist_lookup').on(table.feedId, table.itemGuid)
 ]);
 
+const autofeedLiveSessions = pgTable('autofeed_live_sessions', {
+    id: text('id').primaryKey(),
+    feedId: text('feed_id').notNull(),
+    streamId: text('stream_id').notNull(),
+    streamerName: text('streamer_name').notNull(),
+    channelId: text('channel_id').notNull(),
+    messageId: text('message_id').notNull(),
+    title: text('title'),
+    game: text('game'),
+    url: text('url'),
+    startedAt: bigint('started_at', { mode: 'number' }).notNull(),
+    endedAt: bigint('ended_at', { mode: 'number' }),
+    status: text('status').default('live').notNull(), // 'live' | 'offline'
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
+}, (table) => [
+    index('idx_live_session_lookup').on(table.feedId, table.streamId),
+    index('idx_live_session_status').on(table.feedId, table.status)
+]);
+
 module.exports = {
     autofeeds,
     autofeedSubscriptions,
-    autofeedHistory
+    autofeedHistory,
+    autofeedLiveSessions
 };

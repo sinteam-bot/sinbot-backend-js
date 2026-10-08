@@ -1,11 +1,12 @@
 /**
  * src/modules/util_autofeeds/services/providers/provider-registry.js
  *
- * Registre centralisé des fournisseurs de flux (RSS, YouTube, Reddit, Twitch, Kick, Twitter, etc.).
+ * Registre centralisé des fournisseurs de flux (RSS, YouTube, YouTube Live, Reddit, Twitch, Kick, Twitter, etc.).
  */
 
 const { RssFeedProvider } = require('./rss.provider.js');
 const { YouTubeFeedProvider } = require('./youtube.provider.js');
+const { YouTubeLiveFeedProvider } = require('./youtube-live.provider.js');
 const { RedditFeedProvider } = require('./reddit.provider.js');
 const { GoogleNewsFeedProvider } = require('./google-news.provider.js');
 const { TwitchFeedProvider } = require('./twitch.provider.js');
@@ -22,9 +23,10 @@ class ProviderRegistry {
     constructor() {
         this.providers = new Map();
 
-        // Enregistrement des 11 fournisseurs actifs
+        // Enregistrement des 12 fournisseurs actifs
         this.register(new RssFeedProvider());
         this.register(new YouTubeFeedProvider());
+        this.register(new YouTubeLiveFeedProvider());
         this.register(new RedditFeedProvider());
         this.register(new GoogleNewsFeedProvider());
         this.register(new TwitchFeedProvider());
@@ -52,6 +54,10 @@ class ProviderRegistry {
     detectProvider(url = '') {
         const lower = url.toLowerCase();
 
+        // Si direct YouTube ciblé spécifiquement
+        if (lower.includes('youtube.com') && (lower.includes('/live') || lower.endsWith('/live'))) {
+            return 'youtube_live';
+        }
         if (lower.includes('youtube.com') || lower.includes('youtu.be') || /^UC[\w-]{22}$/.test(url)) {
             return 'youtube';
         }

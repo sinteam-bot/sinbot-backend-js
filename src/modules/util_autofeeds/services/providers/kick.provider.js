@@ -12,7 +12,8 @@ class KickFeedProvider extends BaseFeedProvider {
             name: 'kick',
             label: 'Kick',
             icon: '🟢',
-            description: 'Alertes de diffusions en direct sur Kick.'
+            description: 'Alertes de diffusions en direct sur Kick.',
+            isLive: true
         });
     }
 
