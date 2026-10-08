@@ -23,12 +23,15 @@ const {
     FacebookFeedProvider,
     LinkedInFeedProvider
 } = require('./social-bridge.provider.js');
+const { AnimeSphereFeedProvider } = require('./animesphere.provider.js');
+const { JustWatchFeedProvider } = require('./justwatch.provider.js');
+const { AiModelsFeedProvider } = require('./ai-models.provider.js');
 
 class ProviderRegistry {
     constructor() {
         this.providers = new Map();
 
-        // Enregistrement des 17 fournisseurs actifs
+        // Enregistrement des 20 fournisseurs actifs
         this.register(new RssFeedProvider());
         this.register(new YouTubeFeedProvider());
         this.register(new YouTubeLiveFeedProvider());
@@ -46,6 +49,9 @@ class ProviderRegistry {
         this.register(new InstagramFeedProvider());
         this.register(new FacebookFeedProvider());
         this.register(new LinkedInFeedProvider());
+        this.register(new AnimeSphereFeedProvider());
+        this.register(new JustWatchFeedProvider());
+        this.register(new AiModelsFeedProvider());
     }
 
     register(provider) {
@@ -112,6 +118,15 @@ class ProviderRegistry {
         }
         if (lower.includes('linkedin.com')) {
             return 'linkedin';
+        }
+        if (lower.includes('animesphere.io') || lower.startsWith('animesphere:') || lower === 'animesphere') {
+            return 'animesphere';
+        }
+        if (lower.includes('justwatch.com') || lower.startsWith('justwatch:') || lower === 'justwatch') {
+            return 'justwatch';
+        }
+        if (lower.includes('openrouter.ai') || lower.includes('models.dev') || lower.startsWith('openrouter:') || lower.startsWith('modelsdev:') || lower.includes('opencode-go')) {
+            return 'ai_models';
         }
 
         return 'rss';

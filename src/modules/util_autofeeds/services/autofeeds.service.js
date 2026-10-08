@@ -470,6 +470,81 @@ class AutofeedsService {
             fields.push({ name: '👥 Spectateurs', value: `\`${Number(item.extra.viewers).toLocaleString('fr-FR')}\``, inline: true });
         }
 
+        // Spécificités AnimeSphere & JustWatch (Divertissement Anime / Séries / Films)
+        if (item.source === 'animesphere' || feed.feedType === 'animesphere') {
+            const extra = item.extra || {};
+            if (extra.isFirstEpisodeOrMovie) {
+                // Présentation complète pour le premier épisode ou un film
+                if (extra.titleRomaji && extra.titleRomaji !== extra.titleFr) {
+                    fields.push({ name: '🇯🇵 Titre Romaji', value: `\`${extra.titleRomaji}\``, inline: true });
+                }
+                if (extra.titleEn && extra.titleEn !== extra.titleFr) {
+                    fields.push({ name: '🇬🇧 Titre Anglais', value: `\`${extra.titleEn}\``, inline: true });
+                }
+                if (extra.titleJp) {
+                    fields.push({ name: '🎌 Titre Original', value: `\`${extra.titleJp}\``, inline: true });
+                }
+                if (extra.platforms && extra.platforms.length > 0) {
+                    fields.push({ name: '📺 Plateforme(s)', value: extra.platforms.map(p => `\`${p}\``).join(', '), inline: true });
+                }
+                const metaParts = [];
+                if (extra.format) metaParts.push(`Format: ${extra.format}`);
+                if (extra.season && extra.seasonYear) metaParts.push(`Saison: ${extra.season} ${extra.seasonYear}`);
+                if (extra.episodeCount) metaParts.push(`${extra.episodeCount} ép.`);
+                if (extra.studios) metaParts.push(`Studio: ${extra.studios}`);
+                if (metaParts.length > 0) {
+                    fields.push({ name: 'ℹ️ Infos Œuvre', value: metaParts.join(' • '), inline: false });
+                }
+            } else {
+                // Épisode suivant (format plus concis)
+                const epNum = extra.episodeNumber ? `Épisode ${extra.episodeNumber}` : 'Nouvel épisode';
+                const sNum = extra.season ? `${extra.season}` : '';
+                fields.push({ name: '📺 Sortie Épisode', value: `${sNum ? sNum + ' • ' : ''}${epNum}`, inline: true });
+                if (extra.platforms && extra.platforms.length > 0) {
+                    fields.push({ name: '▶️ Plateforme', value: extra.platforms.map(p => `\`${p}\``).join(', '), inline: true });
+                }
+            }
+        } else if (item.source === 'justwatch' || feed.feedType === 'justwatch') {
+            const extra = item.extra || {};
+            if (extra.isFirstEpisodeOrMovie) {
+                if (extra.platforms && extra.platforms.length > 0) {
+                    fields.push({ name: '📺 Plateforme(s)', value: extra.platforms.map(p => `\`${p}\``).join(', '), inline: true });
+                }
+                if (extra.releaseYear) {
+                    fields.push({ name: '📅 Année', value: `\`${extra.releaseYear}\``, inline: true });
+                }
+                if (extra.totalEpisodeCount) {
+                    fields.push({ name: '🎞️ Épisodes', value: `\`${extra.totalEpisodeCount} épisodes\``, inline: true });
+                }
+            } else {
+                if (extra.subtitle) {
+                    fields.push({ name: '📺 Épisode / Saison', value: `\`${extra.subtitle}\``, inline: true });
+                }
+                if (extra.platforms && extra.platforms.length > 0) {
+                    fields.push({ name: '▶️ Disponible sur', value: extra.platforms.map(p => `\`${p}\``).join(', '), inline: true });
+                }
+            }
+        } else if (item.source === 'openrouter' || item.source === 'models_dev' || feed.feedType === 'ai_models') {
+            const extra = item.extra || {};
+            if (extra.providerName || extra.provider) {
+                fields.push({ name: '🏢 Fournisseur IA', value: `\`${extra.providerName || extra.provider}\``, inline: true });
+            }
+            if (extra.costLabel || extra.pricing) {
+                fields.push({ name: '💰 Tarification', value: extra.costLabel || extra.pricing, inline: true });
+            }
+            if (extra.contextTokens || extra.contextLength) {
+                const ctx = extra.contextTokens || (extra.contextLength ? `${Number(extra.contextLength).toLocaleString()} tokens` : null);
+                if (ctx) fields.push({ name: '🧠 Fenêtre de contexte', value: `\`${ctx}\``, inline: true });
+            }
+            const caps = [];
+            if (extra.reasoning) caps.push('🧠 Raisonnement (Thinking)');
+            if (extra.toolCalling) caps.push('🛠️ Appel d\'outils');
+            if (extra.openWeights) caps.push('🔓 Open Weights');
+            if (caps.length > 0) {
+                fields.push({ name: '⚡ Capacités', value: caps.join(' • '), inline: false });
+            }
+        }
+
         if (item.extra?.aiSummary) {
             fields.unshift({ name: '💡 Résumé IA (TL;DR)', value: item.extra.aiSummary.slice(0, 1024), inline: false });
         }
@@ -516,12 +591,28 @@ class AutofeedsService {
         const row = new ActionRowBuilder();
         const provider = providerRegistry.get(feed.feedType);
 
-        // 1. Bouton Lien direct vers le contenu ou live
+        // 1. Bouton Lien direct vers le contenu ou live ou streaming
         if (item.link && (item.link.startsWith('http://') || item.link.startsWith('https://'))) {
+            let buttonLabel = provider?.isLive ? "🔴 Regarder le Live" : "Voir l'article";
+            let buttonEmoji = provider?.isLive ? '🔴' : '🔗';
+
+            if (item.source === 'animesphere' || feed.feedType === 'animesphere') {
+                const primaryPlatform = item.extra?.platforms?.[0] || 'la plateforme';
+                buttonLabel = `▶️ Regarder sur ${primaryPlatform}`;
+                buttonEmoji = '▶️';
+            } else if (item.source === 'justwatch' || feed.feedType === 'justwatch') {
+                const primaryPlatform = item.extra?.platforms?.[0] || 'JustWatch';
+                buttonLabel = `▶️ Regarder sur ${primaryPlatform}`;
+                buttonEmoji = '🍿';
+            } else if (item.source === 'openrouter' || item.source === 'models_dev' || feed.feedType === 'ai_models') {
+                buttonLabel = item.extra?.isFree ? '🆓 Tester gratuitement' : '🤖 Explorer le modèle';
+                buttonEmoji = item.extra?.isFree ? '🆓' : '🤖';
+            }
+
             row.addComponents(
                 new ButtonBuilder()
-                    .setLabel(provider?.isLive ? "🔴 Regarder le Live" : "Voir l'article")
-                    .setEmoji(provider?.isLive ? '🔴' : '🔗')
+                    .setLabel(buttonLabel.slice(0, 80))
+                    .setEmoji(buttonEmoji)
                     .setStyle(ButtonStyle.Link)
                     .setURL(item.link)
             );

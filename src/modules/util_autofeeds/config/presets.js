@@ -129,6 +129,70 @@ const PRESETS = [
         color: '#EA4335',
         icon: '📰',
         sourceName: 'Google News'
+    },
+
+    // --- 🌸 ANIMES & SÉRIES / FILMS ---
+    {
+        id: 'animesphere-planning',
+        name: 'AnimeSphere - Planning Sorties & Épisodes',
+        description: 'Planning des sorties simulcast de chaque épisode et film d\'animation (Crunchyroll, Netflix, ADN).',
+        feedUrl: 'https://animesphere.io/planning',
+        provider: 'animesphere',
+        category: 'anime',
+        tags: ['anime', 'simulcast', 'planning', 'crunchyroll', 'adn', 'netflix'],
+        color: '#FF70A6',
+        icon: '🌸',
+        sourceName: 'AnimeSphere'
+    },
+    {
+        id: 'justwatch-nouveau',
+        name: 'JustWatch - Nouveautés Séries & Films FR',
+        description: 'Nouveaux films et nouvelles séries arrivant sur Netflix, Disney+, Prime Video, Canal+ et autres.',
+        feedUrl: 'https://www.justwatch.com/fr/nouveau',
+        provider: 'justwatch',
+        category: 'cinema',
+        tags: ['streaming', 'series', 'films', 'netflix', 'disney', 'primevideo'],
+        color: '#FBC02D',
+        icon: '🍿',
+        sourceName: 'JustWatch'
+    },
+
+    // --- 🤖 MODÈLES IA (OPENROUTER & MODELS.DEV) ---
+    {
+        id: 'openrouter-new-models',
+        name: 'OpenRouter - Nouveaux Modèles IA & Gratuits',
+        description: 'Flux officiel des nouveaux modèles d\'intelligence artificielle ajoutés sur OpenRouter (avec détection des modèles gratuits).',
+        feedUrl: 'https://openrouter.ai/api/v1/models?use_rss=true',
+        provider: 'ai_models',
+        category: 'ai',
+        tags: ['ai', 'llm', 'openrouter', 'ia', 'free'],
+        color: '#6366F1',
+        icon: '🤖',
+        sourceName: 'OpenRouter'
+    },
+    {
+        id: 'modelsdev-opencode',
+        name: 'Models.dev - Nouveaux Modèles OpenCode Go',
+        description: 'Veille sur le fournisseur OpenCode Go via Models.dev (détection automatique des modèles gratuits et low-cost).',
+        feedUrl: 'https://models.dev/api.json?provider=opencode-go',
+        provider: 'ai_models',
+        category: 'ai',
+        tags: ['ai', 'opencode-go', 'modelsdev', 'free', 'llm'],
+        color: '#10B981',
+        icon: '🧠',
+        sourceName: 'Models.dev'
+    },
+    {
+        id: 'modelsdev-all-free',
+        name: 'Models.dev - Tous les Modèles IA Gratuits',
+        description: 'Agrégation multi-fournisseurs (220+ providers) filtrant uniquement les modèles IA 100% gratuits (0$/1M tokens).',
+        feedUrl: 'https://models.dev/api.json?freeOnly=true',
+        provider: 'ai_models',
+        category: 'ai',
+        tags: ['ai', 'free', 'modelsdev', 'llm', 'gratuit'],
+        color: '#059669',
+        icon: '🆓',
+        sourceName: 'Models.dev'
     }
 ];
 

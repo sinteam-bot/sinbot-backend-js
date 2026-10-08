@@ -371,9 +371,9 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
     // 8. Social Feed Providers & Resolution
     // ---------------------------------------------------------------
     describe('Social Feed Providers (Twitter, TikTok, Twitch, Kick, Bridges)', () => {
-        it('registers all 17 providers in registry', () => {
+        it('registers all 20 providers in registry', () => {
             const list = providerRegistry.list();
-            expect(list.length).toBe(17);
+            expect(list.length).toBe(20);
             const names = list.map(p => p.name);
             expect(names).toContain('rss');
             expect(names).toContain('youtube');
@@ -391,6 +391,10 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
             expect(names).toContain('github');
             expect(names).toContain('gitlab');
             expect(names).toContain('statuspage');
+            expect(names).toContain('steam');
+            expect(names).toContain('animesphere');
+            expect(names).toContain('justwatch');
+            expect(names).toContain('ai_models');
         });
 
         it('resolves Twitter handles and URLs to Nitter RSS gateway', () => {
