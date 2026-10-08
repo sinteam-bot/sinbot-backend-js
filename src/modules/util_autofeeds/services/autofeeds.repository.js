@@ -78,6 +78,13 @@ class AutofeedsRepository {
                 { name: 'breaking_role_id', type: "text" },
                 { name: 'auto_expire_days', type: "integer DEFAULT 0 NOT NULL" },
                 { name: 'enable_audio_briefing', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'enable_voting', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'best_of_threshold', type: "integer DEFAULT 5 NOT NULL" },
+                { name: 'best_of_channel_id', type: "text" },
+                { name: 'min_discount_percent', type: "integer DEFAULT 0 NOT NULL" },
+                { name: 'auto_sync_events', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'good_vibes_only', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'enable_security_scan', type: "boolean DEFAULT true NOT NULL" },
                 { name: 'last_checked_at', type: "bigint DEFAULT 0 NOT NULL" },
                 { name: 'last_status', type: "text DEFAULT 'ok' NOT NULL" },
                 { name: 'last_error', type: "text" },
@@ -138,6 +145,8 @@ class AutofeedsRepository {
                     "clicks_count" integer DEFAULT 0 NOT NULL,
                     "is_expired" boolean DEFAULT false NOT NULL,
                     "clustered_with_id" text,
+                    "is_best_of" boolean DEFAULT false NOT NULL,
+                    "sentiment_score" text,
                     "posted_at" bigint NOT NULL
                 );
             `);
@@ -153,13 +162,39 @@ class AutofeedsRepository {
                 { name: 'is_digest', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'clicks_count', type: "integer DEFAULT 0 NOT NULL" },
                 { name: 'is_expired', type: "boolean DEFAULT false NOT NULL" },
-                { name: 'clustered_with_id', type: 'text' }
+                { name: 'clustered_with_id', type: 'text' },
+                { name: 'is_best_of', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'sentiment_score', type: 'text' }
             ];
             for (const col of histColsToAdd) {
                 await db.pool.query(`
                     ALTER TABLE "autofeed_history" ADD COLUMN IF NOT EXISTS "${col.name}" ${col.type};
                 `).catch(() => {});
             }
+
+            // 3b. Table d'historique des prix & All-Time Low
+            await db.pool.query(`
+                CREATE TABLE IF NOT EXISTS "autofeed_price_history" (
+                    "id" text PRIMARY KEY NOT NULL,
+                    "feed_id" text NOT NULL,
+                    "item_url" text NOT NULL,
+                    "item_title" text,
+                    "original_price" text,
+                    "current_price" text,
+                    "discount_percent" integer DEFAULT 0 NOT NULL,
+                    "currency" text DEFAULT 'EUR' NOT NULL,
+                    "is_all_time_low" boolean DEFAULT false NOT NULL,
+                    "recorded_at" bigint NOT NULL
+                );
+            `).catch(() => {});
+
+            await db.pool.query(`
+                CREATE INDEX IF NOT EXISTS "idx_autofeed_price_url" ON "autofeed_price_history" ("item_url");
+            `).catch(() => {});
+
+            await db.pool.query(`
+                CREATE INDEX IF NOT EXISTS "idx_autofeed_price_feed" ON "autofeed_price_history" ("feed_id");
+            `).catch(() => {});
 
             await db.pool.query(`
                 CREATE INDEX IF NOT EXISTS "idx_autofeed_hist_lookup" ON "autofeed_history" ("feed_id", "item_guid");
@@ -260,6 +295,13 @@ class AutofeedsRepository {
         breakingRoleId = null,
         autoExpireDays = 0,
         enableAudioBriefing = false,
+        enableVoting = false,
+        bestOfThreshold = 5,
+        bestOfChannelId = null,
+        minDiscountPercent = 0,
+        autoSyncEvents = false,
+        goodVibesOnly = false,
+        enableSecurityScan = true,
         intervalMinutes = 15
     }) {
         await this.initSchema();
@@ -286,8 +328,10 @@ class AutofeedsRepository {
                 channel_tag_routing, quiet_hours, max_posts_per_hour,
                 auto_reactions, auto_poll, breaking_keywords,
                 bypass_quiet_hours, breaking_role_id, auto_expire_days, enable_audio_briefing,
+                enable_voting, best_of_threshold, best_of_channel_id,
+                min_discount_percent, auto_sync_events, good_vibes_only, enable_security_scan,
                 interval_minutes, enabled, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, true, $38, $38)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, true, $45, $45)`,
             [
                 id,
                 guildId,
@@ -325,6 +369,13 @@ class AutofeedsRepository {
                 breakingRoleId || null,
                 Number(autoExpireDays || 0),
                 Boolean(enableAudioBriefing),
+                Boolean(enableVoting),
+                Number(bestOfThreshold || 5),
+                bestOfChannelId || null,
+                Number(minDiscountPercent || 0),
+                Boolean(autoSyncEvents),
+                Boolean(goodVibesOnly),
+                enableSecurityScan !== false,
                 intervalMinutes,
                 now
             ]
@@ -337,6 +388,24 @@ class AutofeedsRepository {
         await this.initSchema();
         const res = await db.pool.query(`SELECT * FROM autofeeds WHERE id = $1 LIMIT 1`, [id]);
         return res.rows?.[0] ? this._mapRow(res.rows[0]) : null;
+    }
+
+    async getFeed(id) {
+        return this.getFeedById(id);
+    }
+
+    async getBestOfHistory(guildId, limit = 5) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT h.*, f.name as feed_name 
+             FROM autofeed_history h
+             JOIN autofeeds f ON h.feed_id = f.id
+             WHERE f.guild_id = $1 AND h.is_best_of = true
+             ORDER BY h.posted_at DESC
+             LIMIT $2`,
+            [guildId, limit]
+        ).catch(() => ({ rows: [] }));
+        return res.rows || [];
     }
 
     async listByGuild(guildId) {
@@ -394,6 +463,13 @@ class AutofeedsRepository {
             breakingRoleId: patch.breakingRoleId !== undefined ? patch.breakingRoleId : current.breakingRoleId,
             autoExpireDays: patch.autoExpireDays !== undefined ? Number(patch.autoExpireDays) : current.autoExpireDays,
             enableAudioBriefing: patch.enableAudioBriefing !== undefined ? Boolean(patch.enableAudioBriefing) : current.enableAudioBriefing,
+            enableVoting: patch.enableVoting !== undefined ? Boolean(patch.enableVoting) : current.enableVoting,
+            bestOfThreshold: patch.bestOfThreshold !== undefined ? Number(patch.bestOfThreshold) : current.bestOfThreshold,
+            bestOfChannelId: patch.bestOfChannelId !== undefined ? patch.bestOfChannelId : current.bestOfChannelId,
+            minDiscountPercent: patch.minDiscountPercent !== undefined ? Number(patch.minDiscountPercent) : current.minDiscountPercent,
+            autoSyncEvents: patch.autoSyncEvents !== undefined ? Boolean(patch.autoSyncEvents) : current.autoSyncEvents,
+            goodVibesOnly: patch.goodVibesOnly !== undefined ? Boolean(patch.goodVibesOnly) : current.goodVibesOnly,
+            enableSecurityScan: patch.enableSecurityScan !== undefined ? Boolean(patch.enableSecurityScan) : (current.enableSecurityScan !== false),
             intervalMinutes: patch.intervalMinutes !== undefined ? patch.intervalMinutes : current.intervalMinutes,
             enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : current.enabled,
             updatedAt: Date.now()
@@ -435,9 +511,16 @@ class AutofeedsRepository {
                 breaking_role_id = $33,
                 auto_expire_days = $34,
                 enable_audio_briefing = $35,
-                interval_minutes = $36,
-                enabled = $37,
-                updated_at = $38
+                enable_voting = $36,
+                best_of_threshold = $37,
+                best_of_channel_id = $38,
+                min_discount_percent = $39,
+                auto_sync_events = $40,
+                good_vibes_only = $41,
+                enable_security_scan = $42,
+                interval_minutes = $43,
+                enabled = $44,
+                updated_at = $45
              WHERE id = $1`,
             [
                 id,
@@ -475,6 +558,13 @@ class AutofeedsRepository {
                 updated.breakingRoleId,
                 updated.autoExpireDays,
                 updated.enableAudioBriefing,
+                updated.enableVoting,
+                updated.bestOfThreshold,
+                updated.bestOfChannelId,
+                updated.minDiscountPercent,
+                updated.autoSyncEvents,
+                updated.goodVibesOnly,
+                updated.enableSecurityScan,
                 updated.intervalMinutes,
                 updated.enabled,
                 updated.updatedAt
@@ -607,22 +697,41 @@ class AutofeedsRepository {
         return Boolean(res.rows?.[0]);
     }
 
-    async recordPostedItem(feedId, itemGuid, itemUrl = null, itemTitle = null, {
-        guildId = null,
-        channelId = null,
-        messageId = null,
-        canonicalUrl = null,
-        itemAuthor = null,
-        itemContent = null,
-        tags = [],
-        isDigest = false,
-        clusteredWithId = null,
-        postedAt = null
-    } = {}) {
+    async recordPostedItem(feedId, itemGuid, itemUrl = null, itemTitle = null, opts = {}) {
+        let fId = feedId;
+        let guid = itemGuid;
+        let url = itemUrl;
+        let title = itemTitle;
+        let options = opts;
+
+        if (typeof feedId === 'object' && feedId !== null) {
+            fId = feedId.feedId || feedId.feed_id;
+            guid = feedId.itemGuid || feedId.item_guid || feedId.itemId || feedId.id;
+            url = feedId.itemUrl || feedId.item_url || feedId.url || feedId.link;
+            title = feedId.itemTitle || feedId.item_title || feedId.title;
+            options = feedId;
+        }
+
+        const {
+            guildId = null,
+            channelId = null,
+            messageId = null,
+            discordMessageId = null,
+            canonicalUrl = null,
+            itemAuthor = null,
+            itemContent = null,
+            tags = [],
+            isDigest = false,
+            clusteredWithId = null,
+            isBestOf = false,
+            sentimentScore = null,
+            postedAt = null
+        } = options;
+
         await this.initSchema();
         let targetGuildId = guildId;
-        if (!targetGuildId && feedId) {
-            const fRes = await db.pool.query(`SELECT guild_id FROM autofeeds WHERE id = $1`, [feedId]);
+        if (!targetGuildId && fId) {
+            const fRes = await db.pool.query(`SELECT guild_id FROM autofeeds WHERE id = $1`, [fId]);
             targetGuildId = fRes.rows?.[0]?.guild_id || null;
         }
         const id = newId();
@@ -633,26 +742,29 @@ class AutofeedsRepository {
                 id, feed_id, guild_id, channel_id, message_id,
                 item_guid, item_url, canonical_url, item_title,
                 item_author, item_content, tags, is_digest,
-                clicks_count, is_expired, clustered_with_id, posted_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, false, $14, $15)`,
+                clicks_count, is_expired, clustered_with_id,
+                is_best_of, sentiment_score, posted_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, false, $14, $15, $16, $17)`,
             [
                 id,
-                feedId,
+                fId,
                 targetGuildId,
                 channelId || null,
-                messageId || null,
-                itemGuid,
-                itemUrl,
-                canonicalUrl || itemUrl,
-                itemTitle,
+                messageId || discordMessageId || null,
+                guid,
+                url,
+                canonicalUrl || url,
+                title,
                 itemAuthor,
                 itemContent ? String(itemContent).slice(0, 1000) : null,
                 tagsJson,
                 Boolean(isDigest),
                 clusteredWithId || null,
+                Boolean(isBestOf),
+                sentimentScore ? String(sentimentScore) : null,
                 now
             ]
-        ).catch(() => {});
+        );
         return id;
     }
 
@@ -758,6 +870,89 @@ class AutofeedsRepository {
         ).catch(() => {});
     }
 
+    async updateHistoryBestOf(id, isBestOf = true) {
+        await this.initSchema();
+        await db.pool.query(
+            `UPDATE autofeed_history SET is_best_of = $2 WHERE id = $1`,
+            [id, Boolean(isBestOf)]
+        ).catch(() => {});
+    }
+
+    async recordPriceHistory({
+        feedId,
+        itemUrl,
+        itemTitle = null,
+        originalPrice = null,
+        currentPrice = null,
+        discountPercent = 0,
+        currency = 'EUR',
+        isAllTimeLow = false,
+        recordedAt = null
+    }) {
+        await this.initSchema();
+        const id = newId();
+        const now = recordedAt ? Number(recordedAt) : Date.now();
+        await db.pool.query(
+            `INSERT INTO autofeed_price_history (
+                id, feed_id, item_url, item_title,
+                original_price, current_price, discount_percent,
+                currency, is_all_time_low, recorded_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+                id,
+                feedId,
+                itemUrl,
+                itemTitle,
+                originalPrice,
+                currentPrice,
+                Number(discountPercent || 0),
+                currency || 'EUR',
+                Boolean(isAllTimeLow),
+                now
+            ]
+        ).catch(() => {});
+        return id;
+    }
+
+    async getPriceHistory(itemUrl, limit = 20) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT * FROM autofeed_price_history WHERE item_url = $1 ORDER BY recorded_at DESC LIMIT $2`,
+            [itemUrl, limit]
+        );
+        return (res.rows || []).map(r => ({
+            id: r.id,
+            feedId: r.feed_id,
+            itemUrl: r.item_url,
+            itemTitle: r.item_title,
+            originalPrice: r.original_price,
+            currentPrice: r.current_price,
+            discountPercent: Number(r.discount_percent || 0),
+            currency: r.currency || 'EUR',
+            isAllTimeLow: Boolean(r.is_all_time_low),
+            recordedAt: Number(r.recorded_at || 0)
+        }));
+    }
+
+    async getLowestHistoricalPrice(itemUrl) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT * FROM autofeed_price_history WHERE item_url = $1 ORDER BY recorded_at ASC`,
+            [itemUrl]
+        );
+        if (!res.rows || res.rows.length === 0) return null;
+        let lowest = null;
+        for (const row of res.rows) {
+            const num = parseFloat(String(row.current_price || '').replace(',', '.').replace(/[^0-9.]/g, ''));
+            if (!isNaN(num)) {
+                if (lowest === null || num < lowest.amount) {
+                    lowest = { amount: num, raw: row.current_price, row };
+                }
+            }
+        }
+        return lowest;
+    }
+
     async getHistory(feedId, limit = 10) {
         await this.initSchema();
         const res = await db.pool.query(
@@ -769,10 +964,16 @@ class AutofeedsRepository {
             feedId: r.feed_id,
             title: r.item_title,
             link: r.item_url,
+            url: r.item_url,
             contentSnippet: r.item_content,
             tags: (() => { try { return JSON.parse(r.tags || '[]'); } catch { return []; } })(),
+            isBestOf: Boolean(r.is_best_of),
             postedAt: Number(r.posted_at || 0)
         }));
+    }
+
+    async listActive() {
+        return this.listAllActive();
     }
 
     async searchHistory(guildId, query, limit = 10) {
@@ -1123,6 +1324,13 @@ class AutofeedsRepository {
             breakingRoleId: row.breaking_role_id || null,
             autoExpireDays: Number(row.auto_expire_days || 0),
             enableAudioBriefing: Boolean(row.enable_audio_briefing),
+            enableVoting: Boolean(row.enable_voting),
+            bestOfThreshold: Number(row.best_of_threshold || 5),
+            bestOfChannelId: row.best_of_channel_id || null,
+            minDiscountPercent: Number(row.min_discount_percent || 0),
+            autoSyncEvents: Boolean(row.auto_sync_events),
+            goodVibesOnly: Boolean(row.good_vibes_only),
+            enableSecurityScan: row.enable_security_scan !== false,
             lastItemId: row.last_item_id,
             lastItemPublishedAt: Number(row.last_item_published_at || 0),
             intervalMinutes: Number(row.interval_minutes || 15),

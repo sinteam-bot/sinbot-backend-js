@@ -43,6 +43,13 @@ const autofeeds = pgTable('autofeeds', {
     breakingRoleId: text('breaking_role_id'),
     autoExpireDays: integer('auto_expire_days').default(0).notNull(), // 0 = disabled
     enableAudioBriefing: boolean('enable_audio_briefing').default(false).notNull(),
+    enableVoting: boolean('enable_voting').default(false).notNull(),
+    bestOfThreshold: integer('best_of_threshold').default(5).notNull(),
+    bestOfChannelId: text('best_of_channel_id'),
+    minDiscountPercent: integer('min_discount_percent').default(0).notNull(),
+    autoSyncEvents: boolean('auto_sync_events').default(false).notNull(),
+    goodVibesOnly: boolean('good_vibes_only').default(false).notNull(),
+    enableSecurityScan: boolean('enable_security_scan').default(true).notNull(),
     lastItemId: text('last_item_id'),
     lastItemPublishedAt: bigint('last_item_published_at', { mode: 'number' }).default(0).notNull(),
     intervalMinutes: integer('interval_minutes').default(15).notNull(),
@@ -90,10 +97,28 @@ const autofeedHistory = pgTable('autofeed_history', {
     clicksCount: integer('clicks_count').default(0).notNull(),
     isExpired: boolean('is_expired').default(false).notNull(),
     clusteredWithId: text('clustered_with_id'),
+    isBestOf: boolean('is_best_of').default(false).notNull(),
+    sentimentScore: text('sentiment_score'),
     postedAt: bigint('posted_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_autofeed_hist_lookup').on(table.feedId, table.itemGuid),
     index('idx_autofeed_hist_guild').on(table.guildId)
+]);
+
+const autofeedPriceHistory = pgTable('autofeed_price_history', {
+    id: text('id').primaryKey(),
+    feedId: text('feed_id').notNull(),
+    itemUrl: text('item_url').notNull(),
+    itemTitle: text('item_title'),
+    originalPrice: text('original_price'),
+    currentPrice: text('current_price'),
+    discountPercent: integer('discount_percent').default(0).notNull(),
+    currency: text('currency').default('EUR').notNull(),
+    isAllTimeLow: boolean('is_all_time_low').default(false).notNull(),
+    recordedAt: bigint('recorded_at', { mode: 'number' }).notNull()
+}, (table) => [
+    index('idx_autofeed_price_url').on(table.itemUrl),
+    index('idx_autofeed_price_feed').on(table.feedId)
 ]);
 
 const autofeedClaims = pgTable('autofeed_claims', {
@@ -134,6 +159,7 @@ module.exports = {
     autofeeds,
     autofeedSubscriptions,
     autofeedHistory,
+    autofeedPriceHistory,
     autofeedClaims,
     autofeedLiveSessions
 };

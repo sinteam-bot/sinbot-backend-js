@@ -118,6 +118,13 @@ class AutofeedsController {
                 breakingRoleId: req.body?.breaking_role_id || req.body?.breakingRoleId || null,
                 autoExpireDays: req.body?.auto_expire_days !== undefined ? Number(req.body.auto_expire_days) : (req.body?.autoExpireDays !== undefined ? Number(req.body.autoExpireDays) : 0),
                 enableAudioBriefing: req.body?.enable_audio_briefing !== undefined ? Boolean(req.body.enable_audio_briefing) : Boolean(req.body?.enableAudioBriefing),
+                enableVoting: req.body?.enable_voting !== undefined ? Boolean(req.body.enable_voting) : Boolean(req.body?.enableVoting),
+                bestOfThreshold: req.body?.best_of_threshold !== undefined ? Number(req.body.best_of_threshold) : (req.body?.bestOfThreshold !== undefined ? Number(req.body.bestOfThreshold) : 5),
+                bestOfChannelId: req.body?.best_of_channel_id || req.body?.bestOfChannelId || null,
+                minDiscountPercent: req.body?.min_discount_percent !== undefined ? Number(req.body.min_discount_percent) : (req.body?.minDiscountPercent !== undefined ? Number(req.body.minDiscountPercent) : 0),
+                autoSyncEvents: req.body?.auto_sync_events !== undefined ? Boolean(req.body.auto_sync_events) : Boolean(req.body?.autoSyncEvents),
+                goodVibesOnly: req.body?.good_vibes_only !== undefined ? Boolean(req.body.good_vibes_only) : Boolean(req.body?.goodVibesOnly),
+                enableSecurityScan: req.body?.enable_security_scan !== undefined ? Boolean(req.body.enable_security_scan) : (req.body?.enableSecurityScan !== undefined ? Boolean(req.body.enableSecurityScan) : true),
                 intervalMinutes: intervalMinutes || interval_minutes || checkIntervalMinutes || check_interval_minutes,
                 enabled: enabled !== undefined ? Boolean(enabled) : (isActive !== undefined ? Boolean(isActive) : (is_active !== undefined ? Boolean(is_active) : true))
             });
@@ -315,6 +322,13 @@ class AutofeedsController {
                 breakingRoleId: patch.breaking_role_id !== undefined ? patch.breaking_role_id : patch.breakingRoleId,
                 autoExpireDays: patch.auto_expire_days !== undefined ? Number(patch.auto_expire_days) : (patch.autoExpireDays !== undefined ? Number(patch.autoExpireDays) : undefined),
                 enableAudioBriefing: patch.enable_audio_briefing !== undefined ? Boolean(patch.enable_audio_briefing) : (patch.enableAudioBriefing !== undefined ? Boolean(patch.enableAudioBriefing) : undefined),
+                enableVoting: patch.enable_voting !== undefined ? Boolean(patch.enable_voting) : (patch.enableVoting !== undefined ? Boolean(patch.enableVoting) : undefined),
+                bestOfThreshold: patch.best_of_threshold !== undefined ? Number(patch.best_of_threshold) : (patch.bestOfThreshold !== undefined ? Number(patch.bestOfThreshold) : undefined),
+                bestOfChannelId: patch.best_of_channel_id !== undefined ? patch.best_of_channel_id : patch.bestOfChannelId,
+                minDiscountPercent: patch.min_discount_percent !== undefined ? Number(patch.min_discount_percent) : (patch.minDiscountPercent !== undefined ? Number(patch.minDiscountPercent) : undefined),
+                autoSyncEvents: patch.auto_sync_events !== undefined ? Boolean(patch.auto_sync_events) : (patch.autoSyncEvents !== undefined ? Boolean(patch.autoSyncEvents) : undefined),
+                goodVibesOnly: patch.good_vibes_only !== undefined ? Boolean(patch.good_vibes_only) : (patch.goodVibesOnly !== undefined ? Boolean(patch.goodVibesOnly) : undefined),
+                enableSecurityScan: patch.enable_security_scan !== undefined ? Boolean(patch.enable_security_scan) : (patch.enableSecurityScan !== undefined ? Boolean(patch.enableSecurityScan) : undefined),
                 intervalMinutes: patch.interval_minutes || patch.intervalMinutes || patch.check_interval_minutes || patch.checkIntervalMinutes,
                 enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : (patch.isActive !== undefined ? Boolean(patch.isActive) : (patch.is_active !== undefined ? Boolean(patch.is_active) : undefined))
             });
@@ -599,11 +613,58 @@ class AutofeedsController {
             return result;
         }
     }
+
+    /**
+     * GET /api/autofeeds/reader?url=...
+     */
+    async getReaderArticle(req, res) {
+        try {
+            const url = req.query?.url;
+            if (!url) {
+                const result = { success: false, ok: false, error: 'url parameter is required' };
+                if (res && typeof res.json === 'function') res.json(result);
+                return result;
+            }
+            const article = await this.service.getReaderArticle(url);
+            const result = { success: true, ok: true, data: article };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * GET /api/autofeeds/votes?targetType=autofeed&targetId=...
+     */
+    async getVotes(req, res) {
+        try {
+            const targetType = req.query?.targetType || 'autofeed';
+            const targetId = req.query?.targetId || req.query?.id;
+            if (!targetId) {
+                const result = { success: false, ok: false, error: 'targetId parameter is required' };
+                if (res && typeof res.json === 'function') res.json(result);
+                return result;
+            }
+            const stats = await this.service.votingService.getStats(targetType, targetId);
+            const result = { success: true, ok: true, data: stats };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
 }
 
 Controller('/api/autofeeds')(AutofeedsController);
 Get('/stats')(AutofeedsController.prototype, 'getStats');
 Get('/search')(AutofeedsController.prototype, 'searchItems');
+Get('/reader')(AutofeedsController.prototype, 'getReaderArticle');
+Get('/votes')(AutofeedsController.prototype, 'getVotes');
 Post('/claims')(AutofeedsController.prototype, 'claimItem');
 Post('/purge')(AutofeedsController.prototype, 'purge');
 Get('/presets')(AutofeedsController.prototype, 'getPresets');

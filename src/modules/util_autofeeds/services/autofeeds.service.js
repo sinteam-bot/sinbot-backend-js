@@ -19,6 +19,12 @@ const { AutofeedsPulseService } = require('./autofeeds-pulse.service.js');
 const { AutofeedsClusteringService } = require('./autofeeds-clustering.service.js');
 const { AutofeedsPurgeService } = require('./autofeeds-purge.service.js');
 const { AutofeedsAudioService } = require('./autofeeds-audio.service.js');
+const { AutofeedsPricingService, autofeedsPricingService } = require('./autofeeds-pricing.service.js');
+const { AutofeedsEventsService, autofeedsEventsService } = require('./autofeeds-events.service.js');
+const { AutofeedsSecurityService, autofeedsSecurityService } = require('./autofeeds-security.service.js');
+const { AutofeedsSentimentService, autofeedsSentimentService } = require('./autofeeds-sentiment.service.js');
+const { AutofeedsReaderService, autofeedsReaderService } = require('./autofeeds-reader.service.js');
+const { communityVotingService } = require('../../../services/community-voting.service.js');
 const { providerRegistry } = require('./providers/provider-registry.js');
 const { PRESETS } = require('../config/presets.js');
 const logger = require('../../../utils/logger.js');
@@ -51,7 +57,13 @@ class AutofeedsService {
         pulseService = new AutofeedsPulseService(),
         clusteringService = new AutofeedsClusteringService(),
         purgeService = new AutofeedsPurgeService({ repository: repo }),
-        audioService = new AutofeedsAudioService()
+        audioService = new AutofeedsAudioService(),
+        pricingService = autofeedsPricingService,
+        eventsService = autofeedsEventsService,
+        securityService = autofeedsSecurityService,
+        sentimentService = autofeedsSentimentService,
+        readerService = autofeedsReaderService,
+        votingService = communityVotingService
     ) {
         this.repo = repo;
         this.subService = subService;
@@ -65,8 +77,20 @@ class AutofeedsService {
         this.clusteringService = clusteringService;
         this.purgeService = purgeService;
         this.audioService = audioService;
+        this.pricingService = pricingService;
+        this.eventsService = eventsService;
+        this.securityService = securityService;
+        this.sentimentService = sentimentService;
+        this.readerService = readerService;
+        this.votingService = votingService;
         this._intervalTimer = null;
         this._client = null;
+
+        if (this.votingService && typeof this.votingService.registerThresholdHook === 'function') {
+            this.votingService.registerThresholdHook('autofeed', async (payload) => {
+                await this.handleVoteThresholdReached(payload);
+            });
+        }
     }
 
     /**
@@ -116,6 +140,13 @@ class AutofeedsService {
         breakingRoleId = null,
         autoExpireDays = 0,
         enableAudioBriefing = false,
+        enableVoting = false,
+        bestOfThreshold = 5,
+        bestOfChannelId = null,
+        minDiscountPercent = 0,
+        autoSyncEvents = false,
+        goodVibesOnly = false,
+        enableSecurityScan = true,
         intervalMinutes = 15
     }) {
         if (!guildId || !channelId || !feedUrl) {
@@ -202,6 +233,13 @@ class AutofeedsService {
             breakingRoleId,
             autoExpireDays,
             enableAudioBriefing,
+            enableVoting,
+            bestOfThreshold,
+            bestOfChannelId,
+            minDiscountPercent,
+            autoSyncEvents,
+            goodVibesOnly,
+            enableSecurityScan,
             intervalMinutes: resolvedInterval
         });
 
@@ -386,6 +424,12 @@ class AutofeedsService {
         if (item.extra?.aiTranslation?.description) {
             fields.unshift({ name: '🇫🇷 Traduction', value: item.extra.aiTranslation.description.slice(0, 1024), inline: false });
         }
+        if (item.extra?.priceInfo?.badgeText) {
+            fields.push({ name: '💰 Bon Plan & Prix', value: item.extra.priceInfo.badgeText, inline: false });
+        }
+        if (item.extra?.sentiment && item.extra.sentiment.category !== 'neutral') {
+            fields.push({ name: '🎭 Ambiance', value: item.extra.sentiment.badgeText, inline: true });
+        }
 
         if (fields.length > 0) {
             embed.addFields(fields);
@@ -449,6 +493,35 @@ class AutofeedsService {
         }
 
         return row.components.length > 0 ? row : null;
+    }
+
+    /**
+     * Génère l'ensemble des ActionRows pour un message, incluant les boutons d'action et de vote.
+     * @param {object} feed
+     * @param {object} item
+     * @returns {ActionRowBuilder[]}
+     */
+    buildComponentRows(feed, item) {
+        const rows = [];
+        const actionRow = this.buildActionRow(feed, item);
+        if (actionRow) {
+            rows.push(actionRow);
+        }
+
+        if (feed.enableVoting && this.votingService) {
+            const voteTargetId = item.id || item.link || item.guid || 'item';
+            const voteRow = this.votingService.buildVoteRow({
+                targetType: 'autofeed',
+                targetId: voteTargetId,
+                upvotes: 0,
+                downvotes: 0
+            });
+            if (voteRow) {
+                rows.push(voteRow);
+            }
+        }
+
+        return rows;
     }
 
     /**
@@ -593,6 +666,58 @@ class AutofeedsService {
 
                     if (!channel) continue;
 
+                    // Bouclier Anti-Phishing & Déplieur d'URLs
+                    if (this.securityService && feed.enableSecurityScan !== false && item.link) {
+                        const safety = await this.securityService.checkUrlSafety(item.link);
+                        if (!safety.safe) {
+                            logger.warn(`[AutofeedsSecurity] Lien bloqué pour "${item.title}": ${safety.reason}`, 'AUTOFEEDS');
+                            continue;
+                        }
+                        if (safety.expandedUrl && safety.expandedUrl !== item.link) {
+                            item.link = safety.expandedUrl;
+                            item.url = safety.expandedUrl;
+                        }
+                    }
+
+                    // Filtre d'Humeur & "Good Vibes Only"
+                    if (this.sentimentService) {
+                        const sentiment = this.sentimentService.analyzeSentiment(item.contentSnippet || item.summary || '', item.title || '');
+                        item.extra = { ...(item.extra || {}), sentiment };
+                        if (feed.goodVibesOnly && this.sentimentService.shouldFilterGoodVibes(sentiment.score, true)) {
+                            logger.info(`[AutofeedsSentiment] Article filtré en mode Good Vibes Only (score: ${sentiment.score}): "${item.title}"`, 'AUTOFEEDS');
+                            continue;
+                        }
+                    }
+
+                    // Traqueur de Prix & All-Time Low
+                    if (this.pricingService) {
+                        const priceInfo = this.pricingService.extractPriceInfo(item.contentSnippet || item.summary || '', item.title || '');
+                        if (priceInfo.hasPrice) {
+                            if (this.pricingService.shouldFilterByDiscount(priceInfo.discountPercent, feed.minDiscountPercent)) {
+                                logger.info(`[AutofeedsPricing] Offre ignorée car réduction ${priceInfo.discountPercent}% < minimum requis ${feed.minDiscountPercent}%`, 'AUTOFEEDS');
+                                continue;
+                            }
+                            const priceHistory = await this.repo.getPriceHistory(item.link || item.url);
+                            const analyzedDeal = this.pricingService.analyzeDeal(priceInfo, priceHistory);
+                            item.extra = { ...(item.extra || {}), priceInfo: analyzedDeal };
+                            await this.repo.recordPriceHistory({
+                                feedId: feed.id,
+                                itemUrl: item.link || item.url,
+                                itemTitle: item.title,
+                                originalPrice: analyzedDeal.originalPrice,
+                                currentPrice: analyzedDeal.currentPrice,
+                                discountPercent: analyzedDeal.discountPercent,
+                                currency: analyzedDeal.currency,
+                                isAllTimeLow: analyzedDeal.isAllTimeLow
+                            });
+                        }
+                    }
+
+                    // Synchronisation automatique des Événements Programmés Discord
+                    if (this.eventsService && feed.autoSyncEvents && channel.guild) {
+                        await this.eventsService.syncGuildScheduledEvent(channel.guild, item);
+                    }
+
                     // Déduplication & News Clustering Cross-Flux
                     if (this.clusteringService && !isBreaking) {
                         const recentItems = await this.repo.findRecentHistoryForClustering(feed.guildId, 6);
@@ -608,7 +733,8 @@ class AutofeedsService {
                                 itemContent: item.contentSnippet,
                                 tags: item.tags,
                                 isDigest: false,
-                                clusteredWithId: cluster.candidate.id
+                                clusteredWithId: cluster.candidate.id,
+                                sentimentScore: item.extra?.sentiment?.score != null ? String(item.extra.sentiment.score) : null
                             });
                             continue; // Doublon détecté et consigné sans reposter !
                         }
@@ -634,7 +760,7 @@ class AutofeedsService {
                         }
 
                         const embed = this.buildDiscordEmbed(feed, item);
-                        const actionRow = this.buildActionRow(feed, item);
+                        const componentRows = this.buildComponentRows(feed, item);
 
                         // Détecter les souscripteurs à notifier
                         const { mentionUserIds, dmUserIds } = await this.subService.findMatchingSubscribers(feed.guildId, feed, item);
@@ -679,8 +805,8 @@ class AutofeedsService {
                         if (messageContent.trim()) {
                             sendPayload.content = messageContent;
                         }
-                        if (actionRow) {
-                            sendPayload.components = [actionRow];
+                        if (componentRows.length > 0) {
+                            sendPayload.components = componentRows;
                         }
 
                         let sentMsg = null;
@@ -740,7 +866,7 @@ class AutofeedsService {
                                         await user.send({
                                             content: `🔔 Nouvel article correspondant à vos abonnements sur le serveur :`,
                                             embeds: [embed],
-                                            components: actionRow ? [actionRow] : []
+                                            components: componentRows
                                         }).catch(() => {});
                                     }
                                 } catch {}
@@ -756,7 +882,8 @@ class AutofeedsService {
                             itemAuthor: item.author,
                             itemContent: item.contentSnippet,
                             tags: item.tags,
-                            isDigest: false
+                            isDigest: false,
+                            sentimentScore: item.extra?.sentiment?.score != null ? String(item.extra.sentiment.score) : null
                         });
                     }
                 }
@@ -1273,6 +1400,86 @@ class AutofeedsService {
             itemCount: items ? items.length : 0,
             mimeType: 'audio/mpeg'
         };
+    }
+
+    /**
+     * Traite les franchissements de seuils de vote et gère la promotion automatique (Hall of Fame / Best-Of).
+     */
+    async handleVoteThresholdReached(payload) {
+        if (!payload || payload.targetType !== 'autofeed') return;
+        const guildId = payload.guildId || 'default';
+        const targetId = payload.targetId;
+        const stats = payload.stats || { score: 0 };
+
+        try {
+            const client = this._client || this.discordClient;
+            let feeds = [];
+            if (targetId && targetId.includes(':')) {
+                const potentialFeedId = targetId.split(':')[0];
+                const directFeed = await this.repo.getFeed(potentialFeedId);
+                if (directFeed) feeds.push(directFeed);
+            }
+            if (feeds.length === 0) {
+                feeds = (guildId && guildId !== 'default')
+                    ? await this.repo.listByGuild(guildId)
+                    : await this.repo.listActive();
+            }
+
+            for (const feed of feeds) {
+                if (!feed.enableVoting || !feed.bestOfChannelId) continue;
+                if (stats.score < (feed.bestOfThreshold || 5)) continue;
+
+                const historyItems = await this.repo.getHistory(feed.id, 50);
+                const match = historyItems.find(h => 
+                    h.id === targetId || 
+                    h.link === targetId || 
+                    h.title === targetId ||
+                    (h.link && targetId.includes(h.link)) ||
+                    (h.id && targetId.includes(h.id)) ||
+                    (h.url && targetId.includes(h.url)) ||
+                    targetId === `${feed.id}:${h.link}` ||
+                    targetId === `${feed.id}:${h.url}`
+                );
+                if (!match || match.isBestOf) continue;
+
+                if (client && client.channels) {
+                    const bestOfChan = client.channels.cache?.get(feed.bestOfChannelId)
+                        || (client.channels.fetch ? await client.channels.fetch(feed.bestOfChannelId).catch(() => null) : null);
+
+                    if (bestOfChan && bestOfChan.send) {
+                        const embed = new EmbedBuilder()
+                            .setColor(0xFEE75C)
+                            .setTitle(`🏆 [BEST-OF] ${match.title ? (match.title.length > 200 ? match.title.slice(0, 197) + '...' : match.title) : 'COUP DE CŒUR'} (+${stats.score} votes)`)
+                            .setDescription(`**[${match.title}](${match.link})**\n\n${match.contentSnippet || ''}`)
+                            .addFields(
+                                { name: '📊 Votes des membres', value: `👍 **${stats.upvotes}** • 👎 **${stats.downvotes}** (Score: **+${stats.score}**)`, inline: true },
+                                { name: '📰 Flux Source', value: `\`${feed.name}\``, inline: true }
+                            )
+                            .setFooter({ text: 'Élu coup de cœur par la communauté' })
+                            .setTimestamp();
+
+                        await bestOfChan.send({ embeds: [embed] }).catch(() => {});
+                    }
+                }
+
+                await this.repo.updateHistoryBestOf(match.id, true);
+                logger.info(`[AutofeedsBestOf] Article "${match.title}" promu dans le Best-Of (${feed.bestOfChannelId}) !`, 'AUTOFEEDS');
+                break;
+            }
+        } catch (err) {
+            logger.warn(`[AutofeedsBestOf] Erreur lors de la promotion Best-Of: ${err.message}`, 'AUTOFEEDS');
+        }
+    }
+
+    /**
+     * Extrait le contenu nettoyé d'un article pour le mode lecture épuré (Reader View).
+     * @param {string} url
+     */
+    async getReaderArticle(url) {
+        if (!this.readerService) {
+            throw new Error('Service de lecture non disponible');
+        }
+        return this.readerService.extractCleanArticle(url);
     }
 
     start(client) {

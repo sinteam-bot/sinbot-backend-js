@@ -50,6 +50,16 @@ module.exports = {
                 }
                 return;
             }
+
+            if (interaction.customId?.startsWith('vote:')) {
+                try {
+                    const { communityVotingService } = require('../services/community-voting.service.js');
+                    await communityVotingService.handleInteraction(interaction);
+                } catch (err) {
+                    console.error('❌ Erreur traitement vote:', err);
+                }
+                return;
+            }
             return;
         }
 

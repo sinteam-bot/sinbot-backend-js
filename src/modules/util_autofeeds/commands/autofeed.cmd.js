@@ -535,6 +535,67 @@ class AutofeedCommands {
         }
     }
 
+    async executeRead(interaction) {
+        const url = interaction.options.getString('url');
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const article = await this.service.getReaderArticle(url);
+            const excerpt = article.textContent?.slice(0, 3500) || 'Contenu indisponible.';
+
+            const embed = new EmbedBuilder()
+                .setColor(0x00A8FC)
+                .setTitle(article.title ? (article.title.length > 250 ? article.title.slice(0, 247) + '...' : article.title) : 'Mode Lecture')
+                .setURL(article.url || url)
+                .setDescription(excerpt)
+                .setFooter({ text: `${article.siteName ? article.siteName + ' • ' : ''}Temps de lecture estimé : ~${article.readingTimeMinutes} min (${article.wordCount} mots)` });
+
+            if (article.leadImageUrl) {
+                embed.setThumbnail(article.leadImageUrl);
+            }
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setLabel('Ouvrir l\'original')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(article.url || url)
+            );
+
+            return interaction.editReply({ embeds: [embed], components: [row] });
+        } catch (err) {
+            return interaction.editReply({
+                content: `❌ Impossible d'extraire la version épurée de cet article : ${err.message}`
+            });
+        }
+    }
+
+    async executeBestOf(interaction) {
+        const limit = interaction.options.getInteger('limite') || 5;
+        const guildId = interaction.guild?.id || 'default';
+
+        const items = await this.service.repo.getBestOfHistory(guildId, limit);
+
+        if (!items || items.length === 0) {
+            return interaction.reply({
+                content: 'ℹ️ Aucun article n\'a encore atteint le palier Best-Of (Hall of Fame) sur ce serveur.',
+                ephemeral: true
+            });
+        }
+
+        const lines = items.map((it, idx) => {
+            const date = it.posted_at ? new Date(it.posted_at).toLocaleDateString('fr-FR') : '';
+            return `**#${idx + 1}** [${it.item_title || 'Article'}](${it.item_url})\n└ Flux: *${it.feedName || 'Inconnu'}* • Date: ${date}`;
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFFD700)
+            .setTitle('🏆 Best-Of Actualités & Recommandations Communautaires')
+            .setDescription(lines.join('\n\n'))
+            .setFooter({ text: 'Les articles les plus plébiscités via les votes 👍' });
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
     // ==========================================
     // POINT D'ENTRÉE DU ROUTEUR COMMANDES
     // ==========================================
@@ -558,6 +619,8 @@ class AutofeedCommands {
             case 'digest':           return this.executeDigest(interaction);
             case 'purge':            return this.executePurge(interaction);
             case 'audio':            return this.executeAudio(interaction);
+            case 'read':             return this.executeRead(interaction);
+            case 'bestof':           return this.executeBestOf(interaction);
             default:
                 return interaction.reply({ content: '❌ Sous-commande inconnue', ephemeral: true });
         }
@@ -663,6 +726,16 @@ const feedBuilder = new SlashCommandBuilder()
             .setDescription('Générer un bulletin audio / radio flash TTS des dernières actualités')
             .addStringOption(o => o.setName('id').setDescription('Identifiant du flux').setRequired(true))
             .addIntegerOption(o => o.setName('nombre').setDescription('Nombre d\'articles à inclure (défaut: 5)').setRequired(false).setMinValue(1).setMaxValue(15))
+    )
+    .addSubcommand(sub =>
+        sub.setName('read')
+            .setDescription('Afficher un article en mode lecture épuré sans publicité')
+            .addStringOption(o => o.setName('url').setDescription('URL de la page web ou article').setRequired(true))
+    )
+    .addSubcommand(sub =>
+        sub.setName('bestof')
+            .setDescription('Afficher les articles Best-Of plébiscités par la communauté')
+            .addIntegerOption(o => o.setName('limite').setDescription('Nombre d\'articles (défaut: 5)').setRequired(false).setMinValue(1).setMaxValue(20))
     );
 
 // Alias /autofeed pour compatibilité descendante

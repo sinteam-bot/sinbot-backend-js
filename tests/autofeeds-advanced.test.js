@@ -24,6 +24,12 @@ import { AutofeedsPulseService } from '../src/modules/util_autofeeds/services/au
 import { AutofeedsClusteringService } from '../src/modules/util_autofeeds/services/autofeeds-clustering.service.js';
 import { AutofeedsPurgeService } from '../src/modules/util_autofeeds/services/autofeeds-purge.service.js';
 import { AutofeedsAudioService } from '../src/modules/util_autofeeds/services/autofeeds-audio.service.js';
+import { communityVotingService } from '../src/services/community-voting.service.js';
+import { AutofeedsPricingService } from '../src/modules/util_autofeeds/services/autofeeds-pricing.service.js';
+import { AutofeedsEventsService } from '../src/modules/util_autofeeds/services/autofeeds-events.service.js';
+import { AutofeedsSecurityService } from '../src/modules/util_autofeeds/services/autofeeds-security.service.js';
+import { AutofeedsSentimentService } from '../src/modules/util_autofeeds/services/autofeeds-sentiment.service.js';
+import { AutofeedsReaderService } from '../src/modules/util_autofeeds/services/autofeeds-reader.service.js';
 
 describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => {
     let repo;
@@ -50,6 +56,8 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
         await db.pool.query(`DELETE FROM autofeed_claims WHERE guild_id = $1`, [guildId]);
         await db.pool.query(`DELETE FROM autofeed_history WHERE feed_id LIKE 'feed_test_%'`);
         await db.pool.query(`DELETE FROM autofeed_live_sessions WHERE feed_id LIKE '%test%'`);
+        await db.pool.query(`DELETE FROM autofeed_price_history`).catch(() => {});
+        await db.pool.query(`DELETE FROM community_votes`).catch(() => {});
     });
 
     // ---------------------------------------------------------------
@@ -1778,6 +1786,359 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
             expect(ctrlAudio.success).toBe(true);
             expect(ctrlAudio.data.feedTitle).toBe('Audio Tech Digest');
             expect(ctrlAudio.data.sizeBytes).toBeGreaterThan(0);
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // 15. v5 Enhancements: Modular Community Voting, Deal Price Tracker, Event Sync, Security Shield, Sentiment Filter & Reader View
+    // ---------------------------------------------------------------
+    describe('15. v5 Enhancements: Community Voting, Price & ATL, Events, Security, Sentiment, Reader', () => {
+        it('handles universal community voting with toggles, stats, action rows and threshold hooks', async () => {
+            const targetType = 'suggestion';
+            const targetId = 'sugg_test_999';
+
+            // Initial stats
+            let stats = await communityVotingService.getStats(targetType, targetId);
+            expect(stats.upvotes).toBe(0);
+            expect(stats.downvotes).toBe(0);
+            expect(stats.score).toBe(0);
+
+            // User 1 upvotes
+            let v1 = await communityVotingService.vote({ targetType, targetId, userId: 'user_1', voteType: 'up' });
+            expect(v1.userVote).toBe('up');
+            expect(v1.stats.upvotes).toBe(1);
+            expect(v1.stats.score).toBe(1);
+
+            // User 1 switches to downvote
+            let v2 = await communityVotingService.vote({ targetType, targetId, userId: 'user_1', voteType: 'down' });
+            expect(v2.userVote).toBe('down');
+            expect(v2.stats.upvotes).toBe(0);
+            expect(v2.stats.downvotes).toBe(1);
+            expect(v2.stats.score).toBe(-1);
+
+            // User 1 clicks downvote again (toggle removal)
+            let v3 = await communityVotingService.vote({ targetType, targetId, userId: 'user_1', voteType: 'down' });
+            expect(v3.userVote).toBeNull();
+            expect(v3.stats.downvotes).toBe(0);
+            expect(v3.stats.score).toBe(0);
+
+            // Multiple users voting
+            await communityVotingService.vote({ targetType, targetId, userId: 'user_1', voteType: 'up' });
+            await communityVotingService.vote({ targetType, targetId, userId: 'user_2', voteType: 'up' });
+            await communityVotingService.vote({ targetType, targetId, userId: 'user_3', voteType: 'down' });
+
+            stats = await communityVotingService.getStats(targetType, targetId);
+            expect(stats.upvotes).toBe(2);
+            expect(stats.downvotes).toBe(1);
+            expect(stats.score).toBe(1);
+            expect(stats.totalVotes).toBe(3);
+
+            // Button action row generation
+            const row = communityVotingService.buildVoteRow({
+                targetType,
+                targetId,
+                upCount: stats.upvotes,
+                downCount: stats.downvotes,
+                userVote: 'up'
+            });
+            expect(row.components.length).toBe(2);
+            expect(row.components[0].data.custom_id).toBe(`vote:${targetType}:${targetId}:up`);
+            expect(row.components[1].data.custom_id).toBe(`vote:${targetType}:${targetId}:down`);
+            expect(row.components[0].data.label).toContain('2');
+            expect(row.components[1].data.label).toContain('1');
+
+            // Threshold hook trigger
+            let triggeredPayload = null;
+            communityVotingService.registerThresholdHook(targetType, async (payload) => {
+                triggeredPayload = payload;
+            });
+
+            // Vote until reaching threshold of 3
+            await communityVotingService.vote({ targetType, targetId, userId: 'user_3', voteType: 'up' }); // switches user_3 to up -> score: 3
+            expect(triggeredPayload).not.toBeNull();
+            expect(triggeredPayload.targetId).toBe(targetId);
+            expect(triggeredPayload.stats.score).toBe(3);
+
+            // Test interaction handler
+            let updatedPayload = null;
+            const mockInteraction = {
+                customId: `vote:${targetType}:${targetId}:up`,
+                user: { id: 'user_4' },
+                isButton: () => true,
+                update: async (p) => { updatedPayload = p; },
+                message: { components: [row] }
+            };
+            const handled = await communityVotingService.handleInteraction(mockInteraction);
+            expect(handled).toBe(true);
+            expect(updatedPayload).not.toBeNull();
+            expect(updatedPayload.components.length).toBe(1);
+        });
+
+        it('promotes autofeed articles to best-of channel upon reaching vote threshold', async () => {
+            const feedRes = await service.addFeed({
+                guildId,
+                channelId,
+                name: 'Gaming Best-Of Feed',
+                feedUrl: 'https://gaming.example.com/rss',
+                enableVoting: true,
+                bestOfThreshold: 2,
+                bestOfChannelId: 'chan_best_of_hall_of_fame'
+            });
+            const feed = feedRes.data;
+
+            // Log item in history
+            const itemUrl = 'https://gaming.example.com/goty-announcement';
+            await repo.recordPostedItem({
+                feedId: feed.id,
+                itemGuid: 'goty_2026',
+                itemUrl,
+                itemTitle: 'Clair Obscur Expedition 33 élu GOTY',
+                discordMessageId: 'msg_embed_goty_123',
+                channelId: feed.channelId
+            });
+
+            // Set up mock client with destination bestOf channel
+            let bestOfSentEmbed = null;
+            const mockBestOfChannel = {
+                send: async (payload) => {
+                    bestOfSentEmbed = payload;
+                    return { id: 'best_of_msg_999' };
+                }
+            };
+            service.discordClient = {
+                channels: {
+                    cache: new Map([['chan_best_of_hall_of_fame', mockBestOfChannel]]),
+                    fetch: async (cId) => (cId === 'chan_best_of_hall_of_fame' ? mockBestOfChannel : null)
+                }
+            };
+
+            const targetId = `${feed.id}:${itemUrl}`;
+            await communityVotingService.vote({ targetType: 'autofeed', targetId, userId: 'voter_1', voteType: 'up' });
+            await communityVotingService.vote({ targetType: 'autofeed', targetId, userId: 'voter_2', voteType: 'up' });
+
+            // Trigger threshold handler
+            await service.handleVoteThresholdReached({
+                targetType: 'autofeed',
+                targetId,
+                score: 2,
+                stats: { upvotes: 2, downvotes: 0, score: 2 }
+            });
+
+            expect(bestOfSentEmbed).not.toBeNull();
+            expect(bestOfSentEmbed.embeds[0].data.title).toContain('🏆 [BEST-OF]');
+            expect(bestOfSentEmbed.embeds[0].data.title).toContain('Expedition 33');
+
+            // History record should have is_best_of = true
+            const res = await db.pool.query('SELECT is_best_of FROM autofeed_history WHERE feed_id = $1 AND item_url = $2', [feed.id, itemUrl]);
+            expect(Boolean(res.rows[0]?.is_best_of)).toBe(true);
+        });
+
+        it('tracks deal prices, detects All-Time Lows (ATL) and enforces min discount percent', async () => {
+            const pricingService = new AutofeedsPricingService(repo);
+
+            // 1. Extraction from text
+            const textDeal = 'Promo Steam : Cyberpunk 2077 Ultimate Edition est à 14,99 € au lieu de 59,99 € (-75%) sur Steam !';
+            const priceInfo = pricingService.extractPriceAndDiscount(textDeal);
+            expect(priceInfo).not.toBeNull();
+            expect(priceInfo.currentPrice).toBe(14.99);
+            expect(priceInfo.originalPrice).toBe(59.99);
+            expect(priceInfo.discountPercent).toBe(75);
+            expect(priceInfo.currency).toBe('€');
+
+            // 2. Minimum discount filter
+            expect(pricingService.meetsMinDiscount(priceInfo, 50)).toBe(true);
+            expect(pricingService.meetsMinDiscount(priceInfo, 80)).toBe(false);
+
+            // 3. Price history and ATL detection
+            const itemUrl = 'https://store.steampowered.com/app/1091500/Cyberpunk_2077/';
+            const feedId = 'feed_deal_tracker_1';
+
+            // First price record (19.99 €)
+            const atlFirst = await pricingService.analyzeAndRecordPrice({
+                feedId,
+                itemUrl,
+                title: 'Cyberpunk 2077',
+                priceInfo: { currentPrice: 19.99, originalPrice: 59.99, discountPercent: 66, currency: '€' }
+            });
+            expect(atlFirst.isAllTimeLow).toBe(true);
+            expect(atlFirst.previousLowest).toBeNull();
+
+            // Second price record (higher: 29.99 €)
+            const atlSecond = await pricingService.analyzeAndRecordPrice({
+                feedId,
+                itemUrl,
+                title: 'Cyberpunk 2077',
+                priceInfo: { currentPrice: 29.99, originalPrice: 59.99, discountPercent: 50, currency: '€' }
+            });
+            expect(atlSecond.isAllTimeLow).toBe(false);
+            expect(atlSecond.previousLowest).toBe(19.99);
+
+            // Third price record (new lowest: 14.99 €)
+            const atlThird = await pricingService.analyzeAndRecordPrice({
+                feedId,
+                itemUrl,
+                title: 'Cyberpunk 2077',
+                priceInfo: { currentPrice: 14.99, originalPrice: 59.99, discountPercent: 75, currency: '€' }
+            });
+            expect(atlThird.isAllTimeLow).toBe(true);
+            expect(atlThird.previousLowest).toBe(19.99);
+
+            // Badge text formatting
+            const badge = pricingService.formatDiscountBadge({
+                ...priceInfo,
+                isAllTimeLow: true,
+                previousLowest: 19.99
+            });
+            expect(badge).toContain('-75%');
+            expect(badge).toContain('14.99 €');
+            expect(badge).toContain('PLUS BAS PRIX HISTORIQUE');
+        });
+
+        it('detects future dates and synchronizes Discord GuildScheduledEvents', async () => {
+            const eventsService = new AutofeedsEventsService();
+
+            const textISO = 'Rejoignez-nous pour le stream le 2026-11-20T20:00:00Z en direct !';
+            const dateISO = eventsService.extractFutureEventDate(textISO);
+            expect(dateISO).not.toBeNull();
+            expect(dateISO.getUTCFullYear()).toBe(2026);
+            expect(dateISO.getUTCMonth()).toBe(10); // Nov (0-indexed)
+
+            const textFR = 'Grande finale du tournoi le 25 décembre 2026 à 21h30';
+            const dateFR = eventsService.extractFutureEventDate(textFR);
+            expect(dateFR).not.toBeNull();
+            expect(dateFR.getUTCDate()).toBe(25);
+            expect(dateFR.getUTCFullYear()).toBe(2026);
+
+            // Sync with mock Discord guild
+            let createdEventPayload = null;
+            const mockGuild = {
+                id: 'guild_loot_test_777',
+                scheduledEvents: {
+                    fetch: async () => [],
+                    create: async (payload) => {
+                        createdEventPayload = payload;
+                        return { id: 'discord_event_555', ...payload };
+                    }
+                }
+            };
+            const mockClient = {
+                guilds: {
+                    cache: new Map([[mockGuild.id, mockGuild]]),
+                    fetch: async () => mockGuild
+                }
+            };
+
+            const created = await eventsService.syncScheduledEvent({
+                client: mockClient,
+                guildId: mockGuild.id,
+                title: 'Tournoi Smash Ultimate',
+                description: 'La grande finale aura lieu avec tous les champions !',
+                url: 'https://smash.example.com/tournament',
+                scheduledDate: dateFR
+            });
+
+            expect(created).not.toBeNull();
+            expect(createdEventPayload.name).toBe('Tournoi Smash Ultimate');
+            expect(createdEventPayload.scheduledStartTime).toEqual(dateFR);
+            expect(createdEventPayload.entityMetadata.location).toBe('https://smash.example.com/tournament');
+        });
+
+        it('unshortens URLs and shields channels against suspicious links and phishing', async () => {
+            const securityService = new AutofeedsSecurityService();
+
+            // Link shortener recognition
+            expect(securityService.isShortenedUrl('https://bit.ly/cyberdeal33')).toBe(true);
+            expect(securityService.isShortenedUrl('https://t.co/xyz123')).toBe(true);
+            expect(securityService.isShortenedUrl('https://store.steampowered.com/app/10')).toBe(false);
+
+            // Phishing / dangerous extensions analysis
+            const cleanUrl = 'https://store.epicgames.com/fr/p/death-stranding';
+            const phishingUrl = 'http://discord-nitro-gift-free.xyz/claim.exe';
+            const dangerousExtUrl = 'https://files.freegames.net/setup_patch.scr';
+
+            expect(securityService.isSafeUrl(cleanUrl).safe).toBe(true);
+
+            const checkPhish = securityService.isSafeUrl(phishingUrl);
+            expect(checkPhish.safe).toBe(false);
+            expect(checkPhish.reason).toContain('exécutable') || expect(checkPhish.reason).toContain('suspect');
+
+            const checkExt = securityService.isSafeUrl(dangerousExtUrl);
+            expect(checkExt.safe).toBe(false);
+            expect(checkExt.reason).toContain('.scr');
+        });
+
+        it('analyzes text polarity and filters negative news in Good Vibes Only mode', () => {
+            const sentimentService = new AutofeedsSentimentService();
+
+            const positiveNews = 'Une incroyable découverte scientifique apporte une merveilleuse victoire et un immense succès pour tous !';
+            const negativeNews = 'Un drame effroyable et une crise catastrophique provoquent un deuil terrible et un choc immense.';
+            const neutralNews = 'La réunion hebdomadaire du conseil municipal a eu lieu mardi après-midi à la mairie.';
+
+            const posScore = sentimentService.calculateSentiment(positiveNews);
+            const negScore = sentimentService.calculateSentiment(negativeNews);
+            const neuScore = sentimentService.calculateSentiment(neutralNews);
+
+            expect(posScore).toBeGreaterThan(0.2);
+            expect(negScore).toBeLessThan(-0.2);
+            expect(Math.abs(neuScore)).toBeLessThan(0.2);
+
+            // Good vibes filter test
+            expect(sentimentService.shouldFilterItem(negativeNews, true)).toBe(true);
+            expect(sentimentService.shouldFilterItem(positiveNews, true)).toBe(false);
+            expect(sentimentService.shouldFilterItem(negativeNews, false)).toBe(false);
+        });
+
+        it('extracts clean reader article content and provides controller endpoints', async () => {
+            const readerService = new AutofeedsReaderService();
+
+            const mockHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Test Article Title - Le Journal</title>
+                    <meta property="og:site_name" content="Le Journal" />
+                    <meta property="og:image" content="https://example.com/cover.jpg" />
+                </head>
+                <body>
+                    <header><nav>Menu links here</nav></header>
+                    <aside class="ads">Publicité invasive</aside>
+                    <article>
+                        <h1>Test Article Title</h1>
+                        <p>Premier paragraphe d'actualité détaillant les informations essentielles de la journée dans le monde de la tech.</p>
+                        <p>Second paragraphe apportant des précisions techniques et des analyses approfondies sur les performances.</p>
+                        <div class="newsletter-signup">Inscrivez-vous !</div>
+                    </article>
+                    <footer>Copyright 2026</footer>
+                </body>
+                </html>
+            `;
+
+            const article = readerService.parseHtmlArticle(mockHtml, 'https://journal.example.com/tech-news');
+            expect(article.title).toContain('Test Article Title');
+            expect(article.siteName).toBe('Le Journal');
+            expect(article.leadImageUrl).toBe('https://example.com/cover.jpg');
+            expect(article.textContent).toContain('Premier paragraphe');
+            expect(article.textContent).toContain('Second paragraphe');
+            expect(article.textContent).not.toContain('Publicité');
+            expect(article.readingTimeMinutes).toBeGreaterThanOrEqual(1);
+            expect(article.wordCount).toBeGreaterThan(15);
+
+            // Controller endpoints tests: /reader & /votes
+            // Mock getReaderArticle on service
+            service.getReaderArticle = async (url) => article;
+
+            let readerResJson = null;
+            const mockRes1 = { json: (d) => { readerResJson = d; } };
+            await controller.getReaderArticle({ query: { url: 'https://journal.example.com/tech-news' } }, mockRes1);
+            expect(readerResJson.success).toBe(true);
+            expect(readerResJson.data.title).toContain('Test Article Title');
+
+            let votesResJson = null;
+            const mockRes2 = { json: (d) => { votesResJson = d; } };
+            await controller.getVotes({ query: { targetType: 'autofeed', targetId: 'feed_1:item_1' } }, mockRes2);
+            expect(votesResJson.success).toBe(true);
+            expect(votesResJson.data).toHaveProperty('upvotes');
+            expect(votesResJson.data).toHaveProperty('downvotes');
         });
     });
 });
