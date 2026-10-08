@@ -13,6 +13,9 @@ const { AutofeedsSubscriptionService } = require('./services/autofeeds-subscript
 const { AutofeedsWebhookService } = require('./services/autofeeds-webhook.service.js');
 const { AutofeedsAiService } = require('./services/autofeeds-ai.service.js');
 const { AutofeedsOpmlService } = require('./services/autofeeds-opml.service.js');
+const { AutofeedsGamificationService } = require('./services/autofeeds-gamification.service.js');
+const { AutofeedsRateLimitService } = require('./services/autofeeds-ratelimit.service.js');
+const { AutofeedsDigestService } = require('./services/autofeeds-digest.service.js');
 const { AutofeedsService } = require('./services/autofeeds.service.js');
 const { AutofeedCommands } = require('./commands/autofeed.cmd.js');
 const { AutofeedsController, AutofeedsWebhooksController } = require('./controllers/autofeeds.controller.js');
@@ -53,6 +56,9 @@ Module({
         AutofeedsWebhookService,
         AutofeedsAiService,
         AutofeedsOpmlService,
+        AutofeedsGamificationService,
+        AutofeedsRateLimitService,
+        AutofeedsDigestService,
         AutofeedsService,
         AutofeedInteractionListener,
         AutofeedsModule

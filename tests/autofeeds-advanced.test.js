@@ -17,6 +17,9 @@ import { AutofeedInteractionListener } from '../src/modules/util_autofeeds/event
 import { AutofeedsAiService } from '../src/modules/util_autofeeds/services/autofeeds-ai.service.js';
 import { AutofeedsWebhookService } from '../src/modules/util_autofeeds/services/autofeeds-webhook.service.js';
 import { AutofeedsOpmlService } from '../src/modules/util_autofeeds/services/autofeeds-opml.service.js';
+import { AutofeedsGamificationService } from '../src/modules/util_autofeeds/services/autofeeds-gamification.service.js';
+import { AutofeedsRateLimitService } from '../src/modules/util_autofeeds/services/autofeeds-ratelimit.service.js';
+import { AutofeedsDigestService } from '../src/modules/util_autofeeds/services/autofeeds-digest.service.js';
 
 describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => {
     let repo;
@@ -40,6 +43,7 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
 
         await db.pool.query(`DELETE FROM autofeeds WHERE guild_id = $1`, [guildId]);
         await db.pool.query(`DELETE FROM autofeed_subscriptions WHERE guild_id = $1`, [guildId]);
+        await db.pool.query(`DELETE FROM autofeed_claims WHERE guild_id = $1`, [guildId]);
         await db.pool.query(`DELETE FROM autofeed_history WHERE feed_id LIKE 'feed_test_%'`);
         await db.pool.query(`DELETE FROM autofeed_live_sessions WHERE feed_id LIKE '%test%'`);
     });
@@ -355,9 +359,9 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
     // 8. Social Feed Providers & Resolution
     // ---------------------------------------------------------------
     describe('Social Feed Providers (Twitter, TikTok, Twitch, Kick, Bridges)', () => {
-        it('registers all 13 providers in registry', () => {
+        it('registers all 16 providers in registry', () => {
             const list = providerRegistry.list();
-            expect(list.length).toBe(13);
+            expect(list.length).toBe(16);
             const names = list.map(p => p.name);
             expect(names).toContain('rss');
             expect(names).toContain('youtube');
@@ -372,6 +376,9 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
             expect(names).toContain('facebook');
             expect(names).toContain('linkedin');
             expect(names).toContain('bluesky');
+            expect(names).toContain('github');
+            expect(names).toContain('gitlab');
+            expect(names).toContain('statuspage');
         });
 
         it('resolves Twitter handles and URLs to Nitter RSS gateway', () => {
@@ -1270,7 +1277,221 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
             expect(userSubs.length).toBe(2);
             const targetValues = userSubs.map(s => s.targetValue);
             expect(targetValues).toContain(feed1.data.id);
-            expect(targetValues).toContain(feed2.data.id);
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // 13. v3 Enhancements (GitHub/GitLab/Statuspage, Tag Routing, Quiet Hours, Gamification, Digest, Analytics)
+    // ---------------------------------------------------------------
+    describe('13. v3 Enhancements: Developer Providers, Tag Routing, Quiet Hours, Gamification, Digest, Analytics', () => {
+        it('detects and resolves GitHub, GitLab and Statuspage feeds', () => {
+            const ghProvider = providerRegistry.get('github');
+            const glProvider = providerRegistry.get('gitlab');
+            const spProvider = providerRegistry.get('statuspage');
+
+            expect(ghProvider).toBeDefined();
+            expect(glProvider).toBeDefined();
+            expect(spProvider).toBeDefined();
+
+            // Provider auto-detection
+            expect(providerRegistry.detectProvider('https://github.com/torvalds/linux')).toBe('github');
+            expect(providerRegistry.detectProvider('torvalds/linux')).toBe('github');
+            expect(providerRegistry.detectProvider('https://gitlab.com/gitlab-org/gitlab')).toBe('gitlab');
+            expect(providerRegistry.detectProvider('https://discordstatus.com')).toBe('statuspage');
+
+            // URL resolution
+            expect(ghProvider.resolveUrl('torvalds/linux')).toBe('https://github.com/torvalds/linux/releases.atom');
+            expect(ghProvider.resolveUrl('https://github.com/torvalds/linux/tags')).toBe('https://github.com/torvalds/linux/tags.atom');
+            expect(glProvider.resolveUrl('gitlab-org/gitlab')).toBe('https://gitlab.com/gitlab-org/gitlab/-/tags?format=atom');
+            expect(spProvider.resolveUrl('https://discordstatus.com')).toBe('https://discordstatus.com/history.rss');
+
+            // Tagging
+            const ghTags = ghProvider.tagItem({ title: 'v1.0.0 Release' });
+            expect(ghTags).toContain('#github');
+            expect(ghTags).toContain('#release');
+
+            const spTags = spProvider.tagItem({ title: 'API Outage Degraded' });
+            expect(spTags).toContain('#status');
+            expect(spTags).toContain('#incident');
+            expect(spTags).toContain('#degraded');
+        });
+
+        it('routes items to specific Discord channels based on matched tags', () => {
+            const mockFeed = {
+                id: 'feed_routing_1',
+                channelId: 'chan_default',
+                channelTagRouting: {
+                    '#ps5': 'chan_playstation',
+                    'switch': 'chan_nintendo'
+                },
+                tags: []
+            };
+
+            // Item with matching #ps5 tag -> routes to chan_playstation
+            const itemPs5 = { title: 'PS5 Free Game', tags: ['#deal', '#ps5'] };
+            expect(service.resolveTargetChannel(mockFeed, itemPs5)).toBe('chan_playstation');
+
+            // Item with matching switch tag -> routes to chan_nintendo
+            const itemSwitch = { title: 'Mario Kart Discount', tags: ['switch', 'exclusive'] };
+            expect(service.resolveTargetChannel(mockFeed, itemSwitch)).toBe('chan_nintendo');
+
+            // Item with non-matching tag -> falls back to chan_default
+            const itemPc = { title: 'Steam Sale', tags: ['#pc', '#steam'] };
+            expect(service.resolveTargetChannel(mockFeed, itemPc)).toBe('chan_default');
+        });
+
+        it('manages quiet hours and sliding window rate limiting', () => {
+            const rateLimit = new AutofeedsRateLimitService();
+
+            const quietFeed = {
+                quietHours: {
+                    enabled: true,
+                    start: '22:00',
+                    end: '08:00',
+                    suppressMentions: true
+                }
+            };
+
+            // Quiet hours testing: 23:30 (inside) vs 14:00 (outside)
+            const nightTime = new Date('2026-10-08T23:30:00');
+            const dayTime = new Date('2026-10-08T14:00:00');
+
+            expect(rateLimit.isQuietTime(quietFeed, nightTime)).toBe(true);
+            expect(rateLimit.isQuietTime(quietFeed, dayTime)).toBe(false);
+            expect(rateLimit.shouldSuppressMentions(quietFeed, nightTime)).toBe(true);
+            expect(rateLimit.shouldSuppressMentions(quietFeed, dayTime)).toBe(false);
+
+            // Rate limit testing: max 2 posts per hour
+            const feedId = 'feed_ratelimit_test';
+            rateLimit.resetRateLimit(feedId);
+
+            expect(rateLimit.checkRateLimit(feedId, 2)).toBe(true);
+            expect(rateLimit.checkRateLimit(feedId, 2)).toBe(true);
+            // 3rd post within same hour is blocked
+            expect(rateLimit.checkRateLimit(feedId, 2)).toBe(false);
+
+            // Resetting rate limit restores capacity
+            rateLimit.resetRateLimit(feedId);
+            expect(rateLimit.checkRateLimit(feedId, 2)).toBe(true);
+        });
+
+        it('awards XP and tracks claims with Drop Hunter gamification', async () => {
+            const feedRes = await service.addFeed({
+                guildId,
+                channelId,
+                name: 'Freebies Drop Hunter',
+                feedUrl: 'https://example.com/loot.xml',
+                feedType: 'rss',
+                enableGamification: true,
+                gamificationXpReward: 50
+            });
+            const feed = feedRes.data;
+
+            // Build action row and verify claim button is present
+            const item = { id: 'loot_epic_game_123', title: 'Cyberpunk Free on Epic' };
+            const row = service.buildActionRow(feed, item);
+            expect(row).not.toBeNull();
+            const claimBtn = row.components.find(c => c.data.custom_id?.startsWith('autofeed:claim:'));
+            expect(claimBtn).toBeDefined();
+
+            // First claim by user_hunter_1
+            const claim1 = await service.claimItem(feed.id, item.id, 'user_hunter_1', guildId);
+            expect(claim1.alreadyClaimed).toBe(false);
+            expect(claim1.claimsCount).toBe(1);
+            expect(claim1.xpAwarded).toBe(50);
+
+            // Duplicate claim by user_hunter_1
+            const claimDup = await service.claimItem(feed.id, item.id, 'user_hunter_1', guildId);
+            expect(claimDup.alreadyClaimed).toBe(true);
+            expect(claimDup.claimsCount).toBe(1);
+
+            // Second user claiming the same item
+            const claim2 = await service.claimItem(feed.id, item.id, 'user_hunter_2', guildId);
+            expect(claim2.alreadyClaimed).toBe(false);
+            expect(claim2.claimsCount).toBe(2);
+
+            // Verify claims stored in repository
+            const userClaims = await repo.getUserClaims('user_hunter_1', guildId);
+            expect(userClaims.length).toBe(1);
+            expect(userClaims[0].itemId).toBe(item.id);
+        });
+
+        it('accumulates items and formats periodic digest with AI overview', async () => {
+            const digestService = new AutofeedsDigestService();
+            const feed = {
+                id: 'feed_digest_daily',
+                guildId,
+                name: 'Tech Daily Digest',
+                digestMode: 'daily',
+                digestSchedule: '09:00'
+            };
+
+            const items = [
+                { id: 'art_1', title: 'Nouvelle IA Gemini 3.0', link: 'https://tech.com/1' },
+                { id: 'art_2', title: 'Sortie de Node.js v24', link: 'https://tech.com/2' }
+            ];
+
+            digestService.accumulateItem(feed.id, items[0]);
+            digestService.accumulateItem(feed.id, items[1]);
+            expect(digestService.getPendingCount(feed.id)).toBe(2);
+
+            // Generate digest embed
+            const embed = await digestService.generateDigestEmbed(feed, items, 'Aperçu matinal des innovations technologiques');
+            expect(embed.data.title).toContain('Gazette & Digest');
+            expect(embed.data.description).toContain('Aperçu matinal des innovations technologiques');
+            expect(embed.data.fields.length).toBe(2);
+
+            // Clear accumulated items
+            digestService.clearPending(feed.id);
+            expect(digestService.getPendingCount(feed.id)).toBe(0);
+        });
+
+        it('provides fulltext search and guild stats analytics', async () => {
+            const feed = await service.addFeed({
+                guildId,
+                channelId,
+                name: 'Searchable Feed',
+                feedUrl: 'https://search.com/rss',
+                feedType: 'rss',
+                category: 'gaming'
+            });
+
+            // Log history entries with enriched metadata
+            await repo.logHistory({
+                feedId: feed.data.id,
+                itemId: 'hist_item_1',
+                title: 'Grand Theft Auto VI Trailer Released',
+                link: 'https://rockstar.com/gta6',
+                contentSnippet: 'Vice City awaits in this high octane adventure',
+                itemTags: ['#gta', '#gaming', '#rockstar'],
+                itemCategory: 'gaming'
+            });
+
+            // Search by query
+            const searchResults = await service.searchItems(guildId, { query: 'Grand Theft' });
+            expect(searchResults.length).toBeGreaterThanOrEqual(1);
+            expect(searchResults[0].title).toContain('Grand Theft Auto VI');
+
+            // Search by tag
+            const tagResults = await service.searchItems(guildId, { tag: 'rockstar' });
+            expect(tagResults.length).toBeGreaterThanOrEqual(1);
+
+            // Fetch guild stats
+            const stats = await service.getGuildStats(guildId);
+            expect(stats.totalFeeds).toBeGreaterThanOrEqual(1);
+            expect(stats.activeFeeds).toBeGreaterThanOrEqual(1);
+            expect(stats.totalPosts).toBeGreaterThanOrEqual(1);
+            expect(stats.topProviders).toBeDefined();
+            expect(stats.topProviders.some(p => p.provider === 'rss')).toBe(true);
+
+            // API Controller stats endpoint
+            let resJson = null;
+            const mockRes = {
+                json: (data) => { resJson = data; }
+            };
+            await controller.getStats({ params: { guildId } }, mockRes);
+            expect(resJson.success).toBe(true);
+            expect(resJson.data.totalFeeds).toBe(stats.totalFeeds);
         });
     });
 });

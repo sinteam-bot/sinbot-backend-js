@@ -12,6 +12,9 @@ const { AutofeedsSubscriptionService } = require('./autofeeds-subscription.servi
 const { AutofeedsWebhookService } = require('./autofeeds-webhook.service.js');
 const { AutofeedsAiService } = require('./autofeeds-ai.service.js');
 const { AutofeedsOpmlService } = require('./autofeeds-opml.service.js');
+const { AutofeedsGamificationService } = require('./autofeeds-gamification.service.js');
+const { AutofeedsRateLimitService } = require('./autofeeds-ratelimit.service.js');
+const { AutofeedsDigestService } = require('./autofeeds-digest.service.js');
 const { providerRegistry } = require('./providers/provider-registry.js');
 const { PRESETS } = require('../config/presets.js');
 const logger = require('../../../utils/logger.js');
@@ -22,7 +25,10 @@ class AutofeedsService {
         AutofeedsSubscriptionService,
         AutofeedsWebhookService,
         AutofeedsAiService,
-        AutofeedsOpmlService
+        AutofeedsOpmlService,
+        AutofeedsGamificationService,
+        AutofeedsRateLimitService,
+        AutofeedsDigestService
     ];
 
     constructor(
@@ -30,13 +36,19 @@ class AutofeedsService {
         subService,
         webhookService = new AutofeedsWebhookService(),
         aiService = new AutofeedsAiService(),
-        opmlService = new AutofeedsOpmlService()
+        opmlService = new AutofeedsOpmlService(),
+        gamificationService = new AutofeedsGamificationService(repo),
+        rateLimitService = new AutofeedsRateLimitService(),
+        digestService = new AutofeedsDigestService(repo, aiService)
     ) {
         this.repo = repo;
         this.subService = subService;
         this.webhookService = webhookService;
         this.aiService = aiService;
         this.opmlService = opmlService;
+        this.gamificationService = gamificationService;
+        this.rateLimitService = rateLimitService;
+        this.digestService = digestService;
         this._intervalTimer = null;
         this._client = null;
     }
@@ -73,6 +85,14 @@ class AutofeedsService {
         ignoreShorts = false,
         aiSummary = false,
         aiTranslate = null,
+        digestMode = 'realtime',
+        digestSchedule = '08:00',
+        digestChannelId = null,
+        enableGamification = false,
+        gamificationXpReward = 25,
+        channelTagRouting = {},
+        quietHours = {},
+        maxPostsPerHour = 0,
         intervalMinutes = 15
     }) {
         if (!guildId || !channelId || !feedUrl) {
@@ -116,6 +136,9 @@ class AutofeedsService {
             if (providerName === 'twitch') resolvedColor = '#9146FF';
             else if (providerName === 'kick') resolvedColor = '#53FC18';
             else if (providerName === 'youtube_live' || providerName === 'youtube') resolvedColor = '#FF0000';
+            else if (providerName === 'github') resolvedColor = '#24292E';
+            else if (providerName === 'gitlab') resolvedColor = '#FC6D26';
+            else if (providerName === 'statuspage') resolvedColor = '#E02424';
             else resolvedColor = '#FF4500';
         }
 
@@ -140,6 +163,14 @@ class AutofeedsService {
             ignoreShorts,
             aiSummary,
             aiTranslate,
+            digestMode,
+            digestSchedule,
+            digestChannelId,
+            enableGamification,
+            gamificationXpReward,
+            channelTagRouting,
+            quietHours,
+            maxPostsPerHour,
             intervalMinutes: resolvedInterval
         });
 
@@ -368,7 +399,41 @@ class AutofeedsService {
             }
         }
 
+        // 4. Bouton Drop Hunter / Gamification
+        if (feed.enableGamification && this.gamificationService && row.components.length < 5) {
+            const itemId = item.id || item.link || 'item';
+            row.addComponents(
+                this.gamificationService.createClaimButton(feed.id, itemId, 0)
+            );
+        }
+
         return row.components.length > 0 ? row : null;
+    }
+
+    /**
+     * Résout le salon Discord cible selon les tags de l'article et la table de routage.
+     * @param {object} feed
+     * @param {object} item
+     * @returns {string} channelId cible
+     */
+    resolveTargetChannel(feed, item) {
+        if (!feed.channelTagRouting) return feed.channelId;
+        const routing = typeof feed.channelTagRouting === 'string' ? JSON.parse(feed.channelTagRouting) : feed.channelTagRouting;
+        if (!routing || typeof routing !== 'object' || Object.keys(routing).length === 0) {
+            return feed.channelId;
+        }
+
+        const allTags = [...(feed.tags || []), ...(item?.tags || []), feed.category]
+            .filter(Boolean)
+            .map(t => String(t).toLowerCase().trim());
+
+        for (const [tagKey, targetChannelId] of Object.entries(routing)) {
+            const cleanKey = tagKey.toLowerCase().replace(/^#/, '').trim();
+            if (targetChannelId && (allTags.includes(cleanKey) || allTags.includes(`#${cleanKey}`))) {
+                return targetChannelId;
+            }
+        }
+        return feed.channelId;
     }
 
     _filterItems(feed, items = []) {
@@ -449,12 +514,40 @@ class AutofeedsService {
             // Limiter à 5 articles simultanés max pour éviter le spam lors d'une première activation
             const toPost = newItems.slice(-5);
 
-            if (client && client.channels) {
-                const channel = client.channels.cache?.get(feed.channelId) 
-                    || (client.channels.fetch ? await client.channels.fetch(feed.channelId).catch(() => null) : null);
+            // Mode Digest (périodique / gazette) : on accumule dans le service Digest au lieu d'envoyer immédiatement
+            if (feed.digestMode && feed.digestMode !== 'realtime' && this.digestService) {
+                for (const item of toPost) {
+                    this.digestService.accumulateItem(feed.id, item);
+                    await this.repo.recordPostedItem(feed.id, item.id, item.link, item.title, {
+                        guildId: feed.guildId,
+                        itemAuthor: item.author,
+                        itemContent: item.contentSnippet,
+                        tags: item.tags,
+                        isDigest: true
+                    });
+                }
+                await this.repo.recordFeedCheckResult(feed.id, {
+                    status: 'ok',
+                    lastItemId: latest.id,
+                    lastItemPublishedAt: latest.publishedAt
+                });
+                return;
+            }
 
-                if (channel && (channel.send || channel.threads?.create)) {
-                    for (const item of toPost) {
+            if (client && client.channels) {
+                for (const item of toPost) {
+                    // Vérification du débit horaire (Anti-flood / Rate limiting)
+                    if (feed.maxPostsPerHour > 0 && this.rateLimitService && !this.rateLimitService.checkRateLimit(feed.id, feed.maxPostsPerHour)) {
+                        logger.info(`[Autofeeds] Débit horaire dépassé pour le flux ${feed.id} (max: ${feed.maxPostsPerHour}/h)`, 'AUTOFEEDS');
+                        continue;
+                    }
+
+                    // Résolution du salon cible avec routage dynamique par tag
+                    const targetChannelId = this.resolveTargetChannel(feed, item);
+                    const channel = client.channels.cache?.get(targetChannelId) 
+                        || (client.channels.fetch ? await client.channels.fetch(targetChannelId).catch(() => null) : null);
+
+                    if (channel && (channel.send || channel.threads?.create)) {
                         // Enrichissement IA si configuré
                         if (feed.aiSummary && this.aiService) {
                             const summary = await this.aiService.generateSummary(item);
@@ -486,6 +579,11 @@ class AutofeedsService {
                         }
                         if (mentionUserIds.length > 0) {
                             pings.push(mentionUserIds.map(uid => `<@${uid}>`).join(' '));
+                        }
+
+                        // Neutralisation des pings en heures silencieuses
+                        if (this.rateLimitService?.shouldSuppressMentions(feed)) {
+                            pings.length = 0;
                         }
 
                         let messageContent = '';
@@ -533,7 +631,7 @@ class AutofeedsService {
                                 message: sendPayload,
                                 appliedTags: appliedTags.slice(0, 5)
                             }).catch(err => {
-                                logger.warn(`[Autofeeds] Erreur post forum ${feed.channelId}: ${err.message}`, 'AUTOFEEDS');
+                                logger.warn(`[Autofeeds] Erreur post forum ${targetChannelId}: ${err.message}`, 'AUTOFEEDS');
                             });
                         } else {
                             let sent = false;
@@ -542,7 +640,7 @@ class AutofeedsService {
                             }
                             if (!sent && channel.send) {
                                 await channel.send(sendPayload).catch(err => {
-                                    logger.warn(`[Autofeeds] Erreur envoi channel ${feed.channelId}: ${err.message}`, 'AUTOFEEDS');
+                                    logger.warn(`[Autofeeds] Erreur envoi channel ${targetChannelId}: ${err.message}`, 'AUTOFEEDS');
                                 });
                             }
                         }
@@ -563,8 +661,14 @@ class AutofeedsService {
                             }
                         }
 
-                        // Enregistrement dans l'historique anti-doublon
-                        await this.repo.recordPostedItem(feed.id, item.id, item.link, item.title);
+                        // Enregistrement dans l'historique anti-doublon & recherche
+                        await this.repo.recordPostedItem(feed.id, item.id, item.link, item.title, {
+                            guildId: feed.guildId,
+                            itemAuthor: item.author,
+                            itemContent: item.contentSnippet,
+                            tags: item.tags,
+                            isDigest: false
+                        });
                     }
                 }
             }
@@ -969,6 +1073,41 @@ class AutofeedsService {
         } catch (err) {
             logger.warn(`Erreur pollFeeds: ${err.message}`, 'AUTOFEEDS');
         }
+    }
+
+    /**
+     * Recherche d'articles dans l'historique de la guilde.
+     */
+    async searchItems(guildId, query, limit = 10) {
+        return this.repo.searchHistory(guildId, query, limit);
+    }
+
+    /**
+     * Récupère les métriques et statistiques d'utilisation des flux pour une guilde.
+     */
+    async getGuildStats(guildId) {
+        return this.repo.getFeedStats(guildId);
+    }
+
+    /**
+     * Réclame une offre Drop Hunter pour un utilisateur.
+     */
+    async claimItem(feedId, itemId, userId, guildId, xpAwarded = null) {
+        let xp = xpAwarded;
+        if (xp === null || xp === undefined) {
+            const feed = await this.repo.getFeedById(feedId);
+            xp = feed?.gamificationXpReward ?? 25;
+        }
+        return this.repo.claimItem({ feedId, itemId, userId, guildId, xpAwarded: xp });
+    }
+
+    /**
+     * Déclenche manuellement ou de manière programmée l'envoi d'un digest.
+     */
+    async triggerDigest(feedId, client = null) {
+        const feed = await this.repo.getFeedById(feedId);
+        if (!feed) return false;
+        return this.digestService.dispatchDigest(feed, client || this._client);
     }
 
     start(client) {

@@ -417,6 +417,75 @@ class AutofeedCommands {
         });
     }
 
+    async executeSearch(interaction) {
+        const query = interaction.options.getString('recherche');
+        const guildId = interaction.guild?.id || 'default';
+
+        const results = await this.service.searchItems(guildId, query, 5);
+        if (!results || results.length === 0) {
+            return interaction.reply({
+                content: `🔍 Aucun article trouvé pour la recherche **"${query}"**.`,
+                ephemeral: true
+            });
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`🔍 Résultats de recherche : "${query}"`)
+            .setDescription(
+                results.map((r, i) => {
+                    const dateStr = r.postedAt ? `<t:${Math.floor(r.postedAt / 1000)}:R>` : '';
+                    return `**${i + 1}.** [${r.title || 'Sans titre'}](${r.url || '#'}) ${dateStr}\n*Source: ${r.feedName}*${r.author ? ` • @${r.author}` : ''}`;
+                }).join('\n\n')
+            )
+            .setFooter({ text: `${results.length} résultat(s) affiché(s)` });
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    async executeStats(interaction) {
+        const guildId = interaction.guild?.id || 'default';
+        const stats = await this.service.getGuildStats(guildId);
+
+        const embed = new EmbedBuilder()
+            .setColor(0x00FF7F)
+            .setTitle('📊 Statistiques d\'Activité des Flux & Communauté')
+            .addFields(
+                { name: '📰 Flux Actifs', value: `${stats.activeFeeds} / ${stats.totalFeeds}`, inline: true },
+                { name: '🔔 Abonnements Membres', value: `${stats.totalSubscriptions}`, inline: true },
+                { name: '📋 Publications Envoyées', value: `${stats.totalPosts}`, inline: true },
+                { name: '🔗 Clics sur Liens', value: `${stats.totalClicks}`, inline: true },
+                { name: '🎁 Offres Réclamées', value: `${stats.totalClaims}`, inline: true },
+                { name: '⭐ XP Distribué', value: `${stats.totalXpAwarded} XP`, inline: true }
+            );
+
+        if (stats.topTags && stats.topTags.length > 0) {
+            embed.addFields({
+                name: '🏷️ Top Tags les plus suivis',
+                value: stats.topTags.map(t => `\`#${t.tag}\` (${t.count})`).join(', '),
+                inline: false
+            });
+        }
+
+        return interaction.reply({ embeds: [embed] });
+    }
+
+    async executeDigest(interaction) {
+        if (!interaction.member?.permissions?.has?.(PermissionFlagsBits.ManageGuild) &&
+            !interaction.member?.permissions?.has?.(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: '❌ Réservé aux modérateurs/administrateurs.', ephemeral: true });
+        }
+
+        const feedId = interaction.options.getString('id');
+        const sent = await this.service.triggerDigest(feedId, interaction.client);
+
+        if (sent) {
+            return interaction.reply({ content: '📰 Digest généré et envoyé avec succès !', ephemeral: true });
+        } else {
+            return interaction.reply({ content: 'ℹ️ Aucun article en attente dans la file pour ce flux ou salon introuvable.', ephemeral: true });
+        }
+    }
+
     // ==========================================
     // POINT D'ENTRÉE DU ROUTEUR COMMANDES
     // ==========================================
@@ -435,6 +504,9 @@ class AutofeedCommands {
             case 'subscribe':        return this.executeSubscribe(interaction);
             case 'unsubscribe':      return this.executeUnsubscribe(interaction);
             case 'my-subscriptions': return this.executeMySubscriptions(interaction);
+            case 'search':           return this.executeSearch(interaction);
+            case 'stats':            return this.executeStats(interaction);
+            case 'digest':           return this.executeDigest(interaction);
             default:
                 return interaction.reply({ content: '❌ Sous-commande inconnue', ephemeral: true });
         }
@@ -515,6 +587,20 @@ const feedBuilder = new SlashCommandBuilder()
     .addSubcommand(sub =>
         sub.setName('my-subscriptions')
             .setDescription('Afficher la liste de vos abonnements actifs sur ce serveur')
+    )
+    .addSubcommand(sub =>
+        sub.setName('search')
+            .setDescription('Rechercher un article ou bon plan dans l\'historique des flux')
+            .addStringOption(o => o.setName('recherche').setDescription('Mots-clés de recherche').setRequired(true))
+    )
+    .addSubcommand(sub =>
+        sub.setName('stats')
+            .setDescription('Afficher les statistiques d\'activité et d\'engagement des flux')
+    )
+    .addSubcommand(sub =>
+        sub.setName('digest')
+            .setDescription('Forcer la génération et l\'envoi immédiat d\'un digest (Admin)')
+            .addStringOption(o => o.setName('id').setDescription('Identifiant du flux').setRequired(true))
     );
 
 // Alias /autofeed pour compatibilité descendante

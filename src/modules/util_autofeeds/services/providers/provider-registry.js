@@ -14,6 +14,9 @@ const { KickFeedProvider } = require('./kick.provider.js');
 const { TwitterFeedProvider } = require('./twitter.provider.js');
 const { TikTokFeedProvider } = require('./tiktok.provider.js');
 const { BlueskyFeedProvider } = require('./bluesky.provider.js');
+const { GithubFeedProvider } = require('./github.provider.js');
+const { GitlabFeedProvider } = require('./gitlab.provider.js');
+const { StatusPageFeedProvider } = require('./status-page.provider.js');
 const {
     InstagramFeedProvider,
     FacebookFeedProvider,
@@ -24,7 +27,7 @@ class ProviderRegistry {
     constructor() {
         this.providers = new Map();
 
-        // Enregistrement des 13 fournisseurs actifs
+        // Enregistrement des 16 fournisseurs actifs
         this.register(new RssFeedProvider());
         this.register(new YouTubeFeedProvider());
         this.register(new YouTubeLiveFeedProvider());
@@ -35,6 +38,9 @@ class ProviderRegistry {
         this.register(new TwitterFeedProvider());
         this.register(new TikTokFeedProvider());
         this.register(new BlueskyFeedProvider());
+        this.register(new GithubFeedProvider());
+        this.register(new GitlabFeedProvider());
+        this.register(new StatusPageFeedProvider());
         this.register(new InstagramFeedProvider());
         this.register(new FacebookFeedProvider());
         this.register(new LinkedInFeedProvider());
@@ -83,6 +89,15 @@ class ProviderRegistry {
         }
         if (lower.includes('bsky.app') || lower.endsWith('.bsky.social') || lower.includes('bsky.social')) {
             return 'bluesky';
+        }
+        if (lower.includes('github.com') || lower.startsWith('github:') || (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(url.trim()) && !lower.startsWith('r/'))) {
+            return 'github';
+        }
+        if (lower.includes('gitlab.com') || lower.startsWith('gitlab:')) {
+            return 'gitlab';
+        }
+        if (lower.includes('statuspage.io') || lower.includes('status.') || lower.includes('discordstatus.com') || lower.includes('cloudflarestatus.com') || lower.includes('statuspage')) {
+            return 'statuspage';
         }
         if (lower.includes('instagram.com')) {
             return 'instagram';

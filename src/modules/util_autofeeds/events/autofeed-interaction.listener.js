@@ -160,6 +160,17 @@ class AutofeedInteractionListener {
                 return interaction.reply({ content: `❌ Erreur: ${err.message}`, ephemeral: true });
             }
         }
+
+        // Cas 4 : Bouton Drop Hunter / Claim de bon plan (autofeed:claim:<feedId>:<itemId>)
+        if (customId.startsWith('autofeed:claim:')) {
+            const parts = customId.replace('autofeed:claim:', '').split(':');
+            const feedId = parts[0];
+            const itemId = decodeURIComponent(parts.slice(1).join(':'));
+
+            if (this.feedService?.gamificationService) {
+                return this.feedService.gamificationService.handleClaimInteraction(interaction, feedId, itemId);
+            }
+        }
     }
 }
 

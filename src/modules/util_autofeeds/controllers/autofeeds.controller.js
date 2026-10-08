@@ -103,6 +103,14 @@ class AutofeedsController {
                 ignoreShorts: req.body?.ignore_shorts !== undefined ? Boolean(req.body.ignore_shorts) : Boolean(req.body?.ignoreShorts),
                 aiSummary: req.body?.ai_summary !== undefined ? Boolean(req.body.ai_summary) : Boolean(req.body?.aiSummary),
                 aiTranslate: req.body?.ai_translate !== undefined ? req.body.ai_translate : (req.body?.aiTranslate || null),
+                digestMode: req.body?.digest_mode || req.body?.digestMode || 'realtime',
+                digestSchedule: req.body?.digest_schedule || req.body?.digestSchedule || '08:00',
+                digestChannelId: req.body?.digest_channel_id || req.body?.digestChannelId || null,
+                enableGamification: req.body?.enable_gamification !== undefined ? Boolean(req.body.enable_gamification) : Boolean(req.body?.enableGamification),
+                gamificationXpReward: req.body?.gamification_xp_reward || req.body?.gamificationXpReward || 25,
+                channelTagRouting: req.body?.channel_tag_routing || req.body?.channelTagRouting || {},
+                quietHours: req.body?.quiet_hours || req.body?.quietHours || {},
+                maxPostsPerHour: req.body?.max_posts_per_hour || req.body?.maxPostsPerHour || 0,
                 intervalMinutes: intervalMinutes || interval_minutes || checkIntervalMinutes || check_interval_minutes,
                 enabled: enabled !== undefined ? Boolean(enabled) : (isActive !== undefined ? Boolean(isActive) : (is_active !== undefined ? Boolean(is_active) : true))
             });
@@ -285,6 +293,14 @@ class AutofeedsController {
                 ignoreShorts: patch.ignore_shorts !== undefined ? Boolean(patch.ignore_shorts) : (patch.ignoreShorts !== undefined ? Boolean(patch.ignoreShorts) : undefined),
                 aiSummary: patch.ai_summary !== undefined ? Boolean(patch.ai_summary) : (patch.aiSummary !== undefined ? Boolean(patch.aiSummary) : undefined),
                 aiTranslate: patch.ai_translate !== undefined ? patch.ai_translate : patch.aiTranslate,
+                digestMode: patch.digest_mode !== undefined ? patch.digest_mode : patch.digestMode,
+                digestSchedule: patch.digest_schedule !== undefined ? patch.digest_schedule : patch.digestSchedule,
+                digestChannelId: patch.digest_channel_id !== undefined ? patch.digest_channel_id : patch.digestChannelId,
+                enableGamification: patch.enable_gamification !== undefined ? Boolean(patch.enable_gamification) : (patch.enableGamification !== undefined ? Boolean(patch.enableGamification) : undefined),
+                gamificationXpReward: patch.gamification_xp_reward !== undefined ? Number(patch.gamification_xp_reward) : patch.gamificationXpReward,
+                channelTagRouting: patch.channel_tag_routing !== undefined ? patch.channel_tag_routing : patch.channelTagRouting,
+                quietHours: patch.quiet_hours !== undefined ? patch.quiet_hours : patch.quietHours,
+                maxPostsPerHour: patch.max_posts_per_hour !== undefined ? Number(patch.max_posts_per_hour) : patch.maxPostsPerHour,
                 intervalMinutes: patch.interval_minutes || patch.intervalMinutes || patch.check_interval_minutes || patch.checkIntervalMinutes,
                 enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : (patch.isActive !== undefined ? Boolean(patch.isActive) : (patch.is_active !== undefined ? Boolean(patch.is_active) : undefined))
             });
@@ -439,9 +455,83 @@ class AutofeedsController {
             return { success: false, ok: false, error: err.message };
         }
     }
+
+    /**
+     * GET /api/autofeeds/stats
+     */
+    async getStats(req, res = null) {
+        try {
+            const guildId = req.params?.guildId || req.params?.guild_id || req.query?.guild_id || req.query?.guildId || process.env.GUILD_ID || 'default';
+            const stats = await this.service.getGuildStats(guildId);
+            const result = { success: true, ok: true, data: stats };
+            if (res && typeof res.json === 'function') {
+                res.json(result);
+            }
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') {
+                res.json(result);
+            }
+            return result;
+        }
+    }
+
+    /**
+     * GET /api/autofeeds/search
+     */
+    async searchItems(req, res = null) {
+        try {
+            const guildId = req.params?.guildId || req.params?.guild_id || req.query?.guild_id || req.query?.guildId || process.env.GUILD_ID || 'default';
+            const query = req.query?.q || req.query?.query || '';
+            const limit = req.query?.limit || 10;
+            const results = await this.service.searchItems(guildId, query, limit);
+            const result = { success: true, ok: true, data: results };
+            if (res && typeof res.json === 'function') {
+                res.json(result);
+            }
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') {
+                res.json(result);
+            }
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/claims
+     */
+    async claimItem(req, res = null) {
+        try {
+            const { feedId, feed_id, itemId, item_id, userId, user_id, guildId, guild_id, xpAwarded, xp_awarded } = req.body || {};
+            const claimRes = await this.service.claimItem(
+                feedId || feed_id,
+                itemId || item_id,
+                userId || user_id,
+                guildId || guild_id || req.params?.guildId || 'default',
+                xpAwarded || xp_awarded || 25
+            );
+            const result = { success: true, ok: true, data: claimRes };
+            if (res && typeof res.json === 'function') {
+                res.json(result);
+            }
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') {
+                res.json(result);
+            }
+            return result;
+        }
+    }
 }
 
 Controller('/api/autofeeds')(AutofeedsController);
+Get('/stats')(AutofeedsController.prototype, 'getStats');
+Get('/search')(AutofeedsController.prototype, 'searchItems');
+Post('/claims')(AutofeedsController.prototype, 'claimItem');
 Get('/presets')(AutofeedsController.prototype, 'getPresets');
 Post('/presets/install')(AutofeedsController.prototype, 'installPreset');
 Get('/providers')(AutofeedsController.prototype, 'getProviders');

@@ -63,6 +63,14 @@ class AutofeedsRepository {
                 { name: 'ignore_shorts', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'ai_summary', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'ai_translate', type: "text" },
+                { name: 'digest_mode', type: "text DEFAULT 'realtime' NOT NULL" },
+                { name: 'digest_schedule', type: "text DEFAULT '08:00'" },
+                { name: 'digest_channel_id', type: "text" },
+                { name: 'enable_gamification', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'gamification_xp_reward', type: "integer DEFAULT 25 NOT NULL" },
+                { name: 'channel_tag_routing', type: "text DEFAULT '{}' NOT NULL" },
+                { name: 'quiet_hours', type: "text DEFAULT '{}' NOT NULL" },
+                { name: 'max_posts_per_hour', type: "integer DEFAULT 0 NOT NULL" },
                 { name: 'last_checked_at', type: "bigint DEFAULT 0 NOT NULL" },
                 { name: 'last_status', type: "text DEFAULT 'ok' NOT NULL" },
                 { name: 'last_error', type: "text" },
@@ -104,23 +112,63 @@ class AutofeedsRepository {
                 CREATE INDEX IF NOT EXISTS "idx_autofeed_subs_user" ON "autofeed_subscriptions" ("guild_id", "user_id");
             `).catch(() => {});
 
-            // 3. Table d'historique anti-doublons
+            // 3. Table d'historique anti-doublons & recherche
             await db.pool.query(`
                 CREATE TABLE IF NOT EXISTS "autofeed_history" (
                     "id" text PRIMARY KEY NOT NULL,
                     "feed_id" text NOT NULL,
+                    "guild_id" text,
                     "item_guid" text NOT NULL,
                     "item_url" text,
                     "item_title" text,
+                    "item_author" text,
+                    "item_content" text,
+                    "tags" text DEFAULT '[]' NOT NULL,
+                    "is_digest" boolean DEFAULT false NOT NULL,
+                    "clicks_count" integer DEFAULT 0 NOT NULL,
                     "posted_at" bigint NOT NULL
                 );
             `);
 
+            const histColsToAdd = [
+                { name: 'guild_id', type: 'text' },
+                { name: 'item_author', type: 'text' },
+                { name: 'item_content', type: 'text' },
+                { name: 'tags', type: "text DEFAULT '[]' NOT NULL" },
+                { name: 'is_digest', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'clicks_count', type: "integer DEFAULT 0 NOT NULL" }
+            ];
+            for (const col of histColsToAdd) {
+                await db.pool.query(`
+                    ALTER TABLE "autofeed_history" ADD COLUMN IF NOT EXISTS "${col.name}" ${col.type};
+                `).catch(() => {});
+            }
+
             await db.pool.query(`
                 CREATE INDEX IF NOT EXISTS "idx_autofeed_hist_lookup" ON "autofeed_history" ("feed_id", "item_guid");
+                CREATE INDEX IF NOT EXISTS "idx_autofeed_hist_guild" ON "autofeed_history" ("guild_id");
             `).catch(() => {});
 
-            // 4. Table des sessions de live (Twitch, Kick, YouTube Live)
+            // 4. Table des récompenses / claims Drop Hunter
+            await db.pool.query(`
+                CREATE TABLE IF NOT EXISTS "autofeed_claims" (
+                    "id" text PRIMARY KEY NOT NULL,
+                    "feed_id" text NOT NULL,
+                    "item_id" text NOT NULL,
+                    "user_id" text NOT NULL,
+                    "guild_id" text NOT NULL,
+                    "xp_awarded" integer DEFAULT 0 NOT NULL,
+                    "claimed_at" bigint NOT NULL,
+                    CONSTRAINT "autofeed_claims_unique" UNIQUE("feed_id", "item_id", "user_id")
+                );
+            `);
+
+            await db.pool.query(`
+                CREATE INDEX IF NOT EXISTS "idx_autofeed_claims_item" ON "autofeed_claims" ("feed_id", "item_id");
+                CREATE INDEX IF NOT EXISTS "idx_autofeed_claims_user" ON "autofeed_claims" ("guild_id", "user_id");
+            `).catch(() => {});
+
+            // 5. Table des sessions de live (Twitch, Kick, YouTube Live)
             await db.pool.query(`
                 CREATE TABLE IF NOT EXISTS "autofeed_live_sessions" (
                     "id" text PRIMARY KEY NOT NULL,
@@ -180,6 +228,14 @@ class AutofeedsRepository {
         ignoreShorts = false,
         aiSummary = false,
         aiTranslate = null,
+        digestMode = 'realtime',
+        digestSchedule = '08:00',
+        digestChannelId = null,
+        enableGamification = false,
+        gamificationXpReward = 25,
+        channelTagRouting = {},
+        quietHours = {},
+        maxPostsPerHour = 0,
         intervalMinutes = 15
     }) {
         await this.initSchema();
@@ -187,6 +243,8 @@ class AutofeedsRepository {
         const now = Date.now();
         const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
         const filtersJson = JSON.stringify(filters || {});
+        const routingJson = JSON.stringify(channelTagRouting || {});
+        const quietHoursJson = JSON.stringify(quietHours || {});
 
         await db.pool.query(
             `INSERT INTO autofeeds (
@@ -196,8 +254,11 @@ class AutofeedsRepository {
                 create_thread, thread_auto_archive_duration,
                 use_webhook, enable_media_proxy, ignore_shorts,
                 ai_summary, ai_translate,
+                digest_mode, digest_schedule, digest_channel_id,
+                enable_gamification, gamification_xp_reward,
+                channel_tag_routing, quiet_hours, max_posts_per_hour,
                 interval_minutes, enabled, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, true, $23, $23)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, true, $31, $31)`,
             [
                 id,
                 guildId,
@@ -220,6 +281,14 @@ class AutofeedsRepository {
                 Boolean(ignoreShorts),
                 Boolean(aiSummary),
                 aiTranslate || null,
+                digestMode || 'realtime',
+                digestSchedule || '08:00',
+                digestChannelId || null,
+                Boolean(enableGamification),
+                Number(gamificationXpReward || 25),
+                routingJson,
+                quietHoursJson,
+                Number(maxPostsPerHour || 0),
                 intervalMinutes,
                 now
             ]
@@ -274,6 +343,14 @@ class AutofeedsRepository {
             ignoreShorts: patch.ignoreShorts !== undefined ? Boolean(patch.ignoreShorts) : current.ignoreShorts,
             aiSummary: patch.aiSummary !== undefined ? Boolean(patch.aiSummary) : current.aiSummary,
             aiTranslate: patch.aiTranslate !== undefined ? patch.aiTranslate : current.aiTranslate,
+            digestMode: patch.digestMode !== undefined ? patch.digestMode : current.digestMode,
+            digestSchedule: patch.digestSchedule !== undefined ? patch.digestSchedule : current.digestSchedule,
+            digestChannelId: patch.digestChannelId !== undefined ? patch.digestChannelId : current.digestChannelId,
+            enableGamification: patch.enableGamification !== undefined ? Boolean(patch.enableGamification) : current.enableGamification,
+            gamificationXpReward: patch.gamificationXpReward !== undefined ? Number(patch.gamificationXpReward) : current.gamificationXpReward,
+            channelTagRouting: patch.channelTagRouting !== undefined ? patch.channelTagRouting : current.channelTagRouting,
+            quietHours: patch.quietHours !== undefined ? patch.quietHours : current.quietHours,
+            maxPostsPerHour: patch.maxPostsPerHour !== undefined ? Number(patch.maxPostsPerHour) : current.maxPostsPerHour,
             intervalMinutes: patch.intervalMinutes !== undefined ? patch.intervalMinutes : current.intervalMinutes,
             enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : current.enabled,
             updatedAt: Date.now()
@@ -300,9 +377,17 @@ class AutofeedsRepository {
                 ignore_shorts = $18,
                 ai_summary = $19,
                 ai_translate = $20,
-                interval_minutes = $21,
-                enabled = $22,
-                updated_at = $23
+                digest_mode = $21,
+                digest_schedule = $22,
+                digest_channel_id = $23,
+                enable_gamification = $24,
+                gamification_xp_reward = $25,
+                channel_tag_routing = $26,
+                quiet_hours = $27,
+                max_posts_per_hour = $28,
+                interval_minutes = $29,
+                enabled = $30,
+                updated_at = $31
              WHERE id = $1`,
             [
                 id,
@@ -325,6 +410,14 @@ class AutofeedsRepository {
                 updated.ignoreShorts,
                 updated.aiSummary,
                 updated.aiTranslate,
+                updated.digestMode,
+                updated.digestSchedule,
+                updated.digestChannelId,
+                updated.enableGamification,
+                updated.gamificationXpReward,
+                JSON.stringify(updated.channelTagRouting),
+                JSON.stringify(updated.quietHours),
+                updated.maxPostsPerHour,
                 updated.intervalMinutes,
                 updated.enabled,
                 updated.updatedAt
@@ -457,15 +550,237 @@ class AutofeedsRepository {
         return Boolean(res.rows?.[0]);
     }
 
-    async recordPostedItem(feedId, itemGuid, itemUrl = null, itemTitle = null) {
+    async recordPostedItem(feedId, itemGuid, itemUrl = null, itemTitle = null, { guildId = null, itemAuthor = null, itemContent = null, tags = [], isDigest = false } = {}) {
         await this.initSchema();
+        let targetGuildId = guildId;
+        if (!targetGuildId && feedId) {
+            const fRes = await db.pool.query(`SELECT guild_id FROM autofeeds WHERE id = $1`, [feedId]);
+            targetGuildId = fRes.rows?.[0]?.guild_id || null;
+        }
+        const id = newId();
+        const now = Date.now();
+        const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
+        await db.pool.query(
+            `INSERT INTO autofeed_history (id, feed_id, guild_id, item_guid, item_url, item_title, item_author, item_content, tags, is_digest, clicks_count, posted_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11)`,
+            [id, feedId, targetGuildId, itemGuid, itemUrl, itemTitle, itemAuthor, itemContent ? String(itemContent).slice(0, 1000) : null, tagsJson, Boolean(isDigest), now]
+        ).catch(() => {});
+    }
+
+    async logHistory({ feedId, itemId, title, link, contentSnippet, itemTags = [], itemCategory = null, guildId = null, isDigest = false }) {
+        return this.recordPostedItem(feedId, itemId, link, title, {
+            guildId,
+            itemAuthor: null,
+            itemContent: contentSnippet,
+            tags: itemTags,
+            isDigest
+        });
+    }
+
+    async searchHistory(guildId, query, limit = 10) {
+        await this.initSchema();
+        let queryString = '';
+        if (typeof query === 'object' && query !== null) {
+            queryString = query.query || query.q || query.tag || '';
+        } else {
+            queryString = String(query || '');
+        }
+
+        const q = `%${queryString.trim().toLowerCase()}%`;
+        const res = await db.pool.query(
+            `SELECT h.*, f.name as feed_name, f.feed_type, f.category
+             FROM autofeed_history h
+             LEFT JOIN autofeeds f ON h.feed_id = f.id
+             WHERE (h.guild_id = $1 OR f.guild_id = $1)
+               AND (LOWER(h.item_title) LIKE $2 OR LOWER(h.item_author) LIKE $2 OR LOWER(h.item_content) LIKE $2 OR LOWER(h.tags) LIKE $2)
+             ORDER BY h.posted_at DESC
+             LIMIT $3`,
+            [guildId, q, Math.max(1, Math.min(Number(limit) || 10, 50))]
+        );
+        return (res.rows || []).map(r => ({
+            id: r.id,
+            feedId: r.feed_id,
+            guildId: r.guild_id,
+            feedName: r.feed_name || 'Flux',
+            itemGuid: r.item_guid,
+            url: r.item_url,
+            title: r.item_title,
+            author: r.item_author,
+            content: r.item_content,
+            tags: typeof r.tags === 'string' ? JSON.parse(r.tags || '[]') : (r.tags || []),
+            isDigest: Boolean(r.is_digest),
+            clicksCount: Number(r.clicks_count || 0),
+            postedAt: Number(r.posted_at || 0)
+        }));
+    }
+
+    async incrementClick(feedId, itemGuid) {
+        await this.initSchema();
+        await db.pool.query(
+            `UPDATE autofeed_history SET clicks_count = clicks_count + 1 WHERE feed_id = $1 AND item_guid = $2`,
+            [feedId, itemGuid]
+        ).catch(() => {});
+    }
+
+    // ==========================================
+    // DROP HUNTER / CLAIMS (GAMIFICATION)
+    // ==========================================
+
+    async claimItem({ feedId, itemId, userId, guildId, xpAwarded = 25 }) {
+        await this.initSchema();
+        // Vérifier si déjà réclamé
+        const check = await db.pool.query(
+            `SELECT id FROM autofeed_claims WHERE feed_id = $1 AND item_id = $2 AND user_id = $3 LIMIT 1`,
+            [feedId, itemId, userId]
+        );
+        if (check.rows?.[0]) {
+            const countRes = await db.pool.query(
+                `SELECT COUNT(*) as count FROM autofeed_claims WHERE feed_id = $1 AND item_id = $2`,
+                [feedId, itemId]
+            );
+            return {
+                success: false,
+                alreadyClaimed: true,
+                claimsCount: Number(countRes.rows?.[0]?.count || 1)
+            };
+        }
+
         const id = newId();
         const now = Date.now();
         await db.pool.query(
-            `INSERT INTO autofeed_history (id, feed_id, item_guid, item_url, item_title, posted_at)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [id, feedId, itemGuid, itemUrl, itemTitle, now]
-        ).catch(() => {});
+            `INSERT INTO autofeed_claims (id, feed_id, item_id, user_id, guild_id, xp_awarded, claimed_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [id, feedId, itemId, userId, guildId, Number(xpAwarded || 0), now]
+        );
+
+        const countRes = await db.pool.query(
+            `SELECT COUNT(*) as count FROM autofeed_claims WHERE feed_id = $1 AND item_id = $2`,
+            [feedId, itemId]
+        );
+
+        return {
+            success: true,
+            alreadyClaimed: false,
+            xpAwarded: Number(xpAwarded || 0),
+            claimsCount: Number(countRes.rows?.[0]?.count || 1)
+        };
+    }
+
+    async getItemClaims(feedId, itemId) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT * FROM autofeed_claims WHERE feed_id = $1 AND item_id = $2 ORDER BY claimed_at ASC`,
+            [feedId, itemId]
+        );
+        return (res.rows || []).map(r => ({
+            id: r.id,
+            feedId: r.feed_id,
+            itemId: r.item_id,
+            userId: r.user_id,
+            guildId: r.guild_id,
+            xpAwarded: Number(r.xp_awarded || 0),
+            claimedAt: Number(r.claimed_at || 0)
+        }));
+    }
+
+    async getClaimsCount(feedId, itemId) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT COUNT(*) as count FROM autofeed_claims WHERE feed_id = $1 AND item_id = $2`,
+            [feedId, itemId]
+        );
+        return Number(res.rows?.[0]?.count || 0);
+    }
+
+    async getUserClaims(arg1, arg2) {
+        await this.initSchema();
+        let query;
+        let params;
+        if (!arg2) {
+            query = `SELECT * FROM autofeed_claims WHERE user_id = $1 ORDER BY claimed_at DESC`;
+            params = [arg1];
+        } else {
+            query = `SELECT * FROM autofeed_claims WHERE (guild_id = $1 AND user_id = $2) OR (user_id = $1 AND guild_id = $2) ORDER BY claimed_at DESC`;
+            params = [arg1, arg2];
+        }
+        const res = await db.pool.query(query, params);
+        return (res.rows || []).map(r => ({
+            id: r.id,
+            feedId: r.feed_id,
+            itemId: r.item_id,
+            userId: r.user_id,
+            guildId: r.guild_id,
+            xpAwarded: Number(r.xp_awarded || 0),
+            claimedAt: Number(r.claimed_at || 0)
+        }));
+    }
+
+    // ==========================================
+    // STATISTIQUES & ANALYTICS
+    // ==========================================
+
+    async getFeedStats(guildId) {
+        await this.initSchema();
+        const feeds = await this.listByGuild(guildId);
+        const totalFeeds = feeds.length;
+        const activeFeeds = feeds.filter(f => f.enabled).length;
+
+        const subsRes = await db.pool.query(
+            `SELECT COUNT(*) as count FROM autofeed_subscriptions WHERE guild_id = $1`,
+            [guildId]
+        );
+        const totalSubs = Number(subsRes.rows?.[0]?.count || 0);
+
+        const histRes = await db.pool.query(
+            `SELECT COUNT(h.id) as count, COALESCE(SUM(h.clicks_count), 0) as total_clicks
+             FROM autofeed_history h
+             LEFT JOIN autofeeds f ON h.feed_id = f.id
+             WHERE h.guild_id = $1 OR f.guild_id = $1`,
+            [guildId]
+        );
+        const totalPosts = Number(histRes.rows?.[0]?.count || 0);
+        const totalClicks = Number(histRes.rows?.[0]?.total_clicks || 0);
+
+        const claimsRes = await db.pool.query(
+            `SELECT COUNT(*) as count, COALESCE(SUM(xp_awarded), 0) as total_xp FROM autofeed_claims WHERE guild_id = $1`,
+            [guildId]
+        );
+        const totalClaims = Number(claimsRes.rows?.[0]?.count || 0);
+        const totalXpAwarded = Number(claimsRes.rows?.[0]?.total_xp || 0);
+
+        // Top 5 tags sur les flux de la guilde
+        const tagMap = {};
+        for (const f of feeds) {
+            for (const t of (f.tags || [])) {
+                tagMap[t] = (tagMap[t] || 0) + 1;
+            }
+        }
+        const topTags = Object.entries(tagMap)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([tag, count]) => ({ tag, count }));
+
+        // Répartition des fournisseurs (topProviders)
+        const providerMap = {};
+        for (const f of feeds) {
+            const p = f.feedType || 'rss';
+            providerMap[p] = (providerMap[p] || 0) + 1;
+        }
+        const topProviders = Object.entries(providerMap)
+            .sort((a, b) => b[1] - a[1])
+            .map(([provider, count]) => ({ provider, count }));
+
+        return {
+            totalFeeds,
+            activeFeeds,
+            totalSubscriptions: totalSubs,
+            totalPosts,
+            totalClicks,
+            totalClaims,
+            totalXpAwarded,
+            topTags,
+            topProviders
+        };
     }
 
     // ==========================================
@@ -539,6 +854,8 @@ class AutofeedsRepository {
     _mapRow(row) {
         let tags = [];
         let filters = {};
+        let channelTagRouting = {};
+        let quietHours = {};
         try {
             tags = typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags || []);
         } catch { tags = []; }
@@ -546,6 +863,14 @@ class AutofeedsRepository {
         try {
             filters = typeof row.filters === 'string' ? JSON.parse(row.filters) : (row.filters || {});
         } catch { filters = {}; }
+
+        try {
+            channelTagRouting = typeof row.channel_tag_routing === 'string' ? JSON.parse(row.channel_tag_routing) : (row.channel_tag_routing || {});
+        } catch { channelTagRouting = {}; }
+
+        try {
+            quietHours = typeof row.quiet_hours === 'string' ? JSON.parse(row.quiet_hours) : (row.quiet_hours || {});
+        } catch { quietHours = {}; }
 
         return {
             id: row.id,
@@ -570,6 +895,14 @@ class AutofeedsRepository {
             ignoreShorts: Boolean(row.ignore_shorts),
             aiSummary: Boolean(row.ai_summary),
             aiTranslate: row.ai_translate || null,
+            digestMode: row.digest_mode || 'realtime',
+            digestSchedule: row.digest_schedule || '08:00',
+            digestChannelId: row.digest_channel_id || null,
+            enableGamification: Boolean(row.enable_gamification),
+            gamificationXpReward: Number(row.gamification_xp_reward || 25),
+            channelTagRouting: channelTagRouting || {},
+            quietHours: quietHours || {},
+            maxPostsPerHour: Number(row.max_posts_per_hour || 0),
             lastItemId: row.last_item_id,
             lastItemPublishedAt: Number(row.last_item_published_at || 0),
             intervalMinutes: Number(row.interval_minutes || 15),
