@@ -293,9 +293,132 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
 
             const actionRow = service.buildActionRow(feed, item);
             expect(actionRow).toBeDefined();
-            expect(actionRow.components.length).toBe(2);
+            expect(actionRow.components.length).toBe(3);
             expect(actionRow.components[0].data.label).toBe("Voir l'article");
             expect(actionRow.components[1].data.custom_id).toContain('autofeed:sub:tag:epic');
+            expect(actionRow.components[2].data.custom_id).toContain('autofeed:sub:author:epic store');
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // 7. Advanced Filters (titleKeywords, authors, tags, media)
+    // ---------------------------------------------------------------
+    describe('Advanced Filter Capabilities', () => {
+        const provider = providerRegistry.get('rss');
+
+        it('filters specifically on titleKeywords and excludeTitleKeywords', () => {
+            const item = { title: 'PlayStation 5 Pro Disponible', content: 'Le stock est limité en magasin.' };
+
+            expect(provider.matchesFilters(item, { titleKeywords: ['playstation'] })).toBe(true);
+            expect(provider.matchesFilters(item, { titleKeywords: ['xbox'] })).toBe(false);
+            expect(provider.matchesFilters(item, { excludeTitleKeywords: ['magasin'] })).toBe(true);
+            expect(provider.matchesFilters(item, { excludeTitleKeywords: ['pro'] })).toBe(false);
+        });
+
+        it('filters by author whitelist and blacklist', () => {
+            const item = { title: 'Nouvelle annonce', content: 'Contenu', author: '@Zerator' };
+
+            expect(provider.matchesFilters(item, { authorInclude: ['zerator'] })).toBe(true);
+            expect(provider.matchesFilters(item, { authorInclude: ['squeezie'] })).toBe(false);
+            expect(provider.matchesFilters(item, { authorExclude: ['automoderator', 'bot'] })).toBe(true);
+            expect(provider.matchesFilters(item, { authorExclude: ['zerator'] })).toBe(false);
+        });
+
+        it('filters by tags and requireMedia', () => {
+            const itemWithImg = {
+                title: 'Jeu avec image',
+                content: 'Description',
+                imageUrl: 'https://example.com/art.jpg',
+                tags: ['steam', 'rpg']
+            };
+            const itemNoImg = {
+                title: 'Jeu sans image',
+                content: 'Description',
+                imageUrl: null,
+                tags: ['indie']
+            };
+
+            expect(provider.matchesFilters(itemWithImg, { requireMedia: true })).toBe(true);
+            expect(provider.matchesFilters(itemNoImg, { requireMedia: true })).toBe(false);
+            expect(provider.matchesFilters(itemWithImg, { tagInclude: ['steam'] })).toBe(true);
+            expect(provider.matchesFilters(itemWithImg, { tagExclude: ['rpg'] })).toBe(false);
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // 8. Social Feed Providers & Resolution
+    // ---------------------------------------------------------------
+    describe('Social Feed Providers (Twitter, TikTok, Twitch, Kick, Bridges)', () => {
+        it('registers all 11 providers in registry', () => {
+            const list = providerRegistry.list();
+            expect(list.length).toBe(11);
+            const names = list.map(p => p.name);
+            expect(names).toContain('rss');
+            expect(names).toContain('youtube');
+            expect(names).toContain('reddit');
+            expect(names).toContain('google_news');
+            expect(names).toContain('twitch');
+            expect(names).toContain('kick');
+            expect(names).toContain('twitter');
+            expect(names).toContain('tiktok');
+            expect(names).toContain('instagram');
+            expect(names).toContain('facebook');
+            expect(names).toContain('linkedin');
+        });
+
+        it('resolves Twitter handles and URLs to Nitter RSS gateway', () => {
+            const twitterProv = providerRegistry.get('twitter');
+            expect(twitterProv.extractUsername('https://x.com/PlayStation')).toBe('PlayStation');
+            expect(twitterProv.resolveUrl('@Xbox')).toContain('/Xbox/rss');
+        });
+
+        it('resolves TikTok creators to ProxiTok RSS gateway', () => {
+            const tiktokProv = providerRegistry.get('tiktok');
+            expect(tiktokProv.extractUsername('https://www.tiktok.com/@khaby.lame')).toBe('khaby.lame');
+            expect(tiktokProv.resolveUrl('@khaby.lame')).toContain('/@khaby.lame/rss');
+        });
+
+        it('resolves Twitch and Kick usernames', () => {
+            const twitchProv = providerRegistry.get('twitch');
+            expect(twitchProv.extractUsername('https://www.twitch.tv/zerator')).toBe('zerator');
+            expect(twitchProv.resolveUrl('zerator')).toBe('https://www.twitch.tv/zerator');
+
+            const kickProv = providerRegistry.get('kick');
+            expect(kickProv.extractUsername('kick:xqc')).toBe('xqc');
+            expect(kickProv.resolveUrl('xqc')).toBe('https://kick.com/xqc');
+        });
+
+        it('supports author/account subscriber matching with personal regex filter', async () => {
+            await subService.subscribe({
+                guildId,
+                userId: 'user_author_fan',
+                targetType: 'account',
+                targetValue: 'playstation',
+                notifyMode: 'mention',
+                filters: {
+                    regexFilter: 'state of play'
+                }
+            });
+
+            const feed = { id: 'feed_soc', guildId, category: 'news', tags: [] };
+            const itemMatch = {
+                id: 't1',
+                title: 'Nouveau State of Play annoncé pour jeudi',
+                content: 'Diffusion en direct',
+                author: '@PlayStation'
+            };
+            const itemNoMatch = {
+                id: 't2',
+                title: 'Remise sur la manette DualSense',
+                content: 'Offre promotionnelle',
+                author: '@PlayStation'
+            };
+
+            const match1 = await subService.findMatchingSubscribers(guildId, feed, itemMatch);
+            expect(match1.mentionUserIds).toContain('user_author_fan');
+
+            const match2 = await subService.findMatchingSubscribers(guildId, feed, itemNoMatch);
+            expect(match2.mentionUserIds).not.toContain('user_author_fan');
         });
     });
 });

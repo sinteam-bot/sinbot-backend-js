@@ -17,7 +17,7 @@ class AutofeedsSubscriptionService {
     /**
      * Ajoute ou met à jour une souscription utilisateur.
      */
-    async subscribe({ guildId, userId, targetType, targetValue, notifyMode = 'mention' }) {
+    async subscribe({ guildId, userId, targetType, targetValue, notifyMode = 'mention', filters = {} }) {
         if (!guildId || !userId || !targetType || !targetValue) {
             return { ok: false, error: 'Paramètres manquants pour la souscription.' };
         }
@@ -141,22 +141,32 @@ class AutofeedsSubscriptionService {
                     break;
             }
 
-            // Vérifier les filtres personnels de l'abonné (include/exclude)
+            // Vérifier les filtres personnels de l'abonné (include/exclude/regex)
             if (matched && sub.filters && typeof sub.filters === 'object') {
-                if (Array.isArray(sub.filters.includeKeywords) && sub.filters.includeKeywords.length > 0) {
-                    const hasInclude = sub.filters.includeKeywords.some(kw => {
+                const inc = sub.filters.includeKeywords || sub.filters.filterKeywords;
+                if (Array.isArray(inc) && inc.length > 0) {
+                    const hasInclude = inc.some(kw => {
                         const k = (kw || '').trim().toLowerCase();
                         return k && fullText.includes(k);
                     });
                     if (!hasInclude) matched = false;
                 }
 
-                if (matched && Array.isArray(sub.filters.excludeKeywords) && sub.filters.excludeKeywords.length > 0) {
-                    const hasExclude = sub.filters.excludeKeywords.some(kw => {
+                const exc = sub.filters.excludeKeywords;
+                if (matched && Array.isArray(exc) && exc.length > 0) {
+                    const hasExclude = exc.some(kw => {
                         const k = (kw || '').trim().toLowerCase();
                         return k && fullText.includes(k);
                     });
                     if (hasExclude) matched = false;
+                }
+
+                const reg = sub.filters.regexFilter || sub.filters.regex;
+                if (matched && reg && typeof reg === 'string' && reg.trim()) {
+                    try {
+                        const re = new RegExp(reg.trim(), 'i');
+                        if (!re.test(fullText)) matched = false;
+                    } catch {}
                 }
             }
 
