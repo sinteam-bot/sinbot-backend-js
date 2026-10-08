@@ -111,6 +111,13 @@ class AutofeedsController {
                 channelTagRouting: req.body?.channel_tag_routing || req.body?.channelTagRouting || {},
                 quietHours: req.body?.quiet_hours || req.body?.quietHours || {},
                 maxPostsPerHour: req.body?.max_posts_per_hour || req.body?.maxPostsPerHour || 0,
+                autoReactions: req.body?.auto_reactions || req.body?.autoReactions || [],
+                autoPoll: req.body?.auto_poll || req.body?.autoPoll || {},
+                breakingKeywords: req.body?.breaking_keywords || req.body?.breakingKeywords || [],
+                bypassQuietHours: req.body?.bypass_quiet_hours !== undefined ? Boolean(req.body.bypass_quiet_hours) : Boolean(req.body?.bypassQuietHours),
+                breakingRoleId: req.body?.breaking_role_id || req.body?.breakingRoleId || null,
+                autoExpireDays: req.body?.auto_expire_days !== undefined ? Number(req.body.auto_expire_days) : (req.body?.autoExpireDays !== undefined ? Number(req.body.autoExpireDays) : 0),
+                enableAudioBriefing: req.body?.enable_audio_briefing !== undefined ? Boolean(req.body.enable_audio_briefing) : Boolean(req.body?.enableAudioBriefing),
                 intervalMinutes: intervalMinutes || interval_minutes || checkIntervalMinutes || check_interval_minutes,
                 enabled: enabled !== undefined ? Boolean(enabled) : (isActive !== undefined ? Boolean(isActive) : (is_active !== undefined ? Boolean(is_active) : true))
             });
@@ -301,6 +308,13 @@ class AutofeedsController {
                 channelTagRouting: patch.channel_tag_routing !== undefined ? patch.channel_tag_routing : patch.channelTagRouting,
                 quietHours: patch.quiet_hours !== undefined ? patch.quiet_hours : patch.quietHours,
                 maxPostsPerHour: patch.max_posts_per_hour !== undefined ? Number(patch.max_posts_per_hour) : patch.maxPostsPerHour,
+                autoReactions: patch.auto_reactions !== undefined ? patch.auto_reactions : patch.autoReactions,
+                autoPoll: patch.auto_poll !== undefined ? patch.auto_poll : patch.autoPoll,
+                breakingKeywords: patch.breaking_keywords !== undefined ? patch.breaking_keywords : patch.breakingKeywords,
+                bypassQuietHours: patch.bypass_quiet_hours !== undefined ? Boolean(patch.bypass_quiet_hours) : (patch.bypassQuietHours !== undefined ? Boolean(patch.bypassQuietHours) : undefined),
+                breakingRoleId: patch.breaking_role_id !== undefined ? patch.breaking_role_id : patch.breakingRoleId,
+                autoExpireDays: patch.auto_expire_days !== undefined ? Number(patch.auto_expire_days) : (patch.autoExpireDays !== undefined ? Number(patch.autoExpireDays) : undefined),
+                enableAudioBriefing: patch.enable_audio_briefing !== undefined ? Boolean(patch.enable_audio_briefing) : (patch.enableAudioBriefing !== undefined ? Boolean(patch.enableAudioBriefing) : undefined),
                 intervalMinutes: patch.interval_minutes || patch.intervalMinutes || patch.check_interval_minutes || patch.checkIntervalMinutes,
                 enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : (patch.isActive !== undefined ? Boolean(patch.isActive) : (patch.is_active !== undefined ? Boolean(patch.is_active) : undefined))
             });
@@ -526,12 +540,72 @@ class AutofeedsController {
             return result;
         }
     }
+    /**
+     * POST /api/autofeeds/purge
+     * Cleans up expired feed items and Discord messages
+     */
+    async purge(req, res = null) {
+        try {
+            const feedId = req.body?.feedId || req.body?.feed_id || req.query?.feed_id || null;
+            const purgeRes = await this.service.purgeExpired(feedId);
+            const result = { success: true, ok: true, data: purgeRes };
+            if (res && typeof res.json === 'function') {
+                res.json(result);
+            }
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') {
+                res.json(result);
+            }
+            return result;
+        }
+    }
+
+    /**
+     * GET /api/autofeeds/:id/audio
+     * Generates TTS radio briefing for a feed
+     */
+    async getAudioBriefing(req, res = null) {
+        try {
+            const id = req.params?.id;
+            const limit = parseInt(req.query?.limit || '5', 10);
+            const briefing = await this.service.createAudioBriefing(id, limit);
+            if (req.query?.download === 'true' && res && typeof res.setHeader === 'function') {
+                res.setHeader('Content-Type', briefing.mimeType || 'audio/mpeg');
+                res.setHeader('Content-Disposition', `attachment; filename="${briefing.filename}"`);
+                return res.send ? res.send(briefing.buffer) : briefing.buffer;
+            }
+            const result = {
+                success: true,
+                ok: true,
+                data: {
+                    feedTitle: briefing.feedTitle,
+                    script: briefing.script,
+                    itemCount: briefing.itemCount,
+                    filename: briefing.filename,
+                    sizeBytes: briefing.buffer ? briefing.buffer.length : 0
+                }
+            };
+            if (res && typeof res.json === 'function') {
+                res.json(result);
+            }
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') {
+                res.json(result);
+            }
+            return result;
+        }
+    }
 }
 
 Controller('/api/autofeeds')(AutofeedsController);
 Get('/stats')(AutofeedsController.prototype, 'getStats');
 Get('/search')(AutofeedsController.prototype, 'searchItems');
 Post('/claims')(AutofeedsController.prototype, 'claimItem');
+Post('/purge')(AutofeedsController.prototype, 'purge');
 Get('/presets')(AutofeedsController.prototype, 'getPresets');
 Post('/presets/install')(AutofeedsController.prototype, 'installPreset');
 Get('/providers')(AutofeedsController.prototype, 'getProviders');
@@ -543,6 +617,7 @@ Get('/opml/export')(AutofeedsController.prototype, 'exportOpml');
 Get('')(AutofeedsController.prototype, 'list');
 Post('')(AutofeedsController.prototype, 'create');
 Get('/:id')(AutofeedsController.prototype, 'getById');
+Get('/:id/audio')(AutofeedsController.prototype, 'getAudioBriefing');
 Patch('/:id')(AutofeedsController.prototype, 'update');
 Delete('/:id')(AutofeedsController.prototype, 'deleteFeed');
 Post('/:id/test')(AutofeedsController.prototype, 'testFeed');

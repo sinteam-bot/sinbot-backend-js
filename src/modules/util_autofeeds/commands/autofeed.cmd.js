@@ -486,6 +486,55 @@ class AutofeedCommands {
         }
     }
 
+    async executePurge(interaction) {
+        if (!interaction.member?.permissions?.has?.(PermissionFlagsBits.ManageGuild) &&
+            !interaction.member?.permissions?.has?.(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: '❌ Réservé aux modérateurs/administrateurs.', ephemeral: true });
+        }
+
+        const feedId = interaction.options.getString('id') || null;
+        await interaction.deferReply({ ephemeral: true });
+
+        const result = await this.service.purgeExpired(feedId, interaction.client);
+        return interaction.editReply({
+            content: `🧹 **Nettoyage automatique terminé !**\n• Articles expirés marqués : **${result.expiredCount}**\n• Messages Discord supprimés : **${result.deletedMessagesCount}**`
+        });
+    }
+
+    async executeAudio(interaction) {
+        const feedId = interaction.options.getString('id');
+        const limit = interaction.options.getInteger('nombre') || 5;
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const briefing = await this.service.createAudioBriefing(feedId, limit);
+            const embed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle(`🎙️ Bulletin Vocal : ${briefing.feedTitle}`)
+                .setDescription(briefing.script.length > 2000 ? briefing.script.slice(0, 1997) + '...' : briefing.script)
+                .setFooter({ text: `${briefing.itemCount} articles synthétisés • Fichier: ${briefing.filename}` });
+
+            const files = [];
+            if (briefing.buffer && briefing.buffer.length > 0) {
+                files.push({
+                    attachment: briefing.buffer,
+                    name: briefing.filename
+                });
+            }
+
+            return interaction.editReply({
+                embeds: [embed],
+                files,
+                content: `📻 **Flash Audio généré avec succès !**`
+            });
+        } catch (err) {
+            return interaction.editReply({
+                content: `❌ Erreur lors de la génération du bulletin audio : ${err.message}`
+            });
+        }
+    }
+
     // ==========================================
     // POINT D'ENTRÉE DU ROUTEUR COMMANDES
     // ==========================================
@@ -507,6 +556,8 @@ class AutofeedCommands {
             case 'search':           return this.executeSearch(interaction);
             case 'stats':            return this.executeStats(interaction);
             case 'digest':           return this.executeDigest(interaction);
+            case 'purge':            return this.executePurge(interaction);
+            case 'audio':            return this.executeAudio(interaction);
             default:
                 return interaction.reply({ content: '❌ Sous-commande inconnue', ephemeral: true });
         }
@@ -601,6 +652,17 @@ const feedBuilder = new SlashCommandBuilder()
         sub.setName('digest')
             .setDescription('Forcer la génération et l\'envoi immédiat d\'un digest (Admin)')
             .addStringOption(o => o.setName('id').setDescription('Identifiant du flux').setRequired(true))
+    )
+    .addSubcommand(sub =>
+        sub.setName('purge')
+            .setDescription('Nettoyer les deals et articles expirés sur Discord (Admin)')
+            .addStringOption(o => o.setName('id').setDescription('Identifiant du flux spécifique (optionnel)').setRequired(false))
+    )
+    .addSubcommand(sub =>
+        sub.setName('audio')
+            .setDescription('Générer un bulletin audio / radio flash TTS des dernières actualités')
+            .addStringOption(o => o.setName('id').setDescription('Identifiant du flux').setRequired(true))
+            .addIntegerOption(o => o.setName('nombre').setDescription('Nombre d\'articles à inclure (défaut: 5)').setRequired(false).setMinValue(1).setMaxValue(15))
     );
 
 // Alias /autofeed pour compatibilité descendante

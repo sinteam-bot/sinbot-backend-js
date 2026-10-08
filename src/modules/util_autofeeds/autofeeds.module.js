@@ -16,6 +16,10 @@ const { AutofeedsOpmlService } = require('./services/autofeeds-opml.service.js')
 const { AutofeedsGamificationService } = require('./services/autofeeds-gamification.service.js');
 const { AutofeedsRateLimitService } = require('./services/autofeeds-ratelimit.service.js');
 const { AutofeedsDigestService } = require('./services/autofeeds-digest.service.js');
+const { AutofeedsPulseService } = require('./services/autofeeds-pulse.service.js');
+const { AutofeedsClusteringService } = require('./services/autofeeds-clustering.service.js');
+const { AutofeedsPurgeService } = require('./services/autofeeds-purge.service.js');
+const { AutofeedsAudioService } = require('./services/autofeeds-audio.service.js');
 const { AutofeedsService } = require('./services/autofeeds.service.js');
 const { AutofeedCommands } = require('./commands/autofeed.cmd.js');
 const { AutofeedsController, AutofeedsWebhooksController } = require('./controllers/autofeeds.controller.js');
@@ -59,6 +63,10 @@ Module({
         AutofeedsGamificationService,
         AutofeedsRateLimitService,
         AutofeedsDigestService,
+        AutofeedsPulseService,
+        AutofeedsClusteringService,
+        AutofeedsPurgeService,
+        AutofeedsAudioService,
         AutofeedsService,
         AutofeedInteractionListener,
         AutofeedsModule

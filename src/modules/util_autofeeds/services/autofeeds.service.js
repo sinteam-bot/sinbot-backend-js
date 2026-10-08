@@ -15,6 +15,10 @@ const { AutofeedsOpmlService } = require('./autofeeds-opml.service.js');
 const { AutofeedsGamificationService } = require('./autofeeds-gamification.service.js');
 const { AutofeedsRateLimitService } = require('./autofeeds-ratelimit.service.js');
 const { AutofeedsDigestService } = require('./autofeeds-digest.service.js');
+const { AutofeedsPulseService } = require('./autofeeds-pulse.service.js');
+const { AutofeedsClusteringService } = require('./autofeeds-clustering.service.js');
+const { AutofeedsPurgeService } = require('./autofeeds-purge.service.js');
+const { AutofeedsAudioService } = require('./autofeeds-audio.service.js');
 const { providerRegistry } = require('./providers/provider-registry.js');
 const { PRESETS } = require('../config/presets.js');
 const logger = require('../../../utils/logger.js');
@@ -28,7 +32,11 @@ class AutofeedsService {
         AutofeedsOpmlService,
         AutofeedsGamificationService,
         AutofeedsRateLimitService,
-        AutofeedsDigestService
+        AutofeedsDigestService,
+        AutofeedsPulseService,
+        AutofeedsClusteringService,
+        AutofeedsPurgeService,
+        AutofeedsAudioService
     ];
 
     constructor(
@@ -39,7 +47,11 @@ class AutofeedsService {
         opmlService = new AutofeedsOpmlService(),
         gamificationService = new AutofeedsGamificationService(repo),
         rateLimitService = new AutofeedsRateLimitService(),
-        digestService = new AutofeedsDigestService(repo, aiService)
+        digestService = new AutofeedsDigestService(repo, aiService),
+        pulseService = new AutofeedsPulseService(),
+        clusteringService = new AutofeedsClusteringService(),
+        purgeService = new AutofeedsPurgeService({ repository: repo }),
+        audioService = new AutofeedsAudioService()
     ) {
         this.repo = repo;
         this.subService = subService;
@@ -49,6 +61,10 @@ class AutofeedsService {
         this.gamificationService = gamificationService;
         this.rateLimitService = rateLimitService;
         this.digestService = digestService;
+        this.pulseService = pulseService;
+        this.clusteringService = clusteringService;
+        this.purgeService = purgeService;
+        this.audioService = audioService;
         this._intervalTimer = null;
         this._client = null;
     }
@@ -93,6 +109,13 @@ class AutofeedsService {
         channelTagRouting = {},
         quietHours = {},
         maxPostsPerHour = 0,
+        autoReactions = [],
+        autoPoll = {},
+        breakingKeywords = [],
+        bypassQuietHours = false,
+        breakingRoleId = null,
+        autoExpireDays = 0,
+        enableAudioBriefing = false,
         intervalMinutes = 15
     }) {
         if (!guildId || !channelId || !feedUrl) {
@@ -139,6 +162,7 @@ class AutofeedsService {
             else if (providerName === 'github') resolvedColor = '#24292E';
             else if (providerName === 'gitlab') resolvedColor = '#FC6D26';
             else if (providerName === 'statuspage') resolvedColor = '#E02424';
+            else if (providerName === 'steam') resolvedColor = '#1B2838';
             else resolvedColor = '#FF4500';
         }
 
@@ -171,6 +195,13 @@ class AutofeedsService {
             channelTagRouting,
             quietHours,
             maxPostsPerHour,
+            autoReactions,
+            autoPoll,
+            breakingKeywords,
+            bypassQuietHours,
+            breakingRoleId,
+            autoExpireDays,
+            enableAudioBriefing,
             intervalMinutes: resolvedInterval
         });
 
@@ -294,19 +325,25 @@ class AutofeedsService {
      * Génère l'embed Discord riche pour un article de flux.
      */
     buildDiscordEmbed(feed, item) {
-        const color = typeof feed.color === 'string'
+        const isBreaking = this.isBreakingItem(feed, item);
+        let color = typeof feed.color === 'string'
             ? parseInt(feed.color.replace('#', ''), 16) || 0xFF4500
             : 0xFF4500;
 
+        if (isBreaking) {
+            color = 0xED4245; // Rouge vif pour Breaking News
+        }
+
         const provider = providerRegistry.get(feed.feedType);
-        const sourceIcon = provider?.icon || '📰';
+        const sourceIcon = isBreaking ? '🚨' : (provider?.icon || '📰');
         const sourceLabel = feed.name || provider?.label || 'Flux RSS';
+        const titlePrefix = isBreaking ? '🚨 FLASH INFO : ' : '';
 
         const embed = new EmbedBuilder()
             .setColor(color)
-            .setTitle(`${sourceIcon} ${item.title.slice(0, 250)}`)
+            .setTitle(`${sourceIcon} ${titlePrefix}${item.title.slice(0, 240)}`)
             .setURL(item.link || feed.feedUrl)
-            .setTimestamp(new Date(item.publishedAt));
+            .setTimestamp(item.publishedAt ? new Date(item.publishedAt) : new Date());
 
         if (item.content) {
             embed.setDescription(item.content);
@@ -318,6 +355,10 @@ class AutofeedsService {
 
         // Champs de métadonnées
         const fields = [];
+        if (isBreaking) {
+            fields.push({ name: '⚡ Alerte Flash', value: 'Publication prioritaire.', inline: false });
+        }
+
         if (feed.category && feed.category !== 'general') {
             fields.push({ name: '📁 Catégorie', value: `\`${feed.category.toUpperCase()}\``, inline: true });
         }
@@ -536,8 +577,11 @@ class AutofeedsService {
 
             if (client && client.channels) {
                 for (const item of toPost) {
-                    // Vérification du débit horaire (Anti-flood / Rate limiting)
-                    if (feed.maxPostsPerHour > 0 && this.rateLimitService && !this.rateLimitService.checkRateLimit(feed.id, feed.maxPostsPerHour)) {
+                    const isBreaking = this.isBreakingItem(feed, item);
+                    const shouldBypassQuiet = isBreaking && (feed.bypassQuietHours || (Array.isArray(feed.breakingKeywords) && feed.breakingKeywords.length > 0));
+
+                    // Vérification du débit horaire (Anti-flood / Rate limiting, sauf si bypass Breaking)
+                    if (feed.maxPostsPerHour > 0 && !shouldBypassQuiet && this.rateLimitService && !this.rateLimitService.checkRateLimit(feed.id, feed.maxPostsPerHour)) {
                         logger.info(`[Autofeeds] Débit horaire dépassé pour le flux ${feed.id} (max: ${feed.maxPostsPerHour}/h)`, 'AUTOFEEDS');
                         continue;
                     }
@@ -547,7 +591,30 @@ class AutofeedsService {
                     const channel = client.channels.cache?.get(targetChannelId) 
                         || (client.channels.fetch ? await client.channels.fetch(targetChannelId).catch(() => null) : null);
 
-                    if (channel && (channel.send || channel.threads?.create)) {
+                    if (!channel) continue;
+
+                    // Déduplication & News Clustering Cross-Flux
+                    if (this.clusteringService && !isBreaking) {
+                        const recentItems = await this.repo.findRecentHistoryForClustering(feed.guildId, 6);
+                        const cluster = this.clusteringService.findClusterCandidate(item, recentItems, 0.75);
+                        if (cluster) {
+                            logger.info(`[Autofeeds] Article "${item.title}" clusterisé avec l'entrée ${cluster.candidate.id} (${cluster.reason})`, 'AUTOFEEDS');
+                            await this.repo.recordPostedItem(feed.id, item.id, item.link, item.title, {
+                                guildId: feed.guildId,
+                                channelId: targetChannelId,
+                                messageId: cluster.candidate.messageId || null,
+                                canonicalUrl: this.clusteringService.normalizeUrl(item.link || item.url),
+                                itemAuthor: item.author,
+                                itemContent: item.contentSnippet,
+                                tags: item.tags,
+                                isDigest: false,
+                                clusteredWithId: cluster.candidate.id
+                            });
+                            continue; // Doublon détecté et consigné sans reposter !
+                        }
+                    }
+
+                    if (channel.send || channel.threads?.create) {
                         // Enrichissement IA si configuré
                         if (feed.aiSummary && this.aiService) {
                             const summary = await this.aiService.generateSummary(item);
@@ -574,6 +641,9 @@ class AutofeedsService {
 
                         // Construire le message texte (mentions + ping de rôle)
                         const pings = [];
+                        if (isBreaking && feed.breakingRoleId) {
+                            pings.push(`<@&${feed.breakingRoleId}>`);
+                        }
                         if (feed.pingRoleId) {
                             pings.push(`<@&${feed.pingRoleId}>`);
                         }
@@ -581,8 +651,8 @@ class AutofeedsService {
                             pings.push(mentionUserIds.map(uid => `<@${uid}>`).join(' '));
                         }
 
-                        // Neutralisation des pings en heures silencieuses
-                        if (this.rateLimitService?.shouldSuppressMentions(feed)) {
+                        // Neutralisation des pings en heures silencieuses (sauf si bypass Breaking)
+                        if (!shouldBypassQuiet && this.rateLimitService?.shouldSuppressMentions(feed)) {
                             pings.length = 0;
                         }
 
@@ -613,6 +683,8 @@ class AutofeedsService {
                             sendPayload.components = [actionRow];
                         }
 
+                        let sentMsg = null;
+
                         // Envoi : Forum Discord ou Salon textuel (avec tentative Webhook personnalisé)
                         const isForum = Boolean(channel.isThreadOnly?.() || channel.type === 15);
                         if (isForum && channel.threads?.create) {
@@ -626,22 +698,36 @@ class AutofeedsService {
                                     }
                                 }
                             }
-                            await channel.threads.create({
+                            const thread = await channel.threads.create({
                                 name: postName,
                                 message: sendPayload,
                                 appliedTags: appliedTags.slice(0, 5)
                             }).catch(err => {
                                 logger.warn(`[Autofeeds] Erreur post forum ${targetChannelId}: ${err.message}`, 'AUTOFEEDS');
                             });
+                            sentMsg = thread?.message || thread;
                         } else {
                             let sent = false;
                             if (feed.useWebhook !== false && this.webhookService) {
                                 sent = await this.webhookService.sendViaWebhook(channel, client, sendPayload, feed, item);
                             }
                             if (!sent && channel.send) {
-                                await channel.send(sendPayload).catch(err => {
+                                sentMsg = await channel.send(sendPayload).catch(err => {
                                     logger.warn(`[Autofeeds] Erreur envoi channel ${targetChannelId}: ${err.message}`, 'AUTOFEEDS');
                                 });
+                            }
+                        }
+
+                        // Community Pulse : Réactions et sondages automatiques
+                        if (sentMsg && this.pulseService) {
+                            if (Array.isArray(feed.autoReactions) && feed.autoReactions.length > 0) {
+                                await this.pulseService.applyAutoReactions(sentMsg, feed.autoReactions);
+                            }
+                            if (feed.autoPoll) {
+                                const pollPayload = this.pulseService.buildPollPayload(feed, item);
+                                if (pollPayload) {
+                                    await this.pulseService.sendAutoPoll(channel, pollPayload);
+                                }
                             }
                         }
 
@@ -664,6 +750,9 @@ class AutofeedsService {
                         // Enregistrement dans l'historique anti-doublon & recherche
                         await this.repo.recordPostedItem(feed.id, item.id, item.link, item.title, {
                             guildId: feed.guildId,
+                            channelId: targetChannelId,
+                            messageId: sentMsg?.id || null,
+                            canonicalUrl: this.clusteringService ? this.clusteringService.normalizeUrl(item.link || item.url) : item.link,
                             itemAuthor: item.author,
                             itemContent: item.contentSnippet,
                             tags: item.tags,
@@ -1110,8 +1199,87 @@ class AutofeedsService {
         return this.digestService.dispatchDigest(feed, client || this._client);
     }
 
+    /**
+     * Vérifie si un article correspond aux critères de Breaking News du flux.
+     * @param {Object} feed
+     * @param {Object} item
+     * @returns {boolean}
+     */
+    isBreakingItem(feed, item) {
+        if (!feed || !item) return false;
+        const keywords = Array.isArray(feed.breakingKeywords) ? feed.breakingKeywords : [];
+        if (keywords.length === 0) return false;
+
+        const text = `${item.title || ''} ${item.content || item.contentSnippet || ''}`.toLowerCase();
+        return keywords.some(k => k && text.includes(String(k).toLowerCase().trim()));
+    }
+
+    /**
+     * Déclenche manuellement ou périodiquement la purge des messages expirés.
+     * @param {Object|string} options
+     * @param {Object} [client]
+     */
+    async purgeExpired(options = {}, client = null) {
+        if (this.purgeService) {
+            const opts = typeof options === 'string' ? { feedId: options } : { ...options };
+            if (client) {
+                opts.client = client;
+                this.purgeService.setClient(client);
+            }
+            const stats = await this.purgeService.purgeExpiredMessages(opts);
+            return {
+                expiredCount: stats.scanned ?? stats.expiredCount ?? 0,
+                deletedMessagesCount: stats.purged ?? stats.deletedMessagesCount ?? 0,
+                errorsCount: stats.errors ?? 0,
+                ...stats
+            };
+        }
+        return { expiredCount: 0, deletedMessagesCount: 0, errorsCount: 0, scanned: 0, purged: 0, errors: 0 };
+    }
+
+    /**
+     * Génère un briefing audio synthétisé (TTS) pour un flux ou les articles récents de la guilde.
+     * @param {string} feedId
+     * @param {number|Object} limitOrOptions
+     */
+    async createAudioBriefing(feedId, limitOrOptions = 5) {
+        if (!this.audioService) return null;
+        const feed = await this.repo.getFeedById(feedId);
+        if (!feed) throw new Error('Flux introuvable');
+
+        const limit = typeof limitOrOptions === 'number' ? limitOrOptions : (limitOrOptions.limit || 5);
+        let items = await this.repo.getHistory(feed.id, limit);
+
+        if (!items || items.length === 0) {
+            const provider = providerRegistry.get(feed.feedType);
+            if (provider) {
+                try {
+                    items = (await provider.fetchItems(feed)).slice(0, limit);
+                } catch {
+                    items = [];
+                }
+            }
+        }
+
+        const script = this.audioService.generateBriefingScript(items, { guildName: feed.name });
+        const buffer = await this.audioService.synthesizeAudio(script);
+
+        return {
+            feedTitle: feed.name || 'Flash Info',
+            script,
+            buffer,
+            audioBuffer: buffer,
+            filename: `briefing-${feed.id}-${Date.now()}.mp3`,
+            itemCount: items ? items.length : 0,
+            mimeType: 'audio/mpeg'
+        };
+    }
+
     start(client) {
         this._client = client;
+        if (this.purgeService && typeof this.purgeService.setClient === 'function') {
+            this.purgeService.setClient(client);
+        }
         if (this._intervalTimer) return;
         this._intervalTimer = setInterval(() => {
             this.pollFeeds(client).catch(() => {});

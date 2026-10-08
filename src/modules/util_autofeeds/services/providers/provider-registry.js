@@ -17,6 +17,7 @@ const { BlueskyFeedProvider } = require('./bluesky.provider.js');
 const { GithubFeedProvider } = require('./github.provider.js');
 const { GitlabFeedProvider } = require('./gitlab.provider.js');
 const { StatusPageFeedProvider } = require('./status-page.provider.js');
+const { SteamFeedProvider } = require('./steam.provider.js');
 const {
     InstagramFeedProvider,
     FacebookFeedProvider,
@@ -27,7 +28,7 @@ class ProviderRegistry {
     constructor() {
         this.providers = new Map();
 
-        // Enregistrement des 16 fournisseurs actifs
+        // Enregistrement des 17 fournisseurs actifs
         this.register(new RssFeedProvider());
         this.register(new YouTubeFeedProvider());
         this.register(new YouTubeLiveFeedProvider());
@@ -41,6 +42,7 @@ class ProviderRegistry {
         this.register(new GithubFeedProvider());
         this.register(new GitlabFeedProvider());
         this.register(new StatusPageFeedProvider());
+        this.register(new SteamFeedProvider());
         this.register(new InstagramFeedProvider());
         this.register(new FacebookFeedProvider());
         this.register(new LinkedInFeedProvider());
@@ -89,6 +91,9 @@ class ProviderRegistry {
         }
         if (lower.includes('bsky.app') || lower.endsWith('.bsky.social') || lower.includes('bsky.social')) {
             return 'bluesky';
+        }
+        if (lower.includes('steampowered.com') || lower.includes('steamcommunity.com') || lower.startsWith('steam:') || /^[0-9]{3,7}$/.test(url.trim())) {
+            return 'steam';
         }
         if (lower.includes('github.com') || lower.startsWith('github:') || (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(url.trim()) && !lower.startsWith('r/'))) {
             return 'github';

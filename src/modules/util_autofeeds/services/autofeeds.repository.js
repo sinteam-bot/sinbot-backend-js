@@ -71,6 +71,13 @@ class AutofeedsRepository {
                 { name: 'channel_tag_routing', type: "text DEFAULT '{}' NOT NULL" },
                 { name: 'quiet_hours', type: "text DEFAULT '{}' NOT NULL" },
                 { name: 'max_posts_per_hour', type: "integer DEFAULT 0 NOT NULL" },
+                { name: 'auto_reactions', type: "text DEFAULT '[]' NOT NULL" },
+                { name: 'auto_poll', type: "text DEFAULT '{}' NOT NULL" },
+                { name: 'breaking_keywords', type: "text DEFAULT '[]' NOT NULL" },
+                { name: 'bypass_quiet_hours', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'breaking_role_id', type: "text" },
+                { name: 'auto_expire_days', type: "integer DEFAULT 0 NOT NULL" },
+                { name: 'enable_audio_briefing', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'last_checked_at', type: "bigint DEFAULT 0 NOT NULL" },
                 { name: 'last_status', type: "text DEFAULT 'ok' NOT NULL" },
                 { name: 'last_error', type: "text" },
@@ -118,25 +125,35 @@ class AutofeedsRepository {
                     "id" text PRIMARY KEY NOT NULL,
                     "feed_id" text NOT NULL,
                     "guild_id" text,
+                    "channel_id" text,
+                    "message_id" text,
                     "item_guid" text NOT NULL,
                     "item_url" text,
+                    "canonical_url" text,
                     "item_title" text,
                     "item_author" text,
                     "item_content" text,
                     "tags" text DEFAULT '[]' NOT NULL,
                     "is_digest" boolean DEFAULT false NOT NULL,
                     "clicks_count" integer DEFAULT 0 NOT NULL,
+                    "is_expired" boolean DEFAULT false NOT NULL,
+                    "clustered_with_id" text,
                     "posted_at" bigint NOT NULL
                 );
             `);
 
             const histColsToAdd = [
                 { name: 'guild_id', type: 'text' },
+                { name: 'channel_id', type: 'text' },
+                { name: 'message_id', type: 'text' },
+                { name: 'canonical_url', type: 'text' },
                 { name: 'item_author', type: 'text' },
                 { name: 'item_content', type: 'text' },
                 { name: 'tags', type: "text DEFAULT '[]' NOT NULL" },
                 { name: 'is_digest', type: "boolean DEFAULT false NOT NULL" },
-                { name: 'clicks_count', type: "integer DEFAULT 0 NOT NULL" }
+                { name: 'clicks_count', type: "integer DEFAULT 0 NOT NULL" },
+                { name: 'is_expired', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'clustered_with_id', type: 'text' }
             ];
             for (const col of histColsToAdd) {
                 await db.pool.query(`
@@ -236,6 +253,13 @@ class AutofeedsRepository {
         channelTagRouting = {},
         quietHours = {},
         maxPostsPerHour = 0,
+        autoReactions = [],
+        autoPoll = {},
+        breakingKeywords = [],
+        bypassQuietHours = false,
+        breakingRoleId = null,
+        autoExpireDays = 0,
+        enableAudioBriefing = false,
         intervalMinutes = 15
     }) {
         await this.initSchema();
@@ -245,6 +269,9 @@ class AutofeedsRepository {
         const filtersJson = JSON.stringify(filters || {});
         const routingJson = JSON.stringify(channelTagRouting || {});
         const quietHoursJson = JSON.stringify(quietHours || {});
+        const autoReactionsJson = JSON.stringify(Array.isArray(autoReactions) ? autoReactions : []);
+        const autoPollJson = JSON.stringify(autoPoll || {});
+        const breakingKeywordsJson = JSON.stringify(Array.isArray(breakingKeywords) ? breakingKeywords : []);
 
         await db.pool.query(
             `INSERT INTO autofeeds (
@@ -257,8 +284,10 @@ class AutofeedsRepository {
                 digest_mode, digest_schedule, digest_channel_id,
                 enable_gamification, gamification_xp_reward,
                 channel_tag_routing, quiet_hours, max_posts_per_hour,
+                auto_reactions, auto_poll, breaking_keywords,
+                bypass_quiet_hours, breaking_role_id, auto_expire_days, enable_audio_briefing,
                 interval_minutes, enabled, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, true, $31, $31)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, true, $38, $38)`,
             [
                 id,
                 guildId,
@@ -289,6 +318,13 @@ class AutofeedsRepository {
                 routingJson,
                 quietHoursJson,
                 Number(maxPostsPerHour || 0),
+                autoReactionsJson,
+                autoPollJson,
+                breakingKeywordsJson,
+                Boolean(bypassQuietHours),
+                breakingRoleId || null,
+                Number(autoExpireDays || 0),
+                Boolean(enableAudioBriefing),
                 intervalMinutes,
                 now
             ]
@@ -351,6 +387,13 @@ class AutofeedsRepository {
             channelTagRouting: patch.channelTagRouting !== undefined ? patch.channelTagRouting : current.channelTagRouting,
             quietHours: patch.quietHours !== undefined ? patch.quietHours : current.quietHours,
             maxPostsPerHour: patch.maxPostsPerHour !== undefined ? Number(patch.maxPostsPerHour) : current.maxPostsPerHour,
+            autoReactions: patch.autoReactions !== undefined ? patch.autoReactions : current.autoReactions,
+            autoPoll: patch.autoPoll !== undefined ? patch.autoPoll : current.autoPoll,
+            breakingKeywords: patch.breakingKeywords !== undefined ? patch.breakingKeywords : current.breakingKeywords,
+            bypassQuietHours: patch.bypassQuietHours !== undefined ? Boolean(patch.bypassQuietHours) : current.bypassQuietHours,
+            breakingRoleId: patch.breakingRoleId !== undefined ? patch.breakingRoleId : current.breakingRoleId,
+            autoExpireDays: patch.autoExpireDays !== undefined ? Number(patch.autoExpireDays) : current.autoExpireDays,
+            enableAudioBriefing: patch.enableAudioBriefing !== undefined ? Boolean(patch.enableAudioBriefing) : current.enableAudioBriefing,
             intervalMinutes: patch.intervalMinutes !== undefined ? patch.intervalMinutes : current.intervalMinutes,
             enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : current.enabled,
             updatedAt: Date.now()
@@ -385,9 +428,16 @@ class AutofeedsRepository {
                 channel_tag_routing = $26,
                 quiet_hours = $27,
                 max_posts_per_hour = $28,
-                interval_minutes = $29,
-                enabled = $30,
-                updated_at = $31
+                auto_reactions = $29,
+                auto_poll = $30,
+                breaking_keywords = $31,
+                bypass_quiet_hours = $32,
+                breaking_role_id = $33,
+                auto_expire_days = $34,
+                enable_audio_briefing = $35,
+                interval_minutes = $36,
+                enabled = $37,
+                updated_at = $38
              WHERE id = $1`,
             [
                 id,
@@ -418,6 +468,13 @@ class AutofeedsRepository {
                 JSON.stringify(updated.channelTagRouting),
                 JSON.stringify(updated.quietHours),
                 updated.maxPostsPerHour,
+                JSON.stringify(updated.autoReactions || []),
+                JSON.stringify(updated.autoPoll || {}),
+                JSON.stringify(updated.breakingKeywords || []),
+                updated.bypassQuietHours,
+                updated.breakingRoleId,
+                updated.autoExpireDays,
+                updated.enableAudioBriefing,
                 updated.intervalMinutes,
                 updated.enabled,
                 updated.updatedAt
@@ -550,7 +607,18 @@ class AutofeedsRepository {
         return Boolean(res.rows?.[0]);
     }
 
-    async recordPostedItem(feedId, itemGuid, itemUrl = null, itemTitle = null, { guildId = null, itemAuthor = null, itemContent = null, tags = [], isDigest = false } = {}) {
+    async recordPostedItem(feedId, itemGuid, itemUrl = null, itemTitle = null, {
+        guildId = null,
+        channelId = null,
+        messageId = null,
+        canonicalUrl = null,
+        itemAuthor = null,
+        itemContent = null,
+        tags = [],
+        isDigest = false,
+        clusteredWithId = null,
+        postedAt = null
+    } = {}) {
         await this.initSchema();
         let targetGuildId = guildId;
         if (!targetGuildId && feedId) {
@@ -558,23 +626,153 @@ class AutofeedsRepository {
             targetGuildId = fRes.rows?.[0]?.guild_id || null;
         }
         const id = newId();
-        const now = Date.now();
+        const now = postedAt ? Number(postedAt) : Date.now();
         const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
         await db.pool.query(
-            `INSERT INTO autofeed_history (id, feed_id, guild_id, item_guid, item_url, item_title, item_author, item_content, tags, is_digest, clicks_count, posted_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11)`,
-            [id, feedId, targetGuildId, itemGuid, itemUrl, itemTitle, itemAuthor, itemContent ? String(itemContent).slice(0, 1000) : null, tagsJson, Boolean(isDigest), now]
+            `INSERT INTO autofeed_history (
+                id, feed_id, guild_id, channel_id, message_id,
+                item_guid, item_url, canonical_url, item_title,
+                item_author, item_content, tags, is_digest,
+                clicks_count, is_expired, clustered_with_id, posted_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, false, $14, $15)`,
+            [
+                id,
+                feedId,
+                targetGuildId,
+                channelId || null,
+                messageId || null,
+                itemGuid,
+                itemUrl,
+                canonicalUrl || itemUrl,
+                itemTitle,
+                itemAuthor,
+                itemContent ? String(itemContent).slice(0, 1000) : null,
+                tagsJson,
+                Boolean(isDigest),
+                clusteredWithId || null,
+                now
+            ]
         ).catch(() => {});
+        return id;
     }
 
-    async logHistory({ feedId, itemId, title, link, contentSnippet, itemTags = [], itemCategory = null, guildId = null, isDigest = false }) {
+    async logHistory({
+        feedId,
+        itemId,
+        title,
+        link,
+        contentSnippet,
+        itemTags = [],
+        itemCategory = null,
+        guildId = null,
+        channelId = null,
+        messageId = null,
+        canonicalUrl = null,
+        isDigest = false,
+        clusteredWithId = null,
+        postedAt = null,
+        publishedAt = null
+    }) {
+        const resolvedPostedAt = postedAt || (publishedAt ? (publishedAt instanceof Date ? publishedAt.getTime() : new Date(publishedAt).getTime()) : null);
         return this.recordPostedItem(feedId, itemId, link, title, {
             guildId,
+            channelId,
+            messageId,
+            canonicalUrl,
             itemAuthor: null,
             itemContent: contentSnippet,
             tags: itemTags,
-            isDigest
+            isDigest,
+            clusteredWithId,
+            postedAt: resolvedPostedAt
         });
+    }
+
+    async findRecentHistoryForClustering(guildId, maxAgeHours = 6) {
+        await this.initSchema();
+        const since = Date.now() - (Number(maxAgeHours) * 3600 * 1000);
+        const res = await db.pool.query(
+            `SELECT h.*, f.name as feed_name, f.feed_type
+             FROM autofeed_history h
+             LEFT JOIN autofeeds f ON h.feed_id = f.id
+             WHERE (h.guild_id = $1 OR f.guild_id = $1)
+               AND h.posted_at >= $2
+             ORDER BY h.posted_at DESC
+             LIMIT 100`,
+            [guildId, since]
+        );
+        return (res.rows || []).map(r => ({
+            id: r.id,
+            feedId: r.feed_id,
+            guildId: r.guild_id,
+            channelId: r.channel_id,
+            messageId: r.message_id,
+            itemGuid: r.item_guid,
+            url: r.item_url,
+            canonicalUrl: r.canonical_url || r.item_url,
+            title: r.item_title,
+            postedAt: Number(r.posted_at || 0)
+        }));
+    }
+
+    async updateHistoryClustered(id, clusteredWithId) {
+        await this.initSchema();
+        await db.pool.query(
+            `UPDATE autofeed_history SET clustered_with_id = $2 WHERE id = $1`,
+            [id, clusteredWithId]
+        ).catch(() => {});
+    }
+
+    async getExpiredHistory(maxAgeDays = 7) {
+        await this.initSchema();
+        const cutoff = Date.now() - (Number(maxAgeDays) * 86400 * 1000);
+        const res = await db.pool.query(
+            `SELECT h.*, f.name as feed_name
+             FROM autofeed_history h
+             LEFT JOIN autofeeds f ON h.feed_id = f.id
+             WHERE h.posted_at <= $1
+               AND h.is_expired = false
+               AND h.message_id IS NOT NULL
+               AND h.channel_id IS NOT NULL
+             ORDER BY h.posted_at ASC
+             LIMIT 100`,
+            [cutoff]
+        );
+        return (res.rows || []).map(r => ({
+            id: r.id,
+            feedId: r.feed_id,
+            guildId: r.guild_id,
+            channelId: r.channel_id,
+            messageId: r.message_id,
+            itemGuid: r.item_guid,
+            title: r.item_title,
+            postedAt: Number(r.posted_at || 0)
+        }));
+    }
+
+    async markHistoryExpired(id) {
+        await this.initSchema();
+        await db.pool.query(
+            `UPDATE autofeed_history SET is_expired = true WHERE id = $1`,
+            [id]
+        ).catch(() => {});
+    }
+
+    async getHistory(feedId, limit = 10) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT * FROM autofeed_history WHERE feed_id = $1 ORDER BY posted_at DESC LIMIT $2`,
+            [feedId, limit]
+        );
+        return (res.rows || []).map(r => ({
+            id: r.id,
+            feedId: r.feed_id,
+            title: r.item_title,
+            link: r.item_url,
+            contentSnippet: r.item_content,
+            tags: (() => { try { return JSON.parse(r.tags || '[]'); } catch { return []; } })(),
+            postedAt: Number(r.posted_at || 0)
+        }));
     }
 
     async searchHistory(guildId, query, limit = 10) {
@@ -856,6 +1054,9 @@ class AutofeedsRepository {
         let filters = {};
         let channelTagRouting = {};
         let quietHours = {};
+        let autoReactions = [];
+        let autoPoll = {};
+        let breakingKeywords = [];
         try {
             tags = typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags || []);
         } catch { tags = []; }
@@ -871,6 +1072,18 @@ class AutofeedsRepository {
         try {
             quietHours = typeof row.quiet_hours === 'string' ? JSON.parse(row.quiet_hours) : (row.quiet_hours || {});
         } catch { quietHours = {}; }
+
+        try {
+            autoReactions = typeof row.auto_reactions === 'string' ? JSON.parse(row.auto_reactions) : (row.auto_reactions || []);
+        } catch { autoReactions = []; }
+
+        try {
+            autoPoll = typeof row.auto_poll === 'string' ? JSON.parse(row.auto_poll) : (row.auto_poll || {});
+        } catch { autoPoll = {}; }
+
+        try {
+            breakingKeywords = typeof row.breaking_keywords === 'string' ? JSON.parse(row.breaking_keywords) : (row.breaking_keywords || []);
+        } catch { breakingKeywords = []; }
 
         return {
             id: row.id,
@@ -903,6 +1116,13 @@ class AutofeedsRepository {
             channelTagRouting: channelTagRouting || {},
             quietHours: quietHours || {},
             maxPostsPerHour: Number(row.max_posts_per_hour || 0),
+            autoReactions: Array.isArray(autoReactions) ? autoReactions : [],
+            autoPoll: autoPoll || {},
+            breakingKeywords: Array.isArray(breakingKeywords) ? breakingKeywords : [],
+            bypassQuietHours: Boolean(row.bypass_quiet_hours),
+            breakingRoleId: row.breaking_role_id || null,
+            autoExpireDays: Number(row.auto_expire_days || 0),
+            enableAudioBriefing: Boolean(row.enable_audio_briefing),
             lastItemId: row.last_item_id,
             lastItemPublishedAt: Number(row.last_item_published_at || 0),
             intervalMinutes: Number(row.interval_minutes || 15),

@@ -36,6 +36,13 @@ const autofeeds = pgTable('autofeeds', {
     channelTagRouting: text('channel_tag_routing').default('{}').notNull(), // JSON: { "#tag": "channelId" }
     quietHours: text('quiet_hours').default('{}').notNull(), // JSON: { enabled: false, start: '23:00', end: '08:00', suppressMentions: true }
     maxPostsPerHour: integer('max_posts_per_hour').default(0).notNull(), // 0 = unlimited
+    autoReactions: text('auto_reactions').default('[]').notNull(), // JSON array: ["🔥", "😐", "💸"]
+    autoPoll: text('auto_poll').default('{}').notNull(), // JSON: { question: '...', answers: [...] }
+    breakingKeywords: text('breaking_keywords').default('[]').notNull(), // JSON array: ["BREAKING", "URGENT", "CVE-"]
+    bypassQuietHours: boolean('bypass_quiet_hours').default(false).notNull(),
+    breakingRoleId: text('breaking_role_id'),
+    autoExpireDays: integer('auto_expire_days').default(0).notNull(), // 0 = disabled
+    enableAudioBriefing: boolean('enable_audio_briefing').default(false).notNull(),
     lastItemId: text('last_item_id'),
     lastItemPublishedAt: bigint('last_item_published_at', { mode: 'number' }).default(0).notNull(),
     intervalMinutes: integer('interval_minutes').default(15).notNull(),
@@ -70,14 +77,19 @@ const autofeedHistory = pgTable('autofeed_history', {
     id: text('id').primaryKey(),
     feedId: text('feed_id').notNull(),
     guildId: text('guild_id'),
+    channelId: text('channel_id'),
+    messageId: text('message_id'),
     itemGuid: text('item_guid').notNull(),
     itemUrl: text('item_url'),
+    canonicalUrl: text('canonical_url'),
     itemTitle: text('item_title'),
     itemAuthor: text('item_author'),
     itemContent: text('item_content'),
     tags: text('tags').default('[]').notNull(),
     isDigest: boolean('is_digest').default(false).notNull(),
     clicksCount: integer('clicks_count').default(0).notNull(),
+    isExpired: boolean('is_expired').default(false).notNull(),
+    clusteredWithId: text('clustered_with_id'),
     postedAt: bigint('posted_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_autofeed_hist_lookup').on(table.feedId, table.itemGuid),

@@ -20,6 +20,10 @@ import { AutofeedsOpmlService } from '../src/modules/util_autofeeds/services/aut
 import { AutofeedsGamificationService } from '../src/modules/util_autofeeds/services/autofeeds-gamification.service.js';
 import { AutofeedsRateLimitService } from '../src/modules/util_autofeeds/services/autofeeds-ratelimit.service.js';
 import { AutofeedsDigestService } from '../src/modules/util_autofeeds/services/autofeeds-digest.service.js';
+import { AutofeedsPulseService } from '../src/modules/util_autofeeds/services/autofeeds-pulse.service.js';
+import { AutofeedsClusteringService } from '../src/modules/util_autofeeds/services/autofeeds-clustering.service.js';
+import { AutofeedsPurgeService } from '../src/modules/util_autofeeds/services/autofeeds-purge.service.js';
+import { AutofeedsAudioService } from '../src/modules/util_autofeeds/services/autofeeds-audio.service.js';
 
 describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => {
     let repo;
@@ -359,9 +363,9 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
     // 8. Social Feed Providers & Resolution
     // ---------------------------------------------------------------
     describe('Social Feed Providers (Twitter, TikTok, Twitch, Kick, Bridges)', () => {
-        it('registers all 16 providers in registry', () => {
+        it('registers all 17 providers in registry', () => {
             const list = providerRegistry.list();
-            expect(list.length).toBe(16);
+            expect(list.length).toBe(17);
             const names = list.map(p => p.name);
             expect(names).toContain('rss');
             expect(names).toContain('youtube');
@@ -1492,6 +1496,288 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
             await controller.getStats({ params: { guildId } }, mockRes);
             expect(resJson.success).toBe(true);
             expect(resJson.data.totalFeeds).toBe(stats.totalFeeds);
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // 14. v4 Enhancements: Steam Direct, Pulse, Clustering, Breaking News, Purge & Audio
+    // ---------------------------------------------------------------
+    describe('14. v4 Enhancements: Steam Direct, Community Pulse, Clustering, Breaking News, Purge & Audio Briefing', () => {
+        it('detects, extracts AppID, and resolves Steam news feeds with BBCode cleaning', () => {
+            const steamProv = providerRegistry.get('steam');
+            expect(steamProv).toBeDefined();
+
+            // Detection
+            expect(providerRegistry.detectProvider('https://store.steampowered.com/app/730/CounterStrike_2/')).toBe('steam');
+            expect(providerRegistry.detectProvider('https://steamcommunity.com/app/252490')).toBe('steam');
+            expect(providerRegistry.detectProvider('steam:730')).toBe('steam');
+            expect(providerRegistry.detectProvider('730')).toBe('steam');
+
+            // AppID Extraction
+            expect(steamProv.extractAppId('https://store.steampowered.com/app/730/CounterStrike_2/')).toBe('730');
+            expect(steamProv.extractAppId('https://steamcommunity.com/app/252490/announcements')).toBe('252490');
+            expect(steamProv.extractAppId('steam:570')).toBe('570');
+            expect(steamProv.extractAppId('1086940')).toBe('1086940');
+
+            // URL Resolution
+            const resolved = steamProv.resolveUrl('730');
+            expect(resolved).toContain('appid=730');
+            expect(resolved).toContain('ISteamNews/GetNewsForApp');
+
+            // Tagging
+            const tags = steamProv.tagItem({ title: 'Major Patch Update v1.2 Notes' });
+            expect(tags).toContain('#steam');
+            expect(tags).toContain('#gaming');
+            expect(tags).toContain('#update');
+
+            // BBCode cleaning
+            const bbcodeText = '[b]New Feature[/b]: [url=https://store.steampowered.com]Steam Store[/url] [img]https://clan.akamai.steamstatic.com/images/123.jpg[/img] [list][*]Fix 1[*]Fix 2[/list]';
+            const cleaned = steamProv.cleanBbcode(bbcodeText);
+            expect(cleaned).toContain('**New Feature**');
+            expect(cleaned).toContain('[Steam Store](https://store.steampowered.com)');
+            expect(cleaned).toContain('• Fix 1');
+            expect(cleaned).toContain('• Fix 2');
+        });
+
+        it('handles Community Pulse auto-reactions and opinion polls', async () => {
+            const pulseService = new AutofeedsPulseService();
+
+            const feed = {
+                id: 'feed_pulse_1',
+                autoReactions: ['🔥', '❤️', '💸'],
+                autoPoll: true
+            };
+
+            const item = {
+                id: 'item_poll_1',
+                title: 'Cyberpunk 2077 Sequel Announced by CD Projekt Red'
+            };
+
+            // Build Poll Payload
+            const pollPayload = pulseService.buildPollPayload(feed, item);
+            expect(pollPayload).not.toBeNull();
+            expect(pollPayload.question.text).toContain('Que pensez-vous');
+            expect(pollPayload.answers.length).toBeGreaterThanOrEqual(3);
+            expect(pollPayload.duration).toBe(24);
+
+            // Reaction Application on Mock Discord Message
+            const reactedEmojis = [];
+            const mockMsg = {
+                react: async (emoji) => {
+                    reactedEmojis.push(emoji);
+                }
+            };
+
+            await pulseService.applyReactions(mockMsg, feed.autoReactions);
+            expect(reactedEmojis).toEqual(['🔥', '❤️', '💸']);
+        });
+
+        it('normalizes URLs, computes Jaccard title similarity, and detects duplicates across feeds', () => {
+            const clustering = new AutofeedsClusteringService();
+
+            // Canonical URL normalization (stripping tracking params & fragments)
+            const dirtyUrl1 = 'https://www.ign.com/articles/elden-ring-dlc-guide?utm_source=twitter&utm_medium=social&utm_campaign=launch#comments';
+            const dirtyUrl2 = 'https://www.ign.com/articles/elden-ring-dlc-guide?fbclid=IwAR12345&ref=homepage';
+            expect(clustering.normalizeUrl(dirtyUrl1)).toBe('https://www.ign.com/articles/elden-ring-dlc-guide');
+            expect(clustering.normalizeUrl(dirtyUrl2)).toBe('https://www.ign.com/articles/elden-ring-dlc-guide');
+
+            // Exact canonical match
+            expect(clustering.isExactDuplicate(dirtyUrl1, dirtyUrl2)).toBe(true);
+
+            // Title Token Similarity
+            const titleA = 'GTA 6 official trailer released by Rockstar Games';
+            const titleB = 'Rockstar Games officially releases first GTA 6 trailer';
+            const titleUnrelated = 'Best microwave ovens to buy in 2026';
+
+            const simHigh = clustering.computeTitleSimilarity(titleA, titleB);
+            const simLow = clustering.computeTitleSimilarity(titleA, titleUnrelated);
+
+            expect(simHigh).toBeGreaterThan(0.4);
+            expect(simLow).toBeLessThan(0.2);
+
+            // Cluster Candidate Match
+            const recentHistory = [
+                {
+                    id: 101,
+                    feedId: 'feed_ign',
+                    canonicalUrl: 'https://othernews.com/news',
+                    title: 'Rockstar Games officially releases first GTA 6 trailer',
+                    publishedAt: new Date()
+                }
+            ];
+
+            const candidate = clustering.findClusterCandidate(
+                { canonicalUrl: 'https://gamespot.com/gta6', title: titleA },
+                recentHistory,
+                0.4
+            );
+
+            expect(candidate).not.toBeNull();
+            expect(candidate.id).toBe(101);
+        });
+
+        it('identifies Breaking News, bypasses quiet hours, and applies urgent red embed styling', () => {
+            const breakingFeed = {
+                id: 'feed_security_breaking',
+                name: 'Security Advisories',
+                breakingKeywords: ['BREAKING', 'URGENT', 'CVE-', '0-DAY'],
+                bypassQuietHours: true,
+                breakingRoleId: 'role_sec_alert',
+                quietHours: {
+                    enabled: true,
+                    start: '22:00',
+                    end: '08:00',
+                    suppressMentions: true
+                }
+            };
+
+            const regularItem = {
+                title: 'Weekly security digest and minor patch notes',
+                content: 'Everything is normal.'
+            };
+
+            const breakingItem = {
+                title: 'URGENT: CVE-2026-9999 Critical Remote Code Execution Found',
+                content: 'Patch immediately.'
+            };
+
+            // Detection
+            expect(service.isBreakingItem(breakingFeed, regularItem)).toBe(false);
+            expect(service.isBreakingItem(breakingFeed, breakingItem)).toBe(true);
+
+            // Embed Styling
+            const regularEmbed = service.buildDiscordEmbed(breakingFeed, regularItem, false);
+            const breakingEmbed = service.buildDiscordEmbed(breakingFeed, breakingItem, true);
+
+            expect(breakingEmbed.data.color).toBe(0xED4245); // Red Discord alert
+            expect(breakingEmbed.data.title).toContain('🚨 FLASH INFO :');
+            expect(breakingEmbed.data.title).toContain('CVE-2026-9999');
+            expect(regularEmbed.data.color).not.toBe(0xED4245);
+        });
+
+        it('scans and purges expired deals and deletes Discord messages', async () => {
+            const feedRes = await service.addFeed({
+                guildId,
+                channelId,
+                name: 'Expiring Deals Feed',
+                feedUrl: 'https://deals.example.com/rss',
+                autoExpireDays: 3
+            });
+            const feedId = feedRes.data.id;
+
+            // Log history entries: one recent, one expired (5 days ago)
+            const now = new Date();
+            const fiveDaysAgo = new Date(now.getTime() - 5 * 86400000);
+
+            // Active item
+            await repo.logHistory({
+                feedId,
+                itemId: 'item_active',
+                title: 'New Game On Sale',
+                link: 'https://deals.example.com/1',
+                channelId,
+                messageId: 'msg_discord_active',
+                publishedAt: now
+            });
+
+            // Expired item
+            await repo.logHistory({
+                feedId,
+                itemId: 'item_expired',
+                title: 'Expired Freebie Giveaway',
+                link: 'https://deals.example.com/2',
+                channelId,
+                messageId: 'msg_discord_expired',
+                publishedAt: fiveDaysAgo
+            });
+
+            // Mock Discord client to track message deletion
+            const deletedMessageIds = [];
+            const mockDiscordClient = {
+                channels: {
+                    fetch: async (cId) => ({
+                        id: cId,
+                        messages: {
+                            fetch: async (mId) => {
+                                if (mId === 'msg_discord_expired') {
+                                    return {
+                                        id: mId,
+                                        delete: async () => {
+                                            deletedMessageIds.push(mId);
+                                        }
+                                    };
+                                }
+                                throw new Error('Unknown message');
+                            }
+                        }
+                    })
+                }
+            };
+
+            // Run purge
+            const purgeRes = await service.purgeExpired(feedId, mockDiscordClient);
+            expect(purgeRes.expiredCount).toBe(1);
+            expect(purgeRes.deletedMessagesCount).toBe(1);
+            expect(deletedMessageIds).toContain('msg_discord_expired');
+
+            // Controller purge endpoint
+            let ctrlJson = null;
+            const mockRes = { json: (d) => { ctrlJson = d; } };
+            await controller.purge({ body: { feedId } }, mockRes);
+            expect(ctrlJson.success).toBe(true);
+        });
+
+        it('generates TTS radio briefing script and MP3 audio buffer', async () => {
+            const audioService = new AutofeedsAudioService();
+
+            const items = [
+                { title: 'Valve annonce le Steam Deck 2', contentSnippet: 'Plus puissant et écran OLED 120Hz.' },
+                { title: 'Half-Life 3 confirmé pour 2027', contentSnippet: 'Gabe Newell prend enfin la parole.' }
+            ];
+
+            const script = audioService.buildBriefingScript('Steam Actualités', items);
+            expect(script).toContain('bulletin d\'information');
+            expect(script).toContain('Steam Actualités');
+            expect(script).toContain('Valve annonce le Steam Deck 2');
+            expect(script).toContain('Half-Life 3 confirmé pour 2027');
+
+            // Generate MP3 buffer
+            const buffer = await audioService.generateBriefingBuffer(script);
+            expect(buffer).toBeInstanceOf(Buffer);
+            expect(buffer.length).toBeGreaterThan(10);
+            // Check ID3v2 / MP3 header
+            expect(buffer.slice(0, 3).toString('ascii')).toBe('ID3');
+
+            // Test Service createAudioBriefing
+            const feedRes = await service.addFeed({
+                guildId,
+                channelId,
+                name: 'Audio Tech Digest',
+                feedUrl: 'https://audio.example.com/rss',
+                enableAudioBriefing: true
+            });
+
+            await repo.logHistory({
+                feedId: feedRes.data.id,
+                itemId: 'audio_item_1',
+                title: 'ChienneBot intègre un flash radio TTS',
+                contentSnippet: 'Une synthèse audio automatique révolutionnaire.',
+                publishedAt: new Date()
+            });
+
+            const briefing = await service.createAudioBriefing(feedRes.data.id, 5);
+            expect(briefing.feedTitle).toBe('Audio Tech Digest');
+            expect(briefing.script).toContain('flash radio');
+            expect(briefing.buffer).toBeInstanceOf(Buffer);
+            expect(briefing.filename).toContain('.mp3');
+
+            // Controller getAudioBriefing
+            let ctrlAudio = null;
+            const mockRes = { json: (d) => { ctrlAudio = d; } };
+            await controller.getAudioBriefing({ params: { id: feedRes.data.id } }, mockRes);
+            expect(ctrlAudio.success).toBe(true);
+            expect(ctrlAudio.data.feedTitle).toBe('Audio Tech Digest');
+            expect(ctrlAudio.data.sizeBytes).toBeGreaterThan(0);
         });
     });
 });
