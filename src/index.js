@@ -336,7 +336,7 @@ const openApiGenerator = new OpenApiGenerator({
 });
 
 const openApiSpec = openApiGenerator.generateSpec({ app, moduleManager, client, config });
-const openApiPath = path.join(__dirname, '../docs/openapi.json');
+const openApiPath = path.join(__dirname, '../../docs/openapi.json');
 openApiGenerator.exportToFile(openApiPath, openApiSpec);
 
 // Endpoints OpenAPI & Documentation interactive
