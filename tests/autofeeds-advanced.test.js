@@ -420,5 +420,45 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
             const match2 = await subService.findMatchingSubscribers(guildId, feed, itemNoMatch);
             expect(match2.mentionUserIds).not.toContain('user_author_fan');
         });
+
+        it('handles streamer live alerts and subscriber notification for Twitch/Kick/YouTube', async () => {
+            const ytProv = providerRegistry.get('youtube');
+            expect(ytProv.extractHandleOrChannel('https://www.youtube.com/@Zerator')).toEqual({ type: 'handle', value: 'Zerator' });
+            expect(ytProv.extractHandleOrChannel('@Zerator')).toEqual({ type: 'handle', value: 'Zerator' });
+            expect(ytProv.extractHandleOrChannel('UC1234567890123456789012')).toEqual({ type: 'channelId', value: 'UC1234567890123456789012' });
+
+            // Abonnement au tag global "live"
+            await subService.subscribe({
+                guildId,
+                userId: 'user_live_watcher',
+                targetType: 'tag',
+                targetValue: 'live',
+                notifyMode: 'mention'
+            });
+
+            // Abonnement direct au streamer "zerator" en DM
+            await subService.subscribe({
+                guildId,
+                userId: 'user_streamer_fan',
+                targetType: 'account',
+                targetValue: 'zerator',
+                notifyMode: 'dm'
+            });
+
+            const liveFeed = { id: 'feed_twitch_zerator', guildId, category: 'gaming', tags: ['stream'] };
+            const twitchLiveItem = {
+                id: 'twitch:zerator:stream_999999',
+                title: '🔴 [LIVE] ZeratoR est en direct sur Twitch !',
+                content: 'Soirée découverte jeux indés',
+                link: 'https://www.twitch.tv/zerator',
+                author: 'ZeratoR',
+                tags: ['twitch', 'live', 'stream', 'zerator']
+            };
+
+            const matches = await subService.findMatchingSubscribers(guildId, liveFeed, twitchLiveItem);
+            expect(matches.mentionUserIds).toContain('user_live_watcher');
+            expect(matches.dmUserIds).toContain('user_streamer_fan');
+            expect(matches.matchedTags).toContain('live');
+        });
     });
 });
