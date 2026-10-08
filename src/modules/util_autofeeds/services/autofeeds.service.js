@@ -212,17 +212,42 @@ class AutofeedsService {
             );
         }
 
+        // 3. Bouton Souscription au créateur/auteur s'il est spécifié
+        if (item.author) {
+            const authorClean = item.author.replace('@', '').trim();
+            if (authorClean && (!primaryTag || authorClean.toLowerCase() !== primaryTag.toLowerCase())) {
+                row.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`autofeed:sub:author:${authorClean.toLowerCase().slice(0, 40)}`)
+                        .setLabel(`Suivre @${authorClean.slice(0, 20)}`)
+                        .setEmoji('👤')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+            }
+        }
+
         return row.components.length > 0 ? row : null;
     }
 
     /**
      * Analyse et publie les nouveaux articles d'un flux spécifique.
      */
-    async _checkSingleFeed(feed, client) {
+    async _checkSingleFeed(feed, client, force = false) {
+        const now = Date.now();
+        const intervalMs = (feed.intervalMinutes || 15) * 60 * 1000;
+
+        // Respect de l'intervalle individuel sauf si forcé
+        if (!force && feed.lastCheckedAt && (now - feed.lastCheckedAt < intervalMs)) {
+            return;
+        }
+
         try {
             const provider = providerRegistry.get(feed.feedType);
             const items = await provider.fetchItems(feed);
-            if (!items || items.length === 0) return;
+            if (!items || items.length === 0) {
+                await this.repo.recordFeedCheckResult(feed.id, { status: 'ok' });
+                return;
+            }
 
             // Filtrer par filtres de mots-clés
             const filteredItems = items.filter(it => provider.matchesFilters(it, feed.filters));
@@ -240,7 +265,11 @@ class AutofeedsService {
 
             // Trier du plus ancien au plus récent
             newItems.sort((a, b) => a.publishedAt - b.publishedAt);
-            if (newItems.length === 0) return;
+
+            if (newItems.length === 0) {
+                await this.repo.recordFeedCheckResult(feed.id, { status: 'ok' });
+                return;
+            }
 
             // Prendre le plus récent pour la mise à jour de la date
             const latest = newItems[newItems.length - 1];
@@ -315,9 +344,17 @@ class AutofeedsService {
                 }
             }
 
-            await this.repo.updateLastItem(feed.id, latest.id, latest.publishedAt);
+            await this.repo.recordFeedCheckResult(feed.id, {
+                status: 'ok',
+                lastItemId: latest.id,
+                lastItemPublishedAt: latest.publishedAt
+            });
         } catch (err) {
             logger.warn(`Erreur check feed ${feed.id}: ${err.message}`, 'AUTOFEEDS');
+            await this.repo.recordFeedCheckResult(feed.id, {
+                status: 'error',
+                error: err.message
+            });
         }
     }
 
@@ -368,7 +405,7 @@ class AutofeedsService {
         if (this._intervalTimer) return;
         this._intervalTimer = setInterval(() => {
             this.pollFeeds(client).catch(() => {});
-        }, 5 * 60 * 1000); // Scrutation toutes les 5 minutes
+        }, 60 * 1000); // Scrutation par minute avec contrôle des intervalles individuels
     }
 
     stop() {

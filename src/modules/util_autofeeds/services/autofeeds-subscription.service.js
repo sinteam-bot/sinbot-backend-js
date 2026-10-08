@@ -22,7 +22,7 @@ class AutofeedsSubscriptionService {
             return { ok: false, error: 'Paramètres manquants pour la souscription.' };
         }
 
-        const validTypes = ['tag', 'category', 'feed', 'keyword'];
+        const validTypes = ['tag', 'category', 'feed', 'keyword', 'account', 'author'];
         if (!validTypes.includes(targetType)) {
             return { ok: false, error: `Type de souscription invalide (${validTypes.join(', ')} attendus).` };
         }
@@ -37,7 +37,8 @@ class AutofeedsSubscriptionService {
             userId,
             targetType,
             targetValue,
-            notifyMode
+            notifyMode,
+            filters: filters || {}
         });
 
         return { ok: true, data: sub };
@@ -75,7 +76,7 @@ class AutofeedsSubscriptionService {
 
     /**
      * Détermine les utilisateurs qui doivent être notifiés pour un article donné.
-     * Compare les tags, la catégorie, l'ID du flux et les mots-clés du texte.
+     * Compare les tags, la catégorie, le créateur/auteur, l'ID du flux et les mots-clés du texte.
      * @param {string} guildId
      * @param {Object} feed
      * @param {Object} item
@@ -95,6 +96,7 @@ class AutofeedsSubscriptionService {
         const category = (feed.category || 'general').toLowerCase();
         const feedId = (feed.id || '').toLowerCase();
         const fullText = `${item.title || ''} ${item.content || ''}`.toLowerCase();
+        const authorLower = (item.author || '').toLowerCase().replace('@', '').trim();
 
         const mentionUsers = new Set();
         const dmUsers = new Set();
@@ -102,32 +104,60 @@ class AutofeedsSubscriptionService {
 
         for (const sub of guildSubs) {
             let matched = false;
+            const targetVal = (sub.targetValue || '').toLowerCase().trim();
 
             switch (sub.targetType) {
                 case 'tag':
-                    if (allTags.has(sub.targetValue.toLowerCase())) {
+                    if (allTags.has(targetVal)) {
                         matched = true;
                         matchedTags.add(sub.targetValue);
                     }
                     break;
 
                 case 'category':
-                    if (category === sub.targetValue.toLowerCase()) {
+                    if (category === targetVal) {
+                        matched = true;
+                    }
+                    break;
+
+                case 'account':
+                case 'author':
+                    const targetAuthor = targetVal.replace('@', '');
+                    if (authorLower && (authorLower === targetAuthor || authorLower.includes(targetAuthor))) {
                         matched = true;
                     }
                     break;
 
                 case 'feed':
-                    if (feedId === sub.targetValue.toLowerCase()) {
+                    if (feedId === targetVal) {
                         matched = true;
                     }
                     break;
 
                 case 'keyword':
-                    if (fullText.includes(sub.targetValue.toLowerCase())) {
+                    if (fullText.includes(targetVal)) {
                         matched = true;
                     }
                     break;
+            }
+
+            // Vérifier les filtres personnels de l'abonné (include/exclude)
+            if (matched && sub.filters && typeof sub.filters === 'object') {
+                if (Array.isArray(sub.filters.includeKeywords) && sub.filters.includeKeywords.length > 0) {
+                    const hasInclude = sub.filters.includeKeywords.some(kw => {
+                        const k = (kw || '').trim().toLowerCase();
+                        return k && fullText.includes(k);
+                    });
+                    if (!hasInclude) matched = false;
+                }
+
+                if (matched && Array.isArray(sub.filters.excludeKeywords) && sub.filters.excludeKeywords.length > 0) {
+                    const hasExclude = sub.filters.excludeKeywords.some(kw => {
+                        const k = (kw || '').trim().toLowerCase();
+                        return k && fullText.includes(k);
+                    });
+                    if (hasExclude) matched = false;
+                }
             }
 
             if (matched) {

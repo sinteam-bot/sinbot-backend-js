@@ -46,6 +46,31 @@ class AutofeedInteractionListener {
             }
         }
 
+        // Cas 1b : Bouton de souscription rapide à un créateur/compte (autofeed:sub:author:<name>)
+        if (customId.startsWith('autofeed:sub:author:')) {
+            const author = customId.replace('autofeed:sub:author:', '').trim().toLowerCase();
+            const guildId = interaction.guildId || 'default';
+            const userId = interaction.user.id;
+
+            try {
+                await this.subService.subscribe({
+                    guildId,
+                    userId,
+                    targetType: 'account',
+                    targetValue: author,
+                    notifyMode: 'mention'
+                });
+
+                return interaction.reply({
+                    content: `👤 Vous êtes maintenant abonné aux publications de **@${author}** !\nVous serez alerté dès qu'un contenu de ce créateur ou compte est publié.`,
+                    ephemeral: true
+                });
+            } catch (err) {
+                logger.warn(`[AutofeedInteraction] Erreur souscription auteur: ${err.message}`, 'AUTOFEEDS');
+                return interaction.reply({ content: '❌ Erreur lors de la souscription.', ephemeral: true });
+            }
+        }
+
         // Cas 2 : Bouton de désinscription (autofeed:unsub:<id>)
         if (customId.startsWith('autofeed:unsub:')) {
             const subId = customId.replace('autofeed:unsub:', '').trim();

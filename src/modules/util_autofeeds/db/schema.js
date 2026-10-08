@@ -23,6 +23,10 @@ const autofeeds = pgTable('autofeeds', {
     lastItemPublishedAt: bigint('last_item_published_at', { mode: 'number' }).default(0).notNull(),
     intervalMinutes: integer('interval_minutes').default(15).notNull(),
     enabled: boolean('enabled').default(true).notNull(),
+    lastCheckedAt: bigint('last_checked_at', { mode: 'number' }).default(0).notNull(),
+    lastStatus: text('last_status').default('ok').notNull(),
+    lastError: text('last_error'),
+    failCount: integer('fail_count').default(0).notNull(),
     createdAt: bigint('created_at', { mode: 'number' }).notNull(),
     updatedAt: bigint('updated_at', { mode: 'number' })
 }, (table) => [
@@ -34,9 +38,10 @@ const autofeedSubscriptions = pgTable('autofeed_subscriptions', {
     id: text('id').primaryKey(),
     guildId: text('guild_id').notNull(),
     userId: text('user_id').notNull(),
-    targetType: text('target_type').notNull(), // 'tag', 'category', 'feed', 'keyword'
-    targetValue: text('target_value').notNull(), // 'steam', 'gaming', 'id_du_feed'
+    targetType: text('target_type').notNull(), // 'tag', 'category', 'feed', 'keyword', 'account'
+    targetValue: text('target_value').notNull(), // 'steam', 'gaming', 'id_du_feed', 'PlayStation'
     notifyMode: text('notify_mode').default('mention').notNull(), // 'mention', 'dm'
+    filters: text('filters').default('{}').notNull(), // JSON: { includeKeywords: [], excludeKeywords: [] }
     createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
     unique('autofeed_subs_unique').on(table.guildId, table.userId, table.targetType, table.targetValue),

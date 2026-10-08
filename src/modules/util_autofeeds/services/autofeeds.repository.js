@@ -54,6 +54,10 @@ class AutofeedsRepository {
                 { name: 'custom_message', type: 'text' },
                 { name: 'color', type: "text DEFAULT '#FF4500' NOT NULL" },
                 { name: 'ping_role_id', type: 'text' },
+                { name: 'last_checked_at', type: "bigint DEFAULT 0 NOT NULL" },
+                { name: 'last_status', type: "text DEFAULT 'ok' NOT NULL" },
+                { name: 'last_error', type: "text" },
+                { name: 'fail_count', type: "integer DEFAULT 0 NOT NULL" },
                 { name: 'updated_at', type: 'bigint' }
             ];
 
@@ -76,10 +80,15 @@ class AutofeedsRepository {
                     "target_type" text NOT NULL,
                     "target_value" text NOT NULL,
                     "notify_mode" text DEFAULT 'mention' NOT NULL,
+                    "filters" text DEFAULT '{}' NOT NULL,
                     "created_at" bigint NOT NULL,
                     CONSTRAINT "autofeed_subs_unique" UNIQUE("guild_id", "user_id", "target_type", "target_value")
                 );
             `);
+
+            await db.pool.query(`
+                ALTER TABLE "autofeed_subscriptions" ADD COLUMN IF NOT EXISTS "filters" text DEFAULT '{}' NOT NULL;
+            `).catch(() => {});
 
             await db.pool.query(`
                 CREATE INDEX IF NOT EXISTS "idx_autofeed_subs_lookup" ON "autofeed_subscriptions" ("guild_id", "target_type", "target_value");
@@ -257,18 +266,19 @@ class AutofeedsRepository {
     // SOUSCRIPTIONS (CRUD)
     // ==========================================
 
-    async addSubscription({ guildId, userId, targetType, targetValue, notifyMode = 'mention' }) {
+    async addSubscription({ guildId, userId, targetType, targetValue, notifyMode = 'mention', filters = {} }) {
         await this.initSchema();
         const id = newId();
         const now = Date.now();
         const normalizedTarget = (targetValue || '').trim().toLowerCase();
+        const filtersJson = JSON.stringify(filters || {});
 
         await db.pool.query(
-            `INSERT INTO autofeed_subscriptions (id, guild_id, user_id, target_type, target_value, notify_mode, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `INSERT INTO autofeed_subscriptions (id, guild_id, user_id, target_type, target_value, notify_mode, filters, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              ON CONFLICT (guild_id, user_id, target_type, target_value)
-             DO UPDATE SET notify_mode = EXCLUDED.notify_mode`,
-            [id, guildId, userId, targetType, normalizedTarget, notifyMode, now]
+             DO UPDATE SET notify_mode = EXCLUDED.notify_mode, filters = EXCLUDED.filters`,
+            [id, guildId, userId, targetType, normalizedTarget, notifyMode, filtersJson, now]
         );
 
         return {
@@ -278,8 +288,32 @@ class AutofeedsRepository {
             targetType,
             targetValue: normalizedTarget,
             notifyMode,
+            filters: filters || {},
             createdAt: now
         };
+    }
+
+    async recordFeedCheckResult(id, { status = 'ok', error = null, lastItemId = null, lastItemPublishedAt = null } = {}) {
+        await this.initSchema();
+        const now = Date.now();
+        if (status === 'ok') {
+            if (lastItemId !== null && lastItemPublishedAt !== null) {
+                await db.pool.query(
+                    `UPDATE autofeeds SET last_checked_at = $2, last_status = 'ok', last_error = NULL, fail_count = 0, last_item_id = $3, last_item_published_at = $4 WHERE id = $1`,
+                    [id, now, lastItemId, lastItemPublishedAt]
+                ).catch(() => {});
+            } else {
+                await db.pool.query(
+                    `UPDATE autofeeds SET last_checked_at = $2, last_status = 'ok', last_error = NULL, fail_count = 0 WHERE id = $1`,
+                    [id, now]
+                ).catch(() => {});
+            }
+        } else {
+            await db.pool.query(
+                `UPDATE autofeeds SET last_checked_at = $2, last_status = 'error', last_error = $3, fail_count = fail_count + 1 WHERE id = $1`,
+                [id, now, String(error || 'Erreur').slice(0, 500)]
+            ).catch(() => {});
+        }
     }
 
     async removeSubscription({ guildId, userId, targetType, targetValue }) {
@@ -373,12 +407,21 @@ class AutofeedsRepository {
             lastItemPublishedAt: Number(row.last_item_published_at || 0),
             intervalMinutes: Number(row.interval_minutes || 15),
             enabled: Boolean(row.enabled),
+            lastCheckedAt: Number(row.last_checked_at || 0),
+            lastStatus: row.last_status || 'ok',
+            lastError: row.last_error || null,
+            failCount: Number(row.fail_count || 0),
             createdAt: Number(row.created_at || 0),
             updatedAt: row.updated_at ? Number(row.updated_at) : null
         };
     }
 
     _mapSubRow(row) {
+        let filters = {};
+        try {
+            filters = typeof row.filters === 'string' ? JSON.parse(row.filters) : (row.filters || {});
+        } catch { filters = {}; }
+
         return {
             id: row.id,
             guildId: row.guild_id,
@@ -386,6 +429,7 @@ class AutofeedsRepository {
             targetType: row.target_type,
             targetValue: row.target_value,
             notifyMode: row.notify_mode || 'mention',
+            filters: filters || {},
             createdAt: Number(row.created_at || 0)
         };
     }

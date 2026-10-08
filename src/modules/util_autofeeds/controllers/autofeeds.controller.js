@@ -143,7 +143,8 @@ class AutofeedsController {
                 target_value,
                 targetValue,
                 notify_mode,
-                notifyMode
+                notifyMode,
+                filters
             } = req.body || {};
 
             return await this.subService.subscribe({
@@ -151,7 +152,8 @@ class AutofeedsController {
                 userId: userId || user_id,
                 targetType: targetType || target_type,
                 targetValue: targetValue || target_value,
-                notifyMode: notifyMode || notify_mode
+                notifyMode: notifyMode || notify_mode,
+                filters: filters || {}
             });
         } catch (err) {
             return { success: false, error: err.message };

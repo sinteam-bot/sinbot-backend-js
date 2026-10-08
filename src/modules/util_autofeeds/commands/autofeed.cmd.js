@@ -170,12 +170,13 @@ class AutofeedCommands {
         const tag = interaction.options.getString('tag');
         const category = interaction.options.getString('categorie');
         const keyword = interaction.options.getString('mot_cle');
+        const account = interaction.options.getString('compte');
         const feedId = interaction.options.getString('flux_id');
         const mode = interaction.options.getString('mode') || 'mention';
 
-        if (!tag && !category && !keyword && !feedId) {
+        if (!tag && !category && !keyword && !account && !feedId) {
             return interaction.reply({
-                content: '❌ Veuillez préciser au moins un critère : `tag`, `categorie`, `mot_cle` ou `flux_id`.',
+                content: '❌ Veuillez préciser au moins un critère : `tag`, `compte`, `categorie`, `mot_cle` ou `flux_id`.',
                 ephemeral: true
             });
         }
@@ -186,6 +187,9 @@ class AutofeedCommands {
         if (category) {
             targetType = 'category';
             targetValue = category;
+        } else if (account) {
+            targetType = 'account';
+            targetValue = account.replace('@', '').trim();
         } else if (keyword) {
             targetType = 'keyword';
             targetValue = keyword;
@@ -220,6 +224,7 @@ class AutofeedCommands {
         const tag = interaction.options.getString('tag');
         const category = interaction.options.getString('categorie');
         const keyword = interaction.options.getString('mot_cle');
+        const account = interaction.options.getString('compte');
         const feedId = interaction.options.getString('flux_id');
 
         let targetType = 'tag';
@@ -228,6 +233,9 @@ class AutofeedCommands {
         if (category) {
             targetType = 'category';
             targetValue = category;
+        } else if (account) {
+            targetType = 'account';
+            targetValue = account.replace('@', '').trim();
         } else if (keyword) {
             targetType = 'keyword';
             targetValue = keyword;
@@ -333,8 +341,9 @@ const feedBuilder = new SlashCommandBuilder()
     )
     .addSubcommand(sub =>
         sub.setName('subscribe')
-            .setDescription('S\'abonner à un tag, une catégorie ou un mot-clé pour recevoir des alertes')
+            .setDescription('S\'abonner à un tag, une catégorie, un compte ou un mot-clé pour recevoir des alertes')
             .addStringOption(o => o.setName('tag').setDescription('Tag à suivre (ex: epic, steam, free, pc)').setRequired(false))
+            .addStringOption(o => o.setName('compte').setDescription('Compte / créateur à suivre (ex: @PlayStation, zerator)').setRequired(false))
             .addStringOption(o => o.setName('categorie').setDescription('Catégorie à suivre (ex: gaming, deals, news)').setRequired(false))
             .addStringOption(o => o.setName('mot_cle').setDescription('Mot-clé spécifique dans le titre ou texte').setRequired(false))
             .addStringOption(o => o.setName('flux_id').setDescription('Identifiant d\'un flux spécifique').setRequired(false))
@@ -345,8 +354,9 @@ const feedBuilder = new SlashCommandBuilder()
     )
     .addSubcommand(sub =>
         sub.setName('unsubscribe')
-            .setDescription('Se désabonner d\'un tag, d\'une catégorie ou d\'un mot-clé')
+            .setDescription('Se désabonner d\'un tag, d\'une catégorie, d\'un compte ou d\'un mot-clé')
             .addStringOption(o => o.setName('tag').setDescription('Tag à retirer').setRequired(false))
+            .addStringOption(o => o.setName('compte').setDescription('Compte / créateur à retirer').setRequired(false))
             .addStringOption(o => o.setName('categorie').setDescription('Catégorie à retirer').setRequired(false))
             .addStringOption(o => o.setName('mot_cle').setDescription('Mot-clé à retirer').setRequired(false))
             .addStringOption(o => o.setName('flux_id').setDescription('Identifiant de flux à retirer').setRequired(false))
