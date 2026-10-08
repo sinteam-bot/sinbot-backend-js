@@ -23,6 +23,12 @@ const { AutofeedsAudioService } = require('./services/autofeeds-audio.service.js
 const { AutofeedsQaService } = require('./services/autofeeds-qa.service.js');
 const { AutofeedsYouTubeSummaryService } = require('./services/autofeeds-youtube-summary.service.js');
 const { AutofeedsUserDigestService } = require('./services/autofeeds-user-digest.service.js');
+const { AutofeedsReminderService } = require('./services/autofeeds-reminder.service.js');
+const { AutofeedsInvestigationService } = require('./services/autofeeds-investigation.service.js');
+const { AutofeedsSmartTagService } = require('./services/autofeeds-smart-tag.service.js');
+const { AutofeedsKnowledgeService } = require('./services/autofeeds-knowledge.service.js');
+const { AutofeedsTriviaService } = require('./services/autofeeds-trivia.service.js');
+const { AutofeedsPredictionService } = require('./services/autofeeds-prediction.service.js');
 const { AutofeedsService } = require('./services/autofeeds.service.js');
 const { AutofeedCommands } = require('./commands/autofeed.cmd.js');
 const { AutofeedsController, AutofeedsWebhooksController } = require('./controllers/autofeeds.controller.js');
@@ -73,6 +79,12 @@ Module({
         AutofeedsQaService,
         AutofeedsYouTubeSummaryService,
         AutofeedsUserDigestService,
+        AutofeedsReminderService,
+        AutofeedsInvestigationService,
+        AutofeedsSmartTagService,
+        AutofeedsKnowledgeService,
+        AutofeedsTriviaService,
+        AutofeedsPredictionService,
         AutofeedsService,
         AutofeedInteractionListener,
         AutofeedsModule

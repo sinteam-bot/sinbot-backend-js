@@ -652,6 +652,104 @@ class AutofeedCommands {
         }
     }
 
+    async executeInvestigate(interaction) {
+        const topic = interaction.options.getString('sujet');
+        const limit = interaction.options.getInteger('limite') || 6;
+        const guildId = interaction.guild?.id || 'default';
+
+        await interaction.deferReply();
+
+        try {
+            const report = await this.service.investigateTopic({ guildId, topic, limit });
+            const embed = this.service.investigationService.buildInvestigationEmbed(report);
+            return interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            return interaction.editReply({ content: `❌ Erreur lors de l'enquête : ${err.message}` });
+        }
+    }
+
+    async executeTrivia(interaction) {
+        const xpReward = interaction.options.getInteger('xp') || 50;
+        const guildId = interaction.guild?.id || 'default';
+
+        await interaction.deferReply();
+
+        try {
+            const quiz = await this.service.generateWeeklyTriviaQuiz({
+                guildId,
+                channelId: interaction.channelId,
+                xpReward
+            });
+
+            const embed = this.service.triviaService.buildQuizEmbed(quiz);
+            const row = this.service.triviaService.buildQuizActionRow(quiz.id);
+
+            return interaction.editReply({
+                embeds: [embed],
+                components: [row]
+            });
+        } catch (err) {
+            return interaction.editReply({ content: `❌ Impossible de lancer le quiz : ${err.message}` });
+        }
+    }
+
+    async executeRemindMe(interaction) {
+        const rawDate = interaction.options.getString('date');
+        const title = interaction.options.getString('titre');
+        const url = interaction.options.getString('url');
+        const note = interaction.options.getString('note');
+        const guildId = interaction.guild?.id || 'default';
+
+        let releaseDate = this.service.reminderService?.detectReleaseDate(rawDate) || rawDate;
+
+        try {
+            await this.service.addReleaseReminder({
+                guildId,
+                channelId: interaction.channelId,
+                userId: interaction.user.id,
+                releaseDate,
+                reminderNote: note,
+                itemTitle: title,
+                itemUrl: url
+            });
+
+            return interaction.reply({
+                content: `⏰ **Rappel programmé !** Vous recevrez une notification privée le **${releaseDate}** pour : *${title}*.`,
+                ephemeral: true
+            });
+        } catch (err) {
+            return interaction.reply({ content: `❌ Erreur : ${err.message}`, ephemeral: true });
+        }
+    }
+
+    async executePredict(interaction) {
+        const title = interaction.options.getString('titre');
+        const rawOptions = interaction.options.getString('options') || 'OUI, NON';
+        const guildId = interaction.guild?.id || 'default';
+
+        const options = rawOptions.split(',').map(o => o.trim()).filter(Boolean);
+
+        try {
+            const market = await this.service.createPredictionMarket({
+                guildId,
+                channelId: interaction.channelId,
+                title,
+                options: options.length >= 2 ? options : ['OUI', 'NON'],
+                createdBy: interaction.user.id
+            });
+
+            const embed = this.service.predictionService.buildPredictionEmbed(market);
+            const row = this.service.predictionService.buildPredictionActionRow(market.id, market.options);
+
+            return interaction.reply({
+                embeds: [embed],
+                components: [row]
+            });
+        } catch (err) {
+            return interaction.reply({ content: `❌ Erreur création marché : ${err.message}`, ephemeral: true });
+        }
+    }
+
     // ==========================================
     // POINT D'ENTRÉE DU ROUTEUR COMMANDES
     // ==========================================
@@ -679,6 +777,10 @@ class AutofeedCommands {
             case 'bestof':           return this.executeBestOf(interaction);
             case 'my-digest':        return this.executeMyDigest(interaction);
             case 'ask':              return this.executeAsk(interaction);
+            case 'investigate':      return this.executeInvestigate(interaction);
+            case 'trivia':           return this.executeTrivia(interaction);
+            case 'remind-me':        return this.executeRemindMe(interaction);
+            case 'predict':          return this.executePredict(interaction);
             default:
                 return interaction.reply({ content: '❌ Sous-commande inconnue', ephemeral: true });
         }
@@ -806,6 +908,31 @@ const feedBuilder = new SlashCommandBuilder()
             .setDescription('Poser une question spécifique à l\'IA sur un article')
             .addStringOption(o => o.setName('url').setDescription('URL de l\'article').setRequired(true))
             .addStringOption(o => o.setName('question').setDescription('Votre question').setRequired(true))
+    )
+    .addSubcommand(sub =>
+        sub.setName('investigate')
+            .setDescription('Méta-enquête IA et frise chronologique multi-sources sur un sujet')
+            .addStringOption(o => o.setName('sujet').setDescription('Sujet, jeu ou personnalité à enquêter').setRequired(true))
+            .addIntegerOption(o => o.setName('limite').setDescription('Nombre d\'articles à analyser (défaut: 6)').setRequired(false).setMinValue(2).setMaxValue(20))
+    )
+    .addSubcommand(sub =>
+        sub.setName('trivia')
+            .setDescription('Lancer le Quiz d\'actualités de la semaine (QCM interactif avec gains d\'XP)')
+            .addIntegerOption(o => o.setName('xp').setDescription('Montant d\'XP à remporter (défaut: 50)').setRequired(false).setMinValue(10).setMaxValue(200))
+    )
+    .addSubcommand(sub =>
+        sub.setName('remind-me')
+            .setDescription('Programmer un rappel personnel en DM pour une date de sortie officielle')
+            .addStringOption(o => o.setName('titre').setDescription('Nom du jeu ou de l\'événement').setRequired(true))
+            .addStringOption(o => o.setName('date').setDescription('Date de sortie au format AAAA-MM-JJ ou JJ/MM/AAAA').setRequired(true))
+            .addStringOption(o => o.setName('url').setDescription('Lien vers la source ou le jeu').setRequired(false))
+            .addStringOption(o => o.setName('note').setDescription('Note ou commentaire personnel').setRequired(false))
+    )
+    .addSubcommand(sub =>
+        sub.setName('predict')
+            .setDescription('Créer un marché de prédiction et ouvrir les paris communautaires en XP')
+            .addStringOption(o => o.setName('titre').setDescription('Question ou affirmation à parier (ex: GTA 6 sortira-t-il en 2026 ?)').setRequired(true))
+            .addStringOption(o => o.setName('options').setDescription('Options séparées par des virgules (ex: OUI, NON)').setRequired(false))
     );
 
 // Alias /autofeed pour compatibilité descendante

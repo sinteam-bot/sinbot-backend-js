@@ -334,6 +334,127 @@ class AutofeedInteractionListener {
                 return interaction.editReply({ content: `❌ Échec de la synthèse vidéo : ${err.message}` });
             }
         }
+
+        // --- NOUVEAUTÉS LOT V7 ---
+
+        // 6. Fact-Check & Nuances IA (Pour & Contre)
+        if (customId.startsWith('feed_factcheck:')) {
+            const target = customId.replace('feed_factcheck:', '').trim();
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const { title, url, content } = await this._resolveHistoryOrEmbed(target, interaction);
+                const historyId = /^\d+$/.test(target) ? Number(target) : null;
+                const analysis = await this.feedService.analyzeArticleFactCheck({
+                    url,
+                    title,
+                    content,
+                    historyId
+                });
+
+                const embed = this.feedService.investigationService.buildFactCheckEmbed(analysis);
+                return interaction.editReply({ embeds: [embed] });
+            } catch (err) {
+                logger.warn(`[AutofeedInteraction] Erreur fact-check: ${err.message}`, 'AUTOFEEDS');
+                return interaction.editReply({ content: `❌ Impossible d'effectuer le fact-check : ${err.message}` });
+            }
+        }
+
+        // 7. Alerte Sortie & Rappel Personnel (« Préviens-moi à la date J »)
+        if (customId.startsWith('feed_remind:')) {
+            const target = customId.replace('feed_remind:', '').trim();
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const { title, url, content } = await this._resolveHistoryOrEmbed(target, interaction);
+                const historyId = /^\d+$/.test(target) ? Number(target) : null;
+
+                // Tenter de détecter la date de sortie dans le texte
+                let releaseDate = this.feedService.reminderService.detectReleaseDate(`${title} ${content}`);
+                if (!releaseDate) {
+                    // Par défaut si non spécifié : demain
+                    const tmw = new Date();
+                    tmw.setDate(tmw.getDate() + 1);
+                    releaseDate = tmw.toISOString().slice(0, 10);
+                }
+
+                await this.feedService.addReleaseReminder({
+                    guildId: interaction.guildId || 'default',
+                    channelId: interaction.channelId,
+                    userId: interaction.user.id,
+                    historyId,
+                    releaseDate,
+                    itemTitle: title || 'Sortie / Événement',
+                    itemUrl: url
+                });
+
+                return interaction.editReply({
+                    content: `⏰ **Rappel programmé avec succès !**\nVous recevrez un message privé (DM) le jour J (**${releaseDate}**) pour ne pas rater la sortie de : *${title || 'l\'événement'}*.`
+                });
+            } catch (err) {
+                logger.warn(`[AutofeedInteraction] Erreur rappel: ${err.message}`, 'AUTOFEEDS');
+                return interaction.editReply({ content: `❌ Impossible d'enregistrer le rappel : ${err.message}` });
+            }
+        }
+
+        // 8. Fiche Wiki & Synchronisation Base de Connaissances (Obsidian / Notion)
+        if (customId.startsWith('feed_wiki:')) {
+            const target = customId.replace('feed_wiki:', '').trim();
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const { title, url, content } = await this._resolveHistoryOrEmbed(target, interaction);
+                const item = { title, link: url, content, tags: ['actualite'] };
+                const markdown = this.feedService.formatKnowledgeMarkdown(item);
+
+                const embed = this.feedService.knowledgeService.buildWikiExportEmbed(item, {}, false);
+                return interaction.editReply({
+                    embeds: [embed],
+                    content: `\`\`\`markdown\n${markdown.slice(0, 1800)}\n\`\`\``
+                });
+            } catch (err) {
+                logger.warn(`[AutofeedInteraction] Erreur wiki export: ${err.message}`, 'AUTOFEEDS');
+                return interaction.editReply({ content: `❌ Impossible de générer la fiche Wiki : ${err.message}` });
+            }
+        }
+
+        // 9. Réponse au Quiz d'Actu Hebdomadaire
+        if (customId.startsWith('feed_trivia_ans:')) {
+            const parts = customId.replace('feed_trivia_ans:', '').split(':');
+            const quizId = parts[0];
+            const optIndex = parts[1];
+
+            if (this.feedService?.triviaService) {
+                return this.feedService.triviaService.handleAnswerInteraction(interaction, quizId, optIndex);
+            }
+        }
+
+        // 10. Mise sur un Marché de Prédiction en XP
+        if (customId.startsWith('feed_pred_bet:')) {
+            const parts = customId.replace('feed_pred_bet:', '').split(':');
+            const predId = parts[0];
+            const optIndex = parts[1];
+
+            try {
+                const bet = await this.feedService.placePredictionBet({
+                    predictionId: predId,
+                    userId: interaction.user.id,
+                    optionIndex: optIndex,
+                    amountXp: 10,
+                    guildId: interaction.guildId || 'default'
+                });
+
+                return interaction.reply({
+                    content: `🎲 **Pari enregistré !** Vous avez misé **10 XP** sur l'option #${parseInt(optIndex, 10) + 1}.\nBonne chance ! Les gains seront redistribués lors de la clôture du marché.`,
+                    ephemeral: true
+                });
+            } catch (err) {
+                return interaction.reply({
+                    content: `❌ ${err.message}`,
+                    ephemeral: true
+                });
+            }
+        }
     }
 }
 

@@ -92,6 +92,10 @@ class AutofeedsRepository {
                 { name: 'enable_story_clustering', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'cluster_mode', type: "text DEFAULT 'merge' NOT NULL" },
                 { name: 'enable_video_summary', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'auto_smart_tag', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'sync_to_knowledge_base', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'knowledge_base_type', type: "text DEFAULT 'markdown' NOT NULL" },
+                { name: 'knowledge_webhook_url', type: "text" },
                 { name: 'last_checked_at', type: "bigint DEFAULT 0 NOT NULL" },
                 { name: 'last_status', type: "text DEFAULT 'ok' NOT NULL" },
                 { name: 'last_error', type: "text" },
@@ -175,7 +179,9 @@ class AutofeedsRepository {
                 { name: 'sentiment_score', type: 'text' },
                 { name: 'is_pending_approval', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'approved_by', type: 'text' },
-                { name: 'rejected_by', type: 'text' }
+                { name: 'rejected_by', type: 'text' },
+                { name: 'release_date', type: 'text' },
+                { name: 'fact_check_score', type: 'integer' }
             ];
             for (const col of histColsToAdd) {
                 await db.pool.query(`
@@ -278,6 +284,96 @@ class AutofeedsRepository {
                 CREATE INDEX IF NOT EXISTS "idx_user_digest_schedule" ON "autofeed_user_digests" ("schedule_time", "is_enabled");
             `).catch(() => {});
 
+            // 7. Table des rappels de sortie de jeux & événements
+            await db.pool.query(`
+                CREATE TABLE IF NOT EXISTS "autofeed_release_reminders" (
+                    "id" text PRIMARY KEY NOT NULL,
+                    "guild_id" text NOT NULL,
+                    "user_id" text NOT NULL,
+                    "history_id" text,
+                    "item_title" text NOT NULL,
+                    "item_url" text,
+                    "target_date" text NOT NULL,
+                    "is_notified" boolean DEFAULT false NOT NULL,
+                    "notified_at" bigint,
+                    "created_at" bigint NOT NULL
+                );
+            `).catch(() => {});
+
+            await db.pool.query(`ALTER TABLE "autofeed_release_reminders" ALTER COLUMN "item_url" DROP NOT NULL;`).catch(() => {});
+
+            await db.pool.query(`
+                CREATE INDEX IF NOT EXISTS "idx_release_reminders_target" ON "autofeed_release_reminders" ("target_date", "is_notified");
+                CREATE INDEX IF NOT EXISTS "idx_release_reminders_user" ON "autofeed_release_reminders" ("guild_id", "user_id");
+            `).catch(() => {});
+
+            // 8. Tables des quiz trivia
+            await db.pool.query(`
+                CREATE TABLE IF NOT EXISTS "autofeed_trivia_quizzes" (
+                    "id" text PRIMARY KEY NOT NULL,
+                    "guild_id" text NOT NULL,
+                    "channel_id" text,
+                    "message_id" text,
+                    "theme" text DEFAULT 'Actualités de la Semaine' NOT NULL,
+                    "question" text NOT NULL,
+                    "options" text NOT NULL,
+                    "correct_option_index" integer NOT NULL,
+                    "explanation" text NOT NULL,
+                    "source_url" text,
+                    "xp_reward" integer DEFAULT 50 NOT NULL,
+                    "is_active" boolean DEFAULT true NOT NULL,
+                    "created_at" bigint NOT NULL
+                );
+            `).catch(() => {});
+
+            await db.pool.query(`
+                CREATE TABLE IF NOT EXISTS "autofeed_trivia_answers" (
+                    "id" text PRIMARY KEY NOT NULL,
+                    "quiz_id" text NOT NULL,
+                    "user_id" text NOT NULL,
+                    "guild_id" text NOT NULL,
+                    "selected_option_index" integer NOT NULL,
+                    "is_correct" boolean NOT NULL,
+                    "xp_earned" integer DEFAULT 0 NOT NULL,
+                    "answered_at" bigint NOT NULL,
+                    CONSTRAINT "autofeed_trivia_answer_unique" UNIQUE("quiz_id", "user_id")
+                );
+            `).catch(() => {});
+
+            // 9. Tables des paris et prédictions communautaires
+            await db.pool.query(`
+                CREATE TABLE IF NOT EXISTS "autofeed_predictions" (
+                    "id" text PRIMARY KEY NOT NULL,
+                    "guild_id" text NOT NULL,
+                    "feed_id" text,
+                    "history_id" text,
+                    "title" text NOT NULL,
+                    "description" text,
+                    "source_url" text,
+                    "options" text NOT NULL,
+                    "status" text DEFAULT 'open' NOT NULL,
+                    "resolved_option_index" integer,
+                    "total_pool_xp" integer DEFAULT 0 NOT NULL,
+                    "closes_at" bigint,
+                    "resolved_at" bigint,
+                    "created_at" bigint NOT NULL
+                );
+            `).catch(() => {});
+
+            await db.pool.query(`
+                CREATE TABLE IF NOT EXISTS "autofeed_prediction_bets" (
+                    "id" text PRIMARY KEY NOT NULL,
+                    "prediction_id" text NOT NULL,
+                    "guild_id" text NOT NULL,
+                    "user_id" text NOT NULL,
+                    "option_index" integer NOT NULL,
+                    "amount_xp" integer NOT NULL,
+                    "payout_xp" integer DEFAULT 0 NOT NULL,
+                    "is_claimed" boolean DEFAULT false NOT NULL,
+                    "created_at" bigint NOT NULL
+                );
+            `).catch(() => {});
+
             this._initialized = true;
         } catch (err) {
             console.warn('[AutofeedsRepository] Erreur initSchema:', err.message);
@@ -338,6 +434,10 @@ class AutofeedsRepository {
         enableStoryClustering = false,
         clusterMode = 'merge',
         enableVideoSummary = false,
+        autoSmartTag = false,
+        syncToKnowledgeBase = false,
+        knowledgeBaseType = 'markdown',
+        knowledgeWebhookUrl = null,
         intervalMinutes = 15
     }) {
         await this.initSchema();
@@ -368,8 +468,9 @@ class AutofeedsRepository {
                 min_discount_percent, auto_sync_events, good_vibes_only, enable_security_scan,
                 translate_title_to_fr, anti_clickbait, require_approval, moderation_channel_id,
                 enable_story_clustering, cluster_mode, enable_video_summary,
+                auto_smart_tag, sync_to_knowledge_base, knowledge_base_type, knowledge_webhook_url,
                 interval_minutes, enabled, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, true, $52, $52)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, true, $56, $56)`,
             [
                 id,
                 guildId,
@@ -421,6 +522,10 @@ class AutofeedsRepository {
                 Boolean(enableStoryClustering),
                 clusterMode || 'merge',
                 Boolean(enableVideoSummary),
+                Boolean(autoSmartTag),
+                Boolean(syncToKnowledgeBase),
+                knowledgeBaseType || 'markdown',
+                knowledgeWebhookUrl || null,
                 intervalMinutes,
                 now
             ]
@@ -577,9 +682,13 @@ class AutofeedsRepository {
                 enable_story_clustering = $47,
                 cluster_mode = $48,
                 enable_video_summary = $49,
-                interval_minutes = $50,
-                enabled = $51,
-                updated_at = $52
+                auto_smart_tag = $50,
+                sync_to_knowledge_base = $51,
+                knowledge_base_type = $52,
+                knowledge_webhook_url = $53,
+                interval_minutes = $54,
+                enabled = $55,
+                updated_at = $56
              WHERE id = $1`,
             [
                 id,
@@ -631,6 +740,10 @@ class AutofeedsRepository {
                 updated.enableStoryClustering,
                 updated.clusterMode,
                 updated.enableVideoSummary,
+                Boolean(updated.autoSmartTag),
+                Boolean(updated.syncToKnowledgeBase),
+                updated.knowledgeBaseType || 'markdown',
+                updated.knowledgeWebhookUrl || null,
                 updated.intervalMinutes,
                 updated.enabled,
                 updated.updatedAt
@@ -795,6 +908,8 @@ class AutofeedsRepository {
             isPendingApproval = false,
             approvedBy = null,
             rejectedBy = null,
+            releaseDate = null,
+            factCheckScore = null,
             postedAt = null
         } = options;
 
@@ -814,8 +929,9 @@ class AutofeedsRepository {
                 item_guid, item_url, canonical_url, item_title,
                 item_author, item_content, tags, is_digest,
                 clicks_count, is_expired, clustered_with_id, related_sources,
-                is_best_of, sentiment_score, is_pending_approval, approved_by, rejected_by, posted_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, false, $14, $15, $16, $17, $18, $19, $20, $21)`,
+                is_best_of, sentiment_score, is_pending_approval, approved_by, rejected_by,
+                release_date, fact_check_score, posted_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, false, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
             [
                 id,
                 fId,
@@ -837,6 +953,8 @@ class AutofeedsRepository {
                 Boolean(isPendingApproval),
                 approvedBy || null,
                 rejectedBy || null,
+                releaseDate || null,
+                factCheckScore !== null && factCheckScore !== undefined ? Number(factCheckScore) : null,
                 now
             ]
         );
@@ -885,6 +1003,8 @@ class AutofeedsRepository {
             isPendingApproval: Boolean(row.is_pending_approval),
             approvedBy: row.approved_by,
             rejectedBy: row.rejected_by,
+            releaseDate: row.release_date || null,
+            factCheckScore: row.fact_check_score !== null && row.fact_check_score !== undefined ? Number(row.fact_check_score) : null,
             postedAt: Number(row.posted_at) || Date.now(),
             feedName: row.feed_name
         };
@@ -1648,6 +1768,10 @@ class AutofeedsRepository {
             enableStoryClustering: Boolean(row.enable_story_clustering),
             clusterMode: row.cluster_mode || 'merge',
             enableVideoSummary: Boolean(row.enable_video_summary),
+            autoSmartTag: Boolean(row.auto_smart_tag),
+            syncToKnowledgeBase: Boolean(row.sync_to_knowledge_base),
+            knowledgeBaseType: row.knowledge_base_type || 'markdown',
+            knowledgeWebhookUrl: row.knowledge_webhook_url || null,
             lastItemId: row.last_item_id,
             lastItemPublishedAt: Number(row.last_item_published_at || 0),
             intervalMinutes: Number(row.interval_minutes || 15),
@@ -1697,6 +1821,335 @@ class AutofeedsRepository {
             status: row.status || 'live',
             createdAt: Number(row.created_at || 0)
         };
+    }
+
+    _mapReleaseReminderRow(row) {
+        if (!row) return null;
+        return {
+            id: row.id,
+            guildId: row.guild_id,
+            userId: row.user_id,
+            historyId: row.history_id || null,
+            itemTitle: row.item_title,
+            itemUrl: row.item_url,
+            targetDate: row.target_date,
+            releaseDate: row.target_date,
+            feedName: row.feed_name || null,
+            isNotified: Boolean(row.is_notified),
+            notifiedAt: row.notified_at ? Number(row.notified_at) : null,
+            createdAt: Number(row.created_at) || Date.now()
+        };
+    }
+
+    _mapTriviaQuizRow(row) {
+        if (!row) return null;
+        let options = [];
+        try { options = typeof row.options === 'string' ? JSON.parse(row.options) : (row.options || []); } catch {}
+        return {
+            id: row.id,
+            guildId: row.guild_id,
+            channelId: row.channel_id,
+            messageId: row.message_id,
+            theme: row.theme || 'Actualités de la Semaine',
+            question: row.question,
+            options,
+            correctOptionIndex: Number(row.correct_option_index),
+            correctIndex: Number(row.correct_option_index),
+            explanation: row.explanation,
+            sourceUrl: row.source_url,
+            xpReward: Number(row.xp_reward || 50),
+            isActive: Boolean(row.is_active),
+            createdAt: Number(row.created_at) || Date.now()
+        };
+    }
+
+    _mapTriviaAnswerRow(row) {
+        if (!row) return null;
+        return {
+            id: row.id,
+            quizId: row.quiz_id,
+            userId: row.user_id,
+            guildId: row.guild_id,
+            selectedOptionIndex: Number(row.selected_option_index),
+            selectedIndex: Number(row.selected_option_index),
+            isCorrect: Boolean(row.is_correct),
+            xpEarned: Number(row.xp_earned || 0),
+            answeredAt: Number(row.answered_at) || Date.now()
+        };
+    }
+
+    _mapPredictionRow(row) {
+        if (!row) return null;
+        let options = [];
+        try { options = typeof row.options === 'string' ? JSON.parse(row.options) : (row.options || []); } catch {}
+        return {
+            id: row.id,
+            guildId: row.guild_id,
+            feedId: row.feed_id,
+            historyId: row.history_id,
+            title: row.title,
+            description: row.description,
+            sourceUrl: row.source_url,
+            options,
+            status: row.status || 'open',
+            resolvedOptionIndex: row.resolved_option_index !== null && row.resolved_option_index !== undefined ? Number(row.resolved_option_index) : null,
+            winningOptionIndex: row.resolved_option_index !== null && row.resolved_option_index !== undefined ? Number(row.resolved_option_index) : null,
+            totalPoolXp: Number(row.total_pool_xp || 0),
+            closesAt: row.closes_at ? Number(row.closes_at) : null,
+            resolvedAt: row.resolved_at ? Number(row.resolved_at) : null,
+            createdAt: Number(row.created_at) || Date.now()
+        };
+    }
+
+    _mapPredictionBetRow(row) {
+        if (!row) return null;
+        return {
+            id: row.id,
+            predictionId: row.prediction_id,
+            guildId: row.guild_id,
+            userId: row.user_id,
+            optionIndex: Number(row.option_index),
+            amountXp: Number(row.amount_xp),
+            payoutXp: Number(row.payout_xp || 0),
+            isClaimed: Boolean(row.is_claimed),
+            createdAt: Number(row.created_at) || Date.now()
+        };
+    }
+
+    // ==========================================
+    // RAPPELS DE SORTIE DE JEUX (« JOUR J »)
+    // ==========================================
+    async addReleaseReminder({ guildId, userId, historyId = null, itemTitle, itemUrl, targetDate, releaseDate, reminderNote = null, feedName = null }) {
+        await this.initSchema();
+        const id = newId();
+        const now = Date.now();
+        const finalDate = targetDate || releaseDate;
+        await db.pool.query(
+            `INSERT INTO autofeed_release_reminders (
+                id, guild_id, user_id, history_id, item_title, item_url, target_date, is_notified, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8)`,
+            [id, guildId, userId, historyId || null, itemTitle, itemUrl || null, finalDate, now]
+        );
+        return this.getReleaseReminderById(id);
+    }
+
+    async getReleaseReminderById(id) {
+        await this.initSchema();
+        const res = await db.pool.query(`SELECT * FROM autofeed_release_reminders WHERE id = $1 LIMIT 1`, [id]);
+        return this._mapReleaseReminderRow(res.rows?.[0]);
+    }
+
+    async listDueReleaseReminders(targetDate = null) {
+        await this.initSchema();
+        const dateLimit = targetDate || new Date().toISOString().slice(0, 10);
+        const res = await db.pool.query(
+            `SELECT * FROM autofeed_release_reminders
+             WHERE is_notified = false AND target_date <= $1
+             ORDER BY created_at ASC`,
+            [dateLimit]
+        ).catch(() => ({ rows: [] }));
+        return (res.rows || []).map(r => this._mapReleaseReminderRow(r));
+    }
+
+    async markReleaseReminderNotified(id) {
+        await this.initSchema();
+        const now = Date.now();
+        await db.pool.query(
+            `UPDATE autofeed_release_reminders SET is_notified = true, notified_at = $2 WHERE id = $1`,
+            [id, now]
+        );
+    }
+
+    async getUserReleaseReminders(userId, guildId = null) {
+        await this.initSchema();
+        let query = `SELECT * FROM autofeed_release_reminders WHERE user_id = $1`;
+        const params = [userId];
+        if (guildId) {
+            query += ` AND (guild_id = $2 OR guild_id IS NULL)`;
+            params.push(guildId);
+        }
+        query += ` ORDER BY created_at DESC`;
+        const res = await db.pool.query(query, params).catch(() => ({ rows: [] }));
+        return (res.rows || []).map(r => this._mapReleaseReminderRow(r));
+    }
+
+    // ==========================================
+    // QUIZ TRIVIA HEBDOMADAIRE
+    // ==========================================
+    async createTriviaQuiz({ guildId, channelId = null, messageId = null, theme = 'Actualités de la Semaine', question, options = [], correctOptionIndex = 0, correctIndex = 0, explanation = '', sourceUrl = null, xpReward = 50 }) {
+        await this.initSchema();
+        const id = newId();
+        const now = Date.now();
+        const optionsJson = JSON.stringify(Array.isArray(options) ? options : []);
+        const finalCorrect = correctOptionIndex !== undefined ? correctOptionIndex : correctIndex;
+        await db.pool.query(
+            `INSERT INTO autofeed_trivia_quizzes (
+                id, guild_id, channel_id, message_id, theme, question, options, correct_option_index, explanation, source_url, xp_reward, is_active, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12)`,
+            [id, guildId, channelId, messageId, theme, question, optionsJson, finalCorrect, explanation, sourceUrl, xpReward, now]
+        );
+        return this.getTriviaQuizById(id);
+    }
+
+    async getTriviaQuizById(id) {
+        await this.initSchema();
+        const res = await db.pool.query(`SELECT * FROM autofeed_trivia_quizzes WHERE id = $1 LIMIT 1`, [id]);
+        return this._mapTriviaQuizRow(res.rows?.[0]);
+    }
+
+    async getActiveTriviaQuiz(guildId) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT * FROM autofeed_trivia_quizzes WHERE guild_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT 1`,
+            [guildId]
+        ).catch(() => ({ rows: [] }));
+        return this._mapTriviaQuizRow(res.rows?.[0]);
+    }
+
+    async recordTriviaAnswer({ quizId, userId, guildId, selectedOptionIndex, selectedIndex, isCorrect, xpEarned = 0 }) {
+        await this.initSchema();
+        const id = newId();
+        const now = Date.now();
+        const finalIndex = selectedOptionIndex !== undefined ? selectedOptionIndex : selectedIndex;
+        await db.pool.query(
+            `INSERT INTO autofeed_trivia_answers (
+                id, quiz_id, user_id, guild_id, selected_option_index, is_correct, xp_earned, answered_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (quiz_id, user_id) DO NOTHING`,
+            [id, quizId, userId, guildId, finalIndex, Boolean(isCorrect), xpEarned, now]
+        );
+        return { ok: true, isCorrect, xpEarned };
+    }
+
+    async hasUserAnsweredTrivia(quizId, userId) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT id FROM autofeed_trivia_answers WHERE quiz_id = $1 AND user_id = $2 LIMIT 1`,
+            [quizId, userId]
+        ).catch(() => ({ rows: [] }));
+        return Boolean(res.rows?.[0]);
+    }
+
+    // ==========================================
+    // MARCHÉ DE PRÉDICTIONS & PARIS EN XP
+    // ==========================================
+    async createPrediction({ guildId, feedId = null, historyId = null, title, description = null, sourceUrl = null, options = ['Oui', 'Non'], closesAtHours = 48 }) {
+        await this.initSchema();
+        const id = newId();
+        const now = Date.now();
+        const closesAt = now + (closesAtHours * 3600 * 1000);
+        const optionsJson = JSON.stringify(Array.isArray(options) ? options : ['Oui', 'Non']);
+        await db.pool.query(
+            `INSERT INTO autofeed_predictions (
+                id, guild_id, feed_id, history_id, title, description, source_url, options, status, total_pool_xp, closes_at, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', 0, $9, $10)`,
+            [id, guildId, feedId, historyId, title, description, sourceUrl, optionsJson, closesAt, now]
+        );
+        return this.getPredictionById(id);
+    }
+
+    async getPredictionById(id) {
+        await this.initSchema();
+        const res = await db.pool.query(`SELECT * FROM autofeed_predictions WHERE id = $1 LIMIT 1`, [id]);
+        return this._mapPredictionRow(res.rows?.[0]);
+    }
+
+    async listPredictions(guildId, status = null) {
+        await this.initSchema();
+        let query = `SELECT * FROM autofeed_predictions WHERE guild_id = $1`;
+        const params = [guildId];
+        if (status) {
+            query += ` AND status = $2`;
+            params.push(status);
+        }
+        query += ` ORDER BY created_at DESC LIMIT 20`;
+        const res = await db.pool.query(query, params).catch(() => ({ rows: [] }));
+        return (res.rows || []).map(r => this._mapPredictionRow(r));
+    }
+
+    async placePredictionBet({ predictionId, guildId, userId, optionIndex, amountXp }) {
+        await this.initSchema();
+        const id = newId();
+        const now = Date.now();
+        await db.pool.query(
+            `INSERT INTO autofeed_prediction_bets (
+                id, prediction_id, guild_id, user_id, option_index, amount_xp, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [id, predictionId, guildId, userId, optionIndex, amountXp, now]
+        );
+        await db.pool.query(
+            `UPDATE autofeed_predictions SET total_pool_xp = total_pool_xp + $2 WHERE id = $1`,
+            [predictionId, amountXp]
+        );
+        return { ok: true, betId: id };
+    }
+
+    async listPredictionBets(predictionId) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT * FROM autofeed_prediction_bets WHERE prediction_id = $1 ORDER BY created_at ASC`,
+            [predictionId]
+        ).catch(() => ({ rows: [] }));
+        return (res.rows || []).map(r => this._mapPredictionBetRow(r));
+    }
+
+    async resolvePrediction(id, resolvedOptionIndex) {
+        await this.initSchema();
+        const now = Date.now();
+        const pred = await this.getPredictionById(id);
+        if (!pred) throw new Error('Prédiction introuvable.');
+
+        const bets = await this.listPredictionBets(id);
+        const winningBets = bets.filter(b => b.optionIndex === resolvedOptionIndex);
+        const totalWinningAmount = winningBets.reduce((acc, b) => acc + b.amountXp, 0);
+
+        if (totalWinningAmount > 0 && pred.totalPoolXp > 0) {
+            for (const winBet of winningBets) {
+                const ratio = winBet.amountXp / totalWinningAmount;
+                const payout = Math.floor(ratio * pred.totalPoolXp);
+                await db.pool.query(
+                    `UPDATE autofeed_prediction_bets SET payout_xp = $2 WHERE id = $1`,
+                    [winBet.id, payout]
+                );
+            }
+        }
+
+        await db.pool.query(
+            `UPDATE autofeed_predictions SET status = 'resolved', resolved_option_index = $2, resolved_at = $3 WHERE id = $1`,
+            [id, resolvedOptionIndex, now]
+        );
+
+        return this.getPredictionById(id);
+    }
+
+    async listRecentHistory(guildId, limit = 15) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT h.*, f.name as feed_name
+             FROM autofeed_history h
+             LEFT JOIN autofeeds f ON h.feed_id = f.id
+             WHERE (h.guild_id = $1 OR f.guild_id = $1)
+             ORDER BY h.posted_at DESC
+             LIMIT $2`,
+            [guildId, limit]
+        ).catch(() => ({ rows: [] }));
+        return (res.rows || []).map(r => this._mapHistoryRow(r));
+    }
+
+    async searchHistoryByTopic(guildId, topic, limit = 20) {
+        await this.initSchema();
+        const term = `%${(topic || '').trim().toLowerCase()}%`;
+        const res = await db.pool.query(
+            `SELECT h.*, f.name as feed_name
+             FROM autofeed_history h
+             LEFT JOIN autofeeds f ON h.feed_id = f.id
+             WHERE (h.guild_id = $1 OR f.guild_id = $1)
+               AND (LOWER(h.item_title) LIKE $2 OR LOWER(h.item_content) LIKE $2 OR LOWER(h.tags) LIKE $2)
+             ORDER BY h.posted_at ASC
+             LIMIT $3`,
+            [guildId, term, limit]
+        ).catch(() => ({ rows: [] }));
+        return (res.rows || []).map(r => this._mapHistoryRow(r));
     }
 }
 

@@ -2514,6 +2514,323 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
                 expect(Array.isArray(jsonRes.data)).toBe(true);
             });
         });
+
+        // =========================================================================
+        // SECTION 17 : LOT V7 FINAL (Rappels Sortie, Fact-Check & Enquête, Smart Tagging, Knowledge Sync, Trivia & Prédictions XP)
+        // =========================================================================
+        describe('Section 17 : Lot v7 Final (Rappels, Fact-Check, Smart Tags, Wiki, Trivia & Predictions)', () => {
+            const { AutofeedsReminderService } = require('../src/modules/util_autofeeds/services/autofeeds-reminder.service.js');
+            const { AutofeedsInvestigationService } = require('../src/modules/util_autofeeds/services/autofeeds-investigation.service.js');
+            const { AutofeedsSmartTagService } = require('../src/modules/util_autofeeds/services/autofeeds-smart-tag.service.js');
+            const { AutofeedsKnowledgeService } = require('../src/modules/util_autofeeds/services/autofeeds-knowledge.service.js');
+            const { AutofeedsTriviaService } = require('../src/modules/util_autofeeds/services/autofeeds-trivia.service.js');
+            const { AutofeedsPredictionService } = require('../src/modules/util_autofeeds/services/autofeeds-prediction.service.js');
+
+            it('detects release dates with various formats in AutofeedsReminderService', () => {
+                const reminderService = new AutofeedsReminderService(repo);
+
+                expect(reminderService.detectReleaseDate('Grand Theft Auto VI sortira le 2026-11-15 sur consoles')).toBe('2026-11-15');
+                expect(reminderService.detectReleaseDate('Disponible en magasin dès le 25/10/2026')).toBe('2026-10-25');
+                expect(reminderService.detectReleaseDate('Sortie confirmée le 15 novembre 2026')).toBe('2026-11-15');
+                expect(reminderService.detectReleaseDate('Sortie prévue pour 30 mai 2026')).toBe('2026-05-30');
+                expect(reminderService.detectReleaseDate('Aucune date annoncée pour l\'instant')).toBeNull();
+            });
+
+            it('creates release reminders and processes due notifications via DM', async () => {
+                const reminderService = new AutofeedsReminderService(repo);
+                const guildId = 'guild_v7_remind';
+                const userId = 'user_remind_99';
+
+                // Enregistrement d'un rappel
+                const reminder = await reminderService.addReminder({
+                    guildId,
+                    userId,
+                    releaseDate: '2026-10-08',
+                    itemTitle: 'Metroid Prime 4: Beyond',
+                    itemUrl: 'https://nintendo.com/metroid-prime-4'
+                });
+
+                expect(reminder).toBeDefined();
+                expect(reminder.id).toBeDefined();
+                expect(reminder.releaseDate).toBe('2026-10-08');
+
+                // Récupération des rappels utilisateur
+                const userList = await reminderService.getUserReminders(userId, guildId);
+                expect(userList.length).toBeGreaterThanOrEqual(1);
+
+                // Simulation client Discord pour notification DM
+                let dmSent = false;
+                let sentContent = '';
+                const mockClient = {
+                    users: {
+                        fetch: async (id) => {
+                            if (id === userId) {
+                                return {
+                                    send: async (payload) => {
+                                        dmSent = true;
+                                        sentContent = payload.content;
+                                        return payload;
+                                    }
+                                };
+                            }
+                            return null;
+                        }
+                    }
+                };
+
+                const processRes = await reminderService.processDueReminders(mockClient);
+                expect(processRes.processed).toBeGreaterThanOrEqual(1);
+                expect(processRes.sent).toBeGreaterThanOrEqual(1);
+                expect(dmSent).toBe(true);
+                expect(sentContent).toContain('Rappel Personnel');
+            });
+
+            it('performs fact-check analysis and stores reliability score in AutofeedsInvestigationService', async () => {
+                const mockAi = async () => JSON.stringify({
+                    pros: ['Sources officielles du studio citées', 'Gameplay vérifiable'],
+                    cons: ['Date sujette à d\'éventuels reports'],
+                    score: 88,
+                    verdict: 'Très Fiable',
+                    explanation: 'Information confirmée par le développeur.'
+                });
+
+                const investService = new AutofeedsInvestigationService(repo, mockAi);
+                const res = await investService.analyzeArticleBalanceAndReliability({
+                    title: 'The Witcher 4 entre en pleine production',
+                    content: 'CD Projekt confirme officiellement le démarrage de la pleine production.'
+                });
+
+                expect(res.score).toBe(88);
+                expect(res.verdict).toBe('Très Fiable');
+                expect(res.pros.length).toBe(2);
+                expect(res.cons.length).toBe(1);
+
+                const embed = investService.buildFactCheckEmbed(res);
+                expect(embed.data.title).toContain('Fact-Check & Analyse');
+                expect(embed.data.fields.length).toBe(2);
+
+                const btn = investService.createFactCheckButton(12345);
+                expect(btn.data.custom_id).toBe('feed_factcheck:12345');
+            });
+
+            it('conducts meta-investigation across history with timeline and consensus', async () => {
+                const investService = new AutofeedsInvestigationService(repo);
+                const guildId = 'guild_v7_invest';
+
+                // Préparer un historique de plusieurs articles sur le même sujet
+                const feed = await repo.addFeed({
+                    guildId,
+                    channelId: 'chan_inv',
+                    feedUrl: 'https://ex.com/invest.xml',
+                    name: 'JeuxActu'
+                });
+
+                await repo.recordPostedItem(feed.id, 'gta-1', 'https://ex.com/1', 'GTA 6 rumeur annonce imminente', {
+                    guildId,
+                    itemContent: 'Des fuites évoquent une bande-annonce pour la fin d\'année.',
+                    postedAt: Date.now() - 200000
+                });
+
+                await repo.recordPostedItem(feed.id, 'gta-2', 'https://ex.com/2', 'GTA 6 premier trailer officiel dévoilé', {
+                    guildId,
+                    itemContent: 'Rockstar Games publie officiellement la première bande-annonce.',
+                    postedAt: Date.now() - 100000
+                });
+
+                const report = await investService.investigateTopic({
+                    guildId,
+                    topic: 'GTA 6',
+                    limit: 5
+                });
+
+                expect(report.topic).toBe('GTA 6');
+                expect(report.sourcesCount).toBeGreaterThanOrEqual(2);
+                expect(report.timeline.length).toBeGreaterThanOrEqual(2);
+                expect(report.consensus).toBeDefined();
+
+                const embed = investService.buildInvestigationEmbed(report);
+                expect(embed.data.title).toContain('Méta-Enquête');
+            });
+
+            it('derives canonical taxonomy tags automatically in AutofeedsSmartTagService', async () => {
+                const smartTag = new AutofeedsSmartTagService();
+
+                // Test heuristique pure sans IA
+                const tagsGamingRpg = await smartTag.deriveTags({
+                    title: 'Nouveau RPG Dragon Quest annoncé sur PS5 et Nintendo Switch',
+                    content: 'Le studio Square Enix dévoile un gameplay exceptionnel pour ce jeu de rôle.'
+                });
+
+                expect(tagsGamingRpg).toContain('rpg');
+                expect(tagsGamingRpg).toContain('playstation');
+                expect(tagsGamingRpg).toContain('nintendo');
+
+                // Test avec tags existants fusionnés sans doublons
+                const merged = await smartTag.deriveTags(
+                    { title: 'Patch notes et correctif hotfix déployé', content: 'Mise à jour pour corriger les bugs.' },
+                    ['actualite']
+                );
+                expect(merged).toContain('actualite');
+                expect(merged).toContain('patchnotes');
+            });
+
+            it('formats articles into Obsidian Markdown frontmatter in AutofeedsKnowledgeService', async () => {
+                const knowledgeService = new AutofeedsKnowledgeService(repo);
+
+                const item = {
+                    title: 'Test complet de la RTX 5090',
+                    link: 'https://tech.com/rtx-5090',
+                    author: 'Nosi',
+                    content: 'Voici un aperçu détaillé de l architecture Blackwell et de ses performances 4K.',
+                    tags: ['hardware', 'nvidia', 'gpu'],
+                    publishedAt: '2026-10-08T12:00:00Z'
+                };
+
+                const md = knowledgeService.formatObsidianMarkdown(item, { name: 'Tech Radar' });
+                expect(md).toContain('---');
+                expect(md).toContain('title: "Test complet de la RTX 5090"');
+                expect(md).toContain('source: "Tech Radar"');
+                expect(md).toContain('reading_time:');
+                expect(md).toContain('- hardware');
+                expect(md).toContain('# Test complet de la RTX 5090');
+
+                expect(knowledgeService.estimateReadingTime('un deux trois')).toBe(1);
+
+                const btn = knowledgeService.createWikiButton(999);
+                expect(btn.data.custom_id).toBe('feed_wiki:999');
+            });
+
+            it('generates weekly trivia quiz and processes community answers in AutofeedsTriviaService', async () => {
+                const mockXpService = {
+                    xpAwarded: 0,
+                    addXp: async (g, u, amount) => { mockXpService.xpAwarded += amount; }
+                };
+
+                const triviaService = new AutofeedsTriviaService(repo, null, mockXpService);
+                const guildId = 'guild_v7_trivia';
+
+                // Insérer un article pour avoir du contexte
+                const feed = await repo.addFeed({ guildId, channelId: 'chan_triv', feedUrl: 'https://ex.com/triv.xml' });
+                await repo.recordPostedItem(feed.id, 'triv-item-1', 'https://ex.com/article-triv', 'Annonce de la Nintendo Switch 2', {
+                    guildId,
+                    itemContent: 'Nintendo confirme la rétrocompatibilité.'
+                });
+
+                const quiz = await triviaService.generateWeeklyQuiz({ guildId, xpReward: 50 });
+                expect(quiz).toBeDefined();
+                expect(quiz.id).toBeDefined();
+                expect(quiz.options.length).toBe(4);
+                expect(quiz.correctIndex).toBeGreaterThanOrEqual(0);
+
+                const embed = triviaService.buildQuizEmbed(quiz);
+                expect(embed.data.title).toContain('QUIZ D\'ACTU');
+
+                const row = triviaService.buildQuizActionRow(quiz.id);
+                expect(row.components.length).toBe(4);
+
+                // Simulation interaction bonne réponse
+                let replyContent = '';
+                const mockInteractionGood = {
+                    user: { id: 'trivia_user_1' },
+                    guildId,
+                    reply: async (p) => { replyContent = p.content; }
+                };
+
+                const ansGood = await triviaService.handleAnswerInteraction(mockInteractionGood, quiz.id, quiz.correctIndex);
+                expect(ansGood.ok).toBe(true);
+                expect(ansGood.isCorrect).toBe(true);
+                expect(mockXpService.xpAwarded).toBe(50);
+                expect(replyContent).toContain('BONNE RÉPONSE');
+
+                // Simulation tentative double soumission
+                const ansDup = await triviaService.handleAnswerInteraction(mockInteractionGood, quiz.id, quiz.correctIndex);
+                expect(ansDup.alreadyAnswered).toBe(true);
+            });
+
+            it('manages prediction markets, XP bets, and pool payouts in AutofeedsPredictionService', async () => {
+                let userBalances = { u1: 100, u2: 100, u3: 100 };
+                const mockXpService = {
+                    deductXp: async (g, u, amt) => {
+                        if (userBalances[u] < amt) throw new Error('Solde insuffisant');
+                        userBalances[u] -= amt;
+                    },
+                    addXp: async (g, u, amt) => {
+                        userBalances[u] += amt;
+                    }
+                };
+
+                const predService = new AutofeedsPredictionService(repo, mockXpService);
+                const guildId = 'guild_v7_pred';
+
+                // 1. Création du marché
+                const market = await predService.createMarket({
+                    guildId,
+                    title: 'Hollow Knight Silksong sortira-t-il avant fin 2026 ?',
+                    options: ['OUI', 'NON'],
+                    createdBy: 'admin_1'
+                });
+
+                expect(market.id).toBeDefined();
+                expect(market.status).toBe('open');
+
+                // 2. Mises des joueurs (u1 mise 40 sur OUI [0], u2 mise 60 sur OUI [0], u3 mise 100 sur NON [1])
+                await predService.placeBet({ predictionId: market.id, userId: 'u1', optionIndex: 0, amountXp: 40, guildId });
+                await predService.placeBet({ predictionId: market.id, userId: 'u2', optionIndex: 0, amountXp: 60, guildId });
+                await predService.placeBet({ predictionId: market.id, userId: 'u3', optionIndex: 1, amountXp: 100, guildId });
+
+                expect(userBalances.u1).toBe(60);
+                expect(userBalances.u2).toBe(40);
+                expect(userBalances.u3).toBe(0);
+
+                // 3. Clôture et résolution : OUI gagne ! Pool total = 200 XP.
+                // u1 a misé 40/100 du sous-pool gagnant -> reçoit 40% de 200 = 80 XP
+                // u2 a misé 60/100 du sous-pool gagnant -> reçoit 60% de 200 = 120 XP
+                const resolution = await predService.resolveMarket({
+                    predictionId: market.id,
+                    winningOptionIndex: 0,
+                    resolvedBy: 'admin_mod'
+                });
+
+                expect(resolution.winnersCount).toBe(2);
+                expect(resolution.totalPool).toBe(200);
+
+                // Vérification soldes finaux
+                expect(userBalances.u1).toBe(60 + 80); // 140 XP
+                expect(userBalances.u2).toBe(40 + 120); // 160 XP
+                expect(userBalances.u3).toBe(0); // 0 XP (a perdu)
+            });
+
+            it('exposes all v7 endpoints through AutofeedsController', async () => {
+                let jsonRes = null;
+                const mockRes = { json: (d) => { jsonRes = d; } };
+
+                // 1. GET /api/autofeeds/investigate
+                await controller.investigateTopic({ query: { topic: 'Zelda', guild_id: 'g_test' } }, mockRes);
+                expect(jsonRes.success).toBe(true);
+
+                // 2. POST /api/autofeeds/fact-check
+                await controller.factCheckArticle({ body: { title: 'Test Fact Check', url: 'https://ex.com/fc' } }, mockRes);
+                expect(jsonRes.success).toBe(true);
+
+                // 3. POST & GET /api/autofeeds/reminders
+                await controller.createReminder({ body: { guild_id: 'g_test', user_id: 'user_c', release_date: '2026-12-01', title: 'Jeu A' } }, mockRes);
+                expect(jsonRes.success).toBe(true);
+
+                await controller.listReminders({ params: { userId: 'user_c' }, query: {} }, mockRes);
+                expect(jsonRes.success).toBe(true);
+                expect(Array.isArray(jsonRes.data)).toBe(true);
+
+                // 4. GET /api/autofeeds/predictions
+                await controller.listPredictions({ query: { guild_id: 'g_test' } }, mockRes);
+                expect(jsonRes.success).toBe(true);
+                expect(Array.isArray(jsonRes.data)).toBe(true);
+
+                // 5. POST /api/autofeeds/knowledge/export
+                await controller.exportKnowledge({ body: { item: { title: 'Note Wiki', content: 'Contenu' } } }, mockRes);
+                expect(jsonRes.success).toBe(true);
+                expect(jsonRes.data.markdown).toContain('Note Wiki');
+            });
+        });
     });
 });
 

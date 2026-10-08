@@ -57,6 +57,10 @@ const autofeeds = pgTable('autofeeds', {
     enableStoryClustering: boolean('enable_story_clustering').default(false).notNull(),
     clusterMode: text('cluster_mode').default('merge').notNull(), // 'merge' | 'skip'
     enableVideoSummary: boolean('enable_video_summary').default(false).notNull(),
+    autoSmartTag: boolean('auto_smart_tag').default(false).notNull(),
+    syncToKnowledgeBase: boolean('sync_to_knowledge_base').default(false).notNull(),
+    knowledgeBaseType: text('knowledge_base_type').default('markdown').notNull(), // 'markdown' | 'webhook'
+    knowledgeWebhookUrl: text('knowledge_webhook_url'),
     lastItemId: text('last_item_id'),
     lastItemPublishedAt: bigint('last_item_published_at', { mode: 'number' }).default(0).notNull(),
     intervalMinutes: integer('interval_minutes').default(15).notNull(),
@@ -110,6 +114,8 @@ const autofeedHistory = pgTable('autofeed_history', {
     isPendingApproval: boolean('is_pending_approval').default(false).notNull(),
     approvedBy: text('approved_by'),
     rejectedBy: text('rejected_by'),
+    releaseDate: text('release_date'),
+    factCheckScore: integer('fact_check_score'),
     postedAt: bigint('posted_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_autofeed_hist_lookup').on(table.feedId, table.itemGuid),
@@ -179,6 +185,86 @@ const autofeedUserDigests = pgTable('autofeed_user_digests', {
     index('idx_user_digest_schedule').on(table.scheduleTime, table.isEnabled)
 ]);
 
+const autofeedReleaseReminders = pgTable('autofeed_release_reminders', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    userId: text('user_id').notNull(),
+    historyId: text('history_id'),
+    itemTitle: text('item_title').notNull(),
+    itemUrl: text('item_url'),
+    targetDate: text('target_date').notNull(), // 'YYYY-MM-DD'
+    isNotified: boolean('is_notified').default(false).notNull(),
+    notifiedAt: bigint('notified_at', { mode: 'number' }),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
+}, (table) => [
+    index('idx_release_reminders_target').on(table.targetDate, table.isNotified),
+    index('idx_release_reminders_user').on(table.guildId, table.userId)
+]);
+
+const autofeedTriviaQuizzes = pgTable('autofeed_trivia_quizzes', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    channelId: text('channel_id'),
+    messageId: text('message_id'),
+    theme: text('theme').default('Actualités de la Semaine').notNull(),
+    question: text('question').notNull(),
+    options: text('options').notNull(), // JSON: ["Option A", "Option B", "Option C", "Option D"]
+    correctOptionIndex: integer('correct_option_index').notNull(),
+    explanation: text('explanation').notNull(),
+    sourceUrl: text('source_url'),
+    xpReward: integer('xp_reward').default(50).notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
+}, (table) => [
+    index('idx_trivia_guild_active').on(table.guildId, table.isActive)
+]);
+
+const autofeedTriviaAnswers = pgTable('autofeed_trivia_answers', {
+    id: text('id').primaryKey(),
+    quizId: text('quiz_id').notNull(),
+    userId: text('user_id').notNull(),
+    guildId: text('guild_id').notNull(),
+    selectedOptionIndex: integer('selected_option_index').notNull(),
+    isCorrect: boolean('is_correct').notNull(),
+    xpEarned: integer('xp_earned').default(0).notNull(),
+    answeredAt: bigint('answered_at', { mode: 'number' }).notNull()
+}, (table) => [
+    unique('autofeed_trivia_answer_unique').on(table.quizId, table.userId)
+]);
+
+const autofeedPredictions = pgTable('autofeed_predictions', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    feedId: text('feed_id'),
+    historyId: text('history_id'),
+    title: text('title').notNull(),
+    description: text('description'),
+    sourceUrl: text('source_url'),
+    options: text('options').notNull(), // JSON: ["Oui", "Non"] ou [...]
+    status: text('status').default('open').notNull(), // 'open' | 'locked' | 'resolved' | 'cancelled'
+    resolvedOptionIndex: integer('resolved_option_index'),
+    totalPoolXp: integer('total_pool_xp').default(0).notNull(),
+    closesAt: bigint('closes_at', { mode: 'number' }),
+    resolvedAt: bigint('resolved_at', { mode: 'number' }),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
+}, (table) => [
+    index('idx_pred_guild_status').on(table.guildId, table.status)
+]);
+
+const autofeedPredictionBets = pgTable('autofeed_prediction_bets', {
+    id: text('id').primaryKey(),
+    predictionId: text('prediction_id').notNull(),
+    guildId: text('guild_id').notNull(),
+    userId: text('user_id').notNull(),
+    optionIndex: integer('option_index').notNull(),
+    amountXp: integer('amount_xp').notNull(),
+    payoutXp: integer('payout_xp').default(0).notNull(),
+    isClaimed: boolean('is_claimed').default(false).notNull(),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
+}, (table) => [
+    index('idx_pred_bets_lookup').on(table.predictionId, table.userId)
+]);
+
 module.exports = {
     autofeeds,
     autofeedSubscriptions,
@@ -186,5 +272,10 @@ module.exports = {
     autofeedPriceHistory,
     autofeedClaims,
     autofeedLiveSessions,
-    autofeedUserDigests
+    autofeedUserDigests,
+    autofeedReleaseReminders,
+    autofeedTriviaQuizzes,
+    autofeedTriviaAnswers,
+    autofeedPredictions,
+    autofeedPredictionBets
 };

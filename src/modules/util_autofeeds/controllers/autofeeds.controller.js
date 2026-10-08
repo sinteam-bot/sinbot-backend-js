@@ -132,6 +132,10 @@ class AutofeedsController {
                 enableStoryClustering: req.body?.enable_story_clustering !== undefined ? Boolean(req.body.enable_story_clustering) : Boolean(req.body?.enableStoryClustering),
                 clusterMode: req.body?.cluster_mode || req.body?.clusterMode || 'merge',
                 enableVideoSummary: req.body?.enable_video_summary !== undefined ? Boolean(req.body.enable_video_summary) : Boolean(req.body?.enableVideoSummary),
+                autoSmartTag: req.body?.auto_smart_tag !== undefined ? Boolean(req.body.auto_smart_tag) : Boolean(req.body?.autoSmartTag),
+                syncToKnowledgeBase: req.body?.sync_to_knowledge_base !== undefined ? Boolean(req.body.sync_to_knowledge_base) : Boolean(req.body?.syncToKnowledgeBase),
+                knowledgeBaseType: req.body?.knowledge_base_type || req.body?.knowledgeBaseType || 'markdown',
+                knowledgeWebhookUrl: req.body?.knowledge_webhook_url || req.body?.knowledgeWebhookUrl || null,
                 intervalMinutes: intervalMinutes || interval_minutes || checkIntervalMinutes || check_interval_minutes,
                 enabled: enabled !== undefined ? Boolean(enabled) : (isActive !== undefined ? Boolean(isActive) : (is_active !== undefined ? Boolean(is_active) : true))
             });
@@ -826,9 +830,295 @@ class AutofeedsController {
             return result;
         }
     }
+
+    /**
+     * GET /api/autofeeds/investigate
+     */
+    async investigateTopic(req, res) {
+        try {
+            const guildId = req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const topic = req.query?.topic || req.query?.q || req.query?.sujet || '';
+            const limit = parseInt(req.query?.limit, 10) || 6;
+            if (!topic) throw new Error('Paramètre "topic" obligatoire.');
+
+            const data = await this.service.investigateTopic({ guildId, topic, limit });
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/fact-check
+     */
+    async factCheckArticle(req, res) {
+        try {
+            const { url, title, content, history_id, historyId } = req.body || {};
+            const data = await this.service.analyzeArticleFactCheck({
+                url,
+                title,
+                content,
+                historyId: historyId || history_id
+            });
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/reminders
+     */
+    async createReminder(req, res) {
+        try {
+            const {
+                guild_id, guildId,
+                channel_id, channelId,
+                user_id, userId,
+                history_id, historyId,
+                release_date, releaseDate,
+                reminder_note, reminderNote,
+                title, item_title, itemTitle,
+                url, item_url, itemUrl,
+                feed_name, feedName
+            } = req.body || {};
+
+            const data = await this.service.addReleaseReminder({
+                guildId: guildId || guild_id || process.env.GUILD_ID || 'default',
+                channelId: channelId || channel_id || null,
+                userId: userId || user_id || req.user?.id || 'admin',
+                historyId: historyId || history_id || null,
+                releaseDate: releaseDate || release_date,
+                reminderNote: reminderNote || reminder_note || null,
+                feedName: feedName || feed_name || null,
+                itemTitle: itemTitle || item_title || title || 'Événement',
+                itemUrl: itemUrl || item_url || url || null
+            });
+
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * GET /api/autofeeds/reminders/:userId
+     */
+    async listReminders(req, res) {
+        try {
+            const userId = req.params?.userId || req.user?.id || 'admin';
+            const guildId = req.query?.guild_id || null;
+            const data = await this.service.getUserReleaseReminders(userId, guildId);
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * GET /api/autofeeds/trivia/generate
+     */
+    async generateTrivia(req, res) {
+        try {
+            const guildId = req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const xpReward = parseInt(req.query?.xp, 10) || 50;
+            const data = await this.service.generateWeeklyTriviaQuiz({ guildId, xpReward });
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/trivia/:id/answer
+     */
+    async answerTrivia(req, res) {
+        try {
+            const quizId = parseInt(req.params?.id, 10);
+            const userId = req.body?.user_id || req.body?.userId || req.user?.id || 'admin';
+            const selectedIndex = parseInt(req.body?.selected_index !== undefined ? req.body.selected_index : req.body?.selectedIndex, 10);
+            const guildId = req.body?.guild_id || req.body?.guildId || 'default';
+
+            const quiz = await this.service.triviaService.repository.getTriviaQuizById(quizId);
+            if (!quiz) throw new Error('Quiz introuvable.');
+
+            const already = await this.service.triviaService.repository.hasUserAnsweredTrivia(quizId, userId);
+            if (already) throw new Error('Vous avez déjà répondu à ce quiz.');
+
+            const isCorrect = selectedIndex === quiz.correctIndex;
+            const xpEarned = isCorrect ? (quiz.xpReward || 50) : 0;
+
+            await this.service.triviaService.repository.recordTriviaAnswer({
+                quizId,
+                userId,
+                guildId,
+                selectedIndex,
+                isCorrect,
+                xpEarned
+            });
+
+            const result = { success: true, ok: true, data: { isCorrect, xpEarned, correctIndex: quiz.correctIndex, explanation: quiz.explanation } };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * GET /api/autofeeds/predictions
+     */
+    async listPredictions(req, res) {
+        try {
+            const guildId = req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const status = req.query?.status || null;
+            const data = await this.service.predictionService.repository.listPredictions(guildId, status);
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/predictions
+     */
+    async createPrediction(req, res) {
+        try {
+            const guildId = req.body?.guild_id || req.body?.guildId || process.env.GUILD_ID || 'default';
+            const { title, description, options, source_url, sourceUrl, closes_at, closesAt } = req.body || {};
+            const createdBy = req.body?.created_by || req.body?.createdBy || req.user?.id || 'admin';
+
+            const data = await this.service.createPredictionMarket({
+                guildId,
+                title,
+                description,
+                options: Array.isArray(options) ? options : (typeof options === 'string' ? options.split(',').map(o => o.trim()).filter(Boolean) : ['OUI', 'NON']),
+                sourceUrl: sourceUrl || source_url || null,
+                closesAt: closesAt || closes_at || null,
+                createdBy
+            });
+
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/predictions/:id/bet
+     */
+    async betPrediction(req, res) {
+        try {
+            const predictionId = parseInt(req.params?.id, 10);
+            const userId = req.body?.user_id || req.body?.userId || req.user?.id || 'admin';
+            const optionIndex = parseInt(req.body?.option_index !== undefined ? req.body.option_index : req.body?.optionIndex, 10);
+            const amountXp = parseInt(req.body?.amount_xp !== undefined ? req.body.amount_xp : req.body?.amountXp, 10) || 10;
+            const guildId = req.body?.guild_id || req.body?.guildId || 'default';
+
+            const data = await this.service.placePredictionBet({
+                predictionId,
+                userId,
+                optionIndex,
+                amountXp,
+                guildId
+            });
+
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/predictions/:id/resolve
+     */
+    async resolvePrediction(req, res) {
+        try {
+            const predictionId = parseInt(req.params?.id, 10);
+            const winningOptionIndex = parseInt(req.body?.winning_option_index !== undefined ? req.body.winning_option_index : req.body?.winningOptionIndex, 10);
+            const resolvedBy = req.body?.resolved_by || req.body?.resolvedBy || req.user?.id || 'admin';
+
+            const data = await this.service.resolvePredictionMarket({
+                predictionId,
+                winningOptionIndex,
+                resolvedBy
+            });
+
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/knowledge/export
+     */
+    async exportKnowledge(req, res) {
+        try {
+            const { item, feed } = req.body || {};
+            if (!item) throw new Error('Objet "item" obligatoire.');
+            const markdown = this.service.formatKnowledgeMarkdown(item, feed || {});
+            const result = { success: true, ok: true, data: { markdown } };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
 }
 
 Controller('/api/autofeeds')(AutofeedsController);
+Get('/investigate')(AutofeedsController.prototype, 'investigateTopic');
+Post('/fact-check')(AutofeedsController.prototype, 'factCheckArticle');
+Post('/reminders')(AutofeedsController.prototype, 'createReminder');
+Get('/reminders/:userId')(AutofeedsController.prototype, 'listReminders');
+Get('/trivia/generate')(AutofeedsController.prototype, 'generateTrivia');
+Post('/trivia/:id/answer')(AutofeedsController.prototype, 'answerTrivia');
+Get('/predictions')(AutofeedsController.prototype, 'listPredictions');
+Post('/predictions')(AutofeedsController.prototype, 'createPrediction');
+Post('/predictions/:id/bet')(AutofeedsController.prototype, 'betPrediction');
+Post('/predictions/:id/resolve')(AutofeedsController.prototype, 'resolvePrediction');
+Post('/knowledge/export')(AutofeedsController.prototype, 'exportKnowledge');
 Get('/stats')(AutofeedsController.prototype, 'getStats');
 Get('/search')(AutofeedsController.prototype, 'searchItems');
 Get('/reader')(AutofeedsController.prototype, 'getReaderArticle');

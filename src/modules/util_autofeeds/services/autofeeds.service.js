@@ -27,6 +27,12 @@ const { AutofeedsReaderService, autofeedsReaderService } = require('./autofeeds-
 const { AutofeedsQaService, autofeedsQaService } = require('./autofeeds-qa.service.js');
 const { AutofeedsYouTubeSummaryService, autofeedsYouTubeSummaryService } = require('./autofeeds-youtube-summary.service.js');
 const { AutofeedsUserDigestService, autofeedsUserDigestService } = require('./autofeeds-user-digest.service.js');
+const { AutofeedsReminderService, autofeedsReminderService } = require('./autofeeds-reminder.service.js');
+const { AutofeedsInvestigationService, autofeedsInvestigationService } = require('./autofeeds-investigation.service.js');
+const { AutofeedsSmartTagService, autofeedsSmartTagService } = require('./autofeeds-smart-tag.service.js');
+const { AutofeedsKnowledgeService, autofeedsKnowledgeService } = require('./autofeeds-knowledge.service.js');
+const { AutofeedsTriviaService, autofeedsTriviaService } = require('./autofeeds-trivia.service.js');
+const { AutofeedsPredictionService, autofeedsPredictionService } = require('./autofeeds-prediction.service.js');
 const { communityVotingService } = require('../../../services/community-voting.service.js');
 const { providerRegistry } = require('./providers/provider-registry.js');
 const { PRESETS } = require('../config/presets.js');
@@ -69,7 +75,13 @@ class AutofeedsService {
         votingService = communityVotingService,
         qaService = autofeedsQaService,
         ytSummaryService = autofeedsYouTubeSummaryService,
-        userDigestService = autofeedsUserDigestService
+        userDigestService = autofeedsUserDigestService,
+        reminderService = autofeedsReminderService,
+        investigationService = autofeedsInvestigationService,
+        smartTagService = autofeedsSmartTagService,
+        knowledgeService = autofeedsKnowledgeService,
+        triviaService = autofeedsTriviaService,
+        predictionService = autofeedsPredictionService
     ) {
         this.repo = repo;
         this.subService = subService;
@@ -95,6 +107,12 @@ class AutofeedsService {
         if (this.userDigestService && (!this.userDigestService.repository || this.userDigestService.repository !== this.repo)) {
             this.userDigestService.repository = this.repo || this.userDigestService.repository || autofeedsRepository;
         }
+        this.reminderService = reminderService;
+        this.investigationService = investigationService;
+        this.smartTagService = smartTagService;
+        this.knowledgeService = knowledgeService;
+        this.triviaService = triviaService;
+        this.predictionService = predictionService;
         this._intervalTimer = null;
         this._client = null;
 
@@ -166,6 +184,10 @@ class AutofeedsService {
         enableStoryClustering = false,
         clusterMode = 'merge',
         enableVideoSummary = false,
+        autoSmartTag = false,
+        syncToKnowledgeBase = false,
+        knowledgeBaseType = 'markdown',
+        knowledgeWebhookUrl = null,
         intervalMinutes = 15
     }) {
         if (!guildId || !channelId || !feedUrl) {
@@ -266,6 +288,10 @@ class AutofeedsService {
             enableStoryClustering,
             clusterMode,
             enableVideoSummary,
+            autoSmartTag,
+            syncToKnowledgeBase,
+            knowledgeBaseType,
+            knowledgeWebhookUrl,
             intervalMinutes: resolvedInterval
         });
 
@@ -579,8 +605,24 @@ class AutofeedsService {
             );
         }
 
+        if (this.investigationService && aiRow.components.length < 5) {
+            aiRow.addComponents(this.investigationService.createFactCheckButton(itemId));
+        }
+
         if (aiRow.components.length > 0) {
             rows.push(aiRow);
+        }
+
+        // ActionRow d'outils (Rappel sortie J, Archivage Wiki / Notion / Obsidian)
+        const toolsRow = new ActionRowBuilder();
+        if (this.reminderService) {
+            toolsRow.addComponents(this.reminderService.createReminderButton(itemId));
+        }
+        if (this.knowledgeService) {
+            toolsRow.addComponents(this.knowledgeService.createWikiButton(itemId));
+        }
+        if (toolsRow.components.length > 0) {
+            rows.push(toolsRow);
         }
 
         if (feed.enableVoting && this.votingService) {
@@ -872,6 +914,30 @@ class AutofeedsService {
                             }
                         }
 
+                        // Smart Tagging & Taxonomie IA Automatique (Zéro-Config)
+                        if (feed.autoSmartTag && this.smartTagService) {
+                            try {
+                                item.tags = await this.smartTagService.deriveTags(item, item.tags || []);
+                            } catch (tagErr) {
+                                logger.warn(`[AutofeedsSmartTag] Échec autoSmartTag: ${tagErr.message}`, 'AUTOFEEDS');
+                            }
+                        }
+
+                        // Détection automatique de date de sortie pour rappels
+                        if (this.reminderService) {
+                            const detectedDate = this.reminderService.detectReleaseDate(`${item.title} ${item.content || ''}`);
+                            if (detectedDate) {
+                                item.extra = { ...(item.extra || {}), releaseDate: detectedDate };
+                            }
+                        }
+
+                        // Synchronisation automatique vers Base de Connaissances (Wiki / Obsidian / Notion)
+                        if (feed.syncToKnowledgeBase && this.knowledgeService) {
+                            this.knowledgeService.syncToKnowledgeBase(feed, item).catch(wErr => {
+                                logger.warn(`[AutofeedsKnowledge] Échec push auto wiki: ${wErr.message}`, 'AUTOFEEDS');
+                            });
+                        }
+
                         // Salle d'attente de modération & Validation Manuelle
                         if (feed.requireApproval && feed.moderationChannelId) {
                             const modChan = client.channels.cache?.get(feed.moderationChannelId)
@@ -1040,7 +1106,8 @@ class AutofeedsService {
                             itemContent: item.contentSnippet,
                             tags: item.tags,
                             isDigest: false,
-                            sentimentScore: item.extra?.sentiment?.score != null ? String(item.extra.sentiment.score) : null
+                            sentimentScore: item.extra?.sentiment?.score != null ? String(item.extra.sentiment.score) : null,
+                            releaseDate: item.extra?.releaseDate || null
                         });
                     }
                 }
@@ -1721,6 +1788,86 @@ class AutofeedsService {
         return this.ytSummaryService.summarizeVideo({ url, videoId, title, description });
     }
 
+    /**
+     * Méta-enquête et frise chronologique (/feed investigate).
+     */
+    async investigateTopic({ guildId, topic, limit = 8 }) {
+        if (!this.investigationService) throw new Error('Service Investigation indisponible.');
+        return this.investigationService.investigateTopic({ guildId, topic, limit });
+    }
+
+    /**
+     * Analyse critique et fact-check d'un article.
+     */
+    async analyzeArticleFactCheck({ url = null, title = null, content = null, historyId = null }) {
+        if (!this.investigationService) throw new Error('Service Investigation indisponible.');
+        return this.investigationService.analyzeArticleBalanceAndReliability({ url, title, content, historyId });
+    }
+
+    /**
+     * Enregistre un rappel personnel de date de sortie.
+     */
+    async addReleaseReminder({ guildId, channelId = null, userId, historyId = null, releaseDate, reminderNote = null, feedName = null, itemTitle = null, itemUrl = null }) {
+        if (!this.reminderService) throw new Error('Service Rappels indisponible.');
+        return this.reminderService.addReminder({ guildId, channelId, userId, historyId, releaseDate, reminderNote, feedName, itemTitle, itemUrl });
+    }
+
+    /**
+     * Liste les rappels personnels d'un utilisateur.
+     */
+    async getUserReleaseReminders(userId, guildId = null) {
+        if (!this.reminderService) throw new Error('Service Rappels indisponible.');
+        return this.reminderService.getUserReminders(userId, guildId);
+    }
+
+    /**
+     * Génère un quiz d'actualités hebdomadaire.
+     */
+    async generateWeeklyTriviaQuiz({ guildId, channelId = null, xpReward = 50 }) {
+        if (!this.triviaService) throw new Error('Service Trivia indisponible.');
+        return this.triviaService.generateWeeklyQuiz({ guildId, channelId, xpReward });
+    }
+
+    /**
+     * Crée un marché de prédiction communautaire en XP.
+     */
+    async createPredictionMarket({ guildId, channelId = null, title, description = null, options = ['OUI', 'NON'], sourceUrl = null, closesAt = null, createdBy = null }) {
+        if (!this.predictionService) throw new Error('Service Prédictions indisponible.');
+        return this.predictionService.createMarket({ guildId, channelId, title, description, options, sourceUrl, closesAt, createdBy });
+    }
+
+    /**
+     * Place une mise sur un marché de prédiction.
+     */
+    async placePredictionBet({ predictionId, userId, optionIndex, amountXp = 10, guildId = 'dm' }) {
+        if (!this.predictionService) throw new Error('Service Prédictions indisponible.');
+        return this.predictionService.placeBet({ predictionId, userId, optionIndex, amountXp, guildId });
+    }
+
+    /**
+     * Résout un marché de prédiction et paie les gains.
+     */
+    async resolvePredictionMarket({ predictionId, winningOptionIndex, resolvedBy = null }) {
+        if (!this.predictionService) throw new Error('Service Prédictions indisponible.');
+        return this.predictionService.resolveMarket({ predictionId, winningOptionIndex, resolvedBy });
+    }
+
+    /**
+     * Formate un article en Markdown Obsidian.
+     */
+    formatKnowledgeMarkdown(item, feed = {}) {
+        if (!this.knowledgeService) throw new Error('Service Knowledge indisponible.');
+        return this.knowledgeService.formatObsidianMarkdown(item, feed);
+    }
+
+    /**
+     * Déduit les tags canoniques pour un article.
+     */
+    async deriveSmartTags(item, existingTags = []) {
+        if (!this.smartTagService) return existingTags || [];
+        return this.smartTagService.deriveTags(item, existingTags);
+    }
+
     start(client) {
         this._client = client;
         if (this.purgeService && typeof this.purgeService.setClient === 'function') {
@@ -1730,6 +1877,7 @@ class AutofeedsService {
         this._intervalTimer = setInterval(() => {
             this.pollFeeds(client).catch(() => {});
             this.userDigestService?.processDueDigests(client).catch(() => {});
+            this.reminderService?.processDueReminders(client).catch(() => {});
         }, 60 * 1000); // Scrutation par minute avec contrôle des intervalles individuels
     }
 
