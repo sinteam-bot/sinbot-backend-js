@@ -9,16 +9,34 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { Injectable } = require('../../../core/index.js');
 const { AutofeedsRepository } = require('./autofeeds.repository.js');
 const { AutofeedsSubscriptionService } = require('./autofeeds-subscription.service.js');
+const { AutofeedsWebhookService } = require('./autofeeds-webhook.service.js');
+const { AutofeedsAiService } = require('./autofeeds-ai.service.js');
+const { AutofeedsOpmlService } = require('./autofeeds-opml.service.js');
 const { providerRegistry } = require('./providers/provider-registry.js');
 const { PRESETS } = require('../config/presets.js');
 const logger = require('../../../utils/logger.js');
 
 class AutofeedsService {
-    static inject = [AutofeedsRepository, AutofeedsSubscriptionService];
+    static inject = [
+        AutofeedsRepository,
+        AutofeedsSubscriptionService,
+        AutofeedsWebhookService,
+        AutofeedsAiService,
+        AutofeedsOpmlService
+    ];
 
-    constructor(repo, subService) {
+    constructor(
+        repo,
+        subService,
+        webhookService = new AutofeedsWebhookService(),
+        aiService = new AutofeedsAiService(),
+        opmlService = new AutofeedsOpmlService()
+    ) {
         this.repo = repo;
         this.subService = subService;
+        this.webhookService = webhookService;
+        this.aiService = aiService;
+        this.opmlService = opmlService;
         this._intervalTimer = null;
         this._client = null;
     }
@@ -50,6 +68,11 @@ class AutofeedsService {
         notificationDelivery = 'channel',
         createThread = false,
         threadAutoArchiveDuration = 1440,
+        useWebhook = true,
+        enableMediaProxy = true,
+        ignoreShorts = false,
+        aiSummary = false,
+        aiTranslate = null,
         intervalMinutes = 15
     }) {
         if (!guildId || !channelId || !feedUrl) {
@@ -112,6 +135,11 @@ class AutofeedsService {
             notificationDelivery,
             createThread,
             threadAutoArchiveDuration,
+            useWebhook,
+            enableMediaProxy,
+            ignoreShorts,
+            aiSummary,
+            aiTranslate,
             intervalMinutes: resolvedInterval
         });
 
@@ -164,6 +192,74 @@ class AutofeedsService {
     }
 
     /**
+     * Convertit une URL Twitter/TikTok en passerelle média directe si activé.
+     */
+    getProxiedMediaLink(url) {
+        if (!url || typeof url !== 'string') return url;
+
+        if (url.match(/https?:\/\/(?:www\.)?(?:twitter|x)\.com/i)) {
+            return url.replace(/https?:\/\/(?:www\.)?(?:twitter|x)\.com/i, 'https://fxtwitter.com');
+        }
+        if (url.match(/https?:\/\/vm\.tiktok\.com/i)) {
+            return url.replace(/https?:\/\/vm\.tiktok\.com/i, 'https://vm.vxtiktok.com');
+        }
+        if (url.match(/https?:\/\/(?:www\.)?tiktok\.com/i)) {
+            return url.replace(/https?:\/\/(?:www\.)?tiktok\.com/i, 'https://vxtiktok.com');
+        }
+        return url;
+    }
+
+    /**
+     * Importe un fichier OPML pour une guilde dans un salon cible.
+     */
+    async importOpml(arg1, maybeChannelId, maybeOpmlXml) {
+        let guildId, channelId, opmlXml;
+        if (arg1 && typeof arg1 === 'object') {
+            guildId = arg1.guildId;
+            channelId = arg1.channelId;
+            opmlXml = arg1.opmlXml;
+        } else {
+            guildId = arg1;
+            channelId = maybeChannelId;
+            opmlXml = maybeOpmlXml;
+        }
+
+        const parsed = await this.opmlService.parseOpml(opmlXml);
+        const imported = [];
+        const errors = [];
+
+        for (const item of parsed) {
+            try {
+                const res = await this.addFeed({
+                    guildId,
+                    channelId,
+                    feedUrl: item.feedUrl || item.xmlUrl,
+                    name: item.name || item.title,
+                    category: item.category,
+                    tags: item.tags
+                });
+                if (res.ok) {
+                    imported.push(res.data);
+                } else {
+                    errors.push({ feedUrl: item.feedUrl || item.xmlUrl, error: res.error });
+                }
+            } catch (err) {
+                errors.push({ feedUrl: item.feedUrl || item.xmlUrl, error: err.message });
+            }
+        }
+
+        return { ok: true, importedCount: imported.length, imported, errors };
+    }
+
+    /**
+     * Exporte les flux d'une guilde au format XML OPML standard.
+     */
+    async exportOpml(guildId, guildName = 'Serveur Discord') {
+        const feeds = await this.repo.listByGuild(guildId);
+        return this.opmlService.generateOpml(feeds, guildName);
+    }
+
+    /**
      * Génère l'embed Discord riche pour un article de flux.
      */
     buildDiscordEmbed(feed, item) {
@@ -210,6 +306,13 @@ class AutofeedsService {
         }
         if (item.extra?.viewers != null) {
             fields.push({ name: '👥 Spectateurs', value: `\`${Number(item.extra.viewers).toLocaleString('fr-FR')}\``, inline: true });
+        }
+
+        if (item.extra?.aiSummary) {
+            fields.unshift({ name: '💡 Résumé IA (TL;DR)', value: item.extra.aiSummary.slice(0, 1024), inline: false });
+        }
+        if (item.extra?.aiTranslation?.description) {
+            fields.unshift({ name: '🇫🇷 Traduction', value: item.extra.aiTranslation.description.slice(0, 1024), inline: false });
         }
 
         if (fields.length > 0) {
@@ -268,6 +371,19 @@ class AutofeedsService {
         return row.components.length > 0 ? row : null;
     }
 
+    _filterItems(feed, items = []) {
+        const provider = providerRegistry.get(feed.feedType || 'rss') || providerRegistry.get('rss');
+        return items.filter(it => {
+            if (feed.ignoreShorts && (feed.feedType === 'youtube' || feed.feedType === 'youtube_live')) {
+                const yt = providerRegistry.get('youtube');
+                if (yt && typeof yt.isShort === 'function' && yt.isShort(it)) {
+                    return false;
+                }
+            }
+            return provider ? provider.matchesFilters(it, feed.filters) : true;
+        });
+    }
+
     /**
      * Analyse et publie les nouveaux articles d'un flux spécifique.
      */
@@ -305,8 +421,8 @@ class AutofeedsService {
                 return;
             }
 
-            // Filtrer par filtres de mots-clés
-            const filteredItems = items.filter(it => provider.matchesFilters(it, feed.filters));
+            // Filtrer par filtres de mots-clés et shorts
+            const filteredItems = this._filterItems(feed, items);
 
             // Filtrer les nouveaux articles : date plus récente et pas encore présent dans l'historique
             const newItems = [];
@@ -337,8 +453,26 @@ class AutofeedsService {
                 const channel = client.channels.cache?.get(feed.channelId) 
                     || (client.channels.fetch ? await client.channels.fetch(feed.channelId).catch(() => null) : null);
 
-                if (channel && channel.send) {
+                if (channel && (channel.send || channel.threads?.create)) {
                     for (const item of toPost) {
+                        // Enrichissement IA si configuré
+                        if (feed.aiSummary && this.aiService) {
+                            const summary = await this.aiService.generateSummary(item);
+                            if (summary) item.extra = { ...(item.extra || {}), aiSummary: summary };
+                        }
+                        if (feed.aiTranslate && this.aiService) {
+                            const trans = await this.aiService.translateItem(item, feed.aiTranslate);
+                            if (trans) item.extra = { ...(item.extra || {}), aiTranslation: trans };
+                        }
+
+                        // Media proxy (fxtwitter / vxtiktok)
+                        if (feed.enableMediaProxy !== false && item.link) {
+                            const proxied = this.getProxiedMediaLink(item.link);
+                            if (proxied !== item.link) {
+                                item.extra = { ...(item.extra || {}), proxiedLink: proxied };
+                            }
+                        }
+
                         const embed = this.buildDiscordEmbed(feed, item);
                         const actionRow = this.buildActionRow(feed, item);
 
@@ -366,6 +500,11 @@ class AutofeedsService {
                             messageContent = `🔔 ${pings.join(' ')}`;
                         }
 
+                        // Si lien média proxied (vidéo Twitter/TikTok), l'ajouter au texte pour rendu player Discord
+                        if (feed.enableMediaProxy !== false && item.extra?.proxiedLink && !messageContent.includes(item.extra.proxiedLink)) {
+                            messageContent = messageContent ? `${messageContent}\n${item.extra.proxiedLink}` : item.extra.proxiedLink;
+                        }
+
                         const sendPayload = {
                             embeds: [embed]
                         };
@@ -376,10 +515,37 @@ class AutofeedsService {
                             sendPayload.components = [actionRow];
                         }
 
-                        // Envoi dans le salon Discord
-                        await channel.send(sendPayload).catch(err => {
-                            logger.warn(`[Autofeeds] Erreur envoi channel ${feed.channelId}: ${err.message}`, 'AUTOFEEDS');
-                        });
+                        // Envoi : Forum Discord ou Salon textuel (avec tentative Webhook personnalisé)
+                        const isForum = Boolean(channel.isThreadOnly?.() || channel.type === 15);
+                        if (isForum && channel.threads?.create) {
+                            const postName = (item.title || feed.name || 'Nouvel article').slice(0, 95);
+                            const appliedTags = [];
+                            if (channel.availableTags && Array.isArray(channel.availableTags)) {
+                                const allTags = [...(feed.tags || []), ...(item.tags || []), feed.category].map(t => t?.toLowerCase());
+                                for (const t of channel.availableTags) {
+                                    if (allTags.includes(t.name.toLowerCase())) {
+                                        appliedTags.push(t.id);
+                                    }
+                                }
+                            }
+                            await channel.threads.create({
+                                name: postName,
+                                message: sendPayload,
+                                appliedTags: appliedTags.slice(0, 5)
+                            }).catch(err => {
+                                logger.warn(`[Autofeeds] Erreur post forum ${feed.channelId}: ${err.message}`, 'AUTOFEEDS');
+                            });
+                        } else {
+                            let sent = false;
+                            if (feed.useWebhook !== false && this.webhookService) {
+                                sent = await this.webhookService.sendViaWebhook(channel, client, sendPayload, feed, item);
+                            }
+                            if (!sent && channel.send) {
+                                await channel.send(sendPayload).catch(err => {
+                                    logger.warn(`[Autofeeds] Erreur envoi channel ${feed.channelId}: ${err.message}`, 'AUTOFEEDS');
+                                });
+                            }
+                        }
 
                         // Envoi des notifications privées en DM
                         if (dmUserIds.length > 0) {

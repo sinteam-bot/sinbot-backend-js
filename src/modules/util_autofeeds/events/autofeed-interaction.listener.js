@@ -18,6 +18,57 @@ class AutofeedInteractionListener {
     }
 
     async handle(interaction) {
+        // Cas 0 : Menu déroulant interactif de sélection d'abonnements
+        if (interaction.isStringSelectMenu?.()) {
+            const customId = interaction.customId || '';
+            if (customId === 'autofeed:select_menu') {
+                const selectedFeedIds = interaction.values || [];
+                const guildId = interaction.guildId || 'default';
+                const userId = interaction.user.id;
+
+                try {
+                    let addedCount = 0;
+                    for (const feedId of selectedFeedIds) {
+                        const feed = await this.feedService.getFeed(feedId);
+                        if (feed) {
+                            await this.subService.subscribe({
+                                guildId,
+                                userId,
+                                targetType: 'feed',
+                                targetValue: feedId,
+                                notifyMode: 'mention'
+                            });
+
+                            if (feed.subscriberRoleId && interaction.member?.roles?.add) {
+                                try {
+                                    await interaction.member.roles.add(feed.subscriberRoleId);
+                                } catch (roleErr) {
+                                    logger.warn(`[AutofeedInteraction] Impossible d'attribuer le rôle ${feed.subscriberRoleId}: ${roleErr.message}`, 'AUTOFEEDS');
+                                }
+                            }
+                            addedCount++;
+                        }
+                    }
+
+                    if (addedCount === 0) {
+                        return interaction.reply({
+                            content: 'ℹ️ Aucun flux valide sélectionné ou flux introuvables.',
+                            ephemeral: true
+                        });
+                    }
+
+                    return interaction.reply({
+                        content: `✅ Vous êtes désormais abonné à **${addedCount}** flux !\nVous recevrez des alertes lors des nouvelles publications.`,
+                        ephemeral: true
+                    });
+                } catch (err) {
+                    logger.warn(`[AutofeedInteraction] Erreur menu select: ${err.message}`, 'AUTOFEEDS');
+                    return interaction.reply({ content: '❌ Erreur lors de l\'enregistrement de vos abonnements.', ephemeral: true });
+                }
+            }
+            return;
+        }
+
         if (!interaction.isButton()) return;
         const customId = interaction.customId || '';
 

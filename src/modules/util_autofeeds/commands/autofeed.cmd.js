@@ -11,7 +11,9 @@ const {
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder
 } = require('discord.js');
 const { Command } = require('../../../core/index.js');
 const { AutofeedsService } = require('../services/autofeeds.service.js');
@@ -355,6 +357,66 @@ class AutofeedCommands {
         return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
+    async executeMenu(interaction) {
+        const guildId = interaction.guild?.id || 'default';
+        const feeds = await this.service.listFeeds(guildId);
+        const activeFeeds = feeds.filter(f => f.enabled !== false);
+
+        if (activeFeeds.length === 0) {
+            return interaction.reply({
+                content: 'ℹ️ Aucun flux actif disponible sur ce serveur pour le moment.',
+                ephemeral: true
+            });
+        }
+
+        // Discord Select Menu supports max 25 items
+        const menuOptions = activeFeeds.slice(0, 25).map(f => {
+            const label = (f.name || f.feedType || 'Flux').slice(0, 100);
+            let description = (f.category ? `Catégorie: ${f.category}` : (f.feedUrl || '')).slice(0, 100);
+            if (!description) description = 'Flux RSS';
+
+            let emoji = '📰';
+            if (f.feedType === 'twitch') emoji = '🟣';
+            else if (f.feedType === 'kick') emoji = '🟢';
+            else if (f.feedType === 'youtube') emoji = '🔴';
+            else if (f.feedType === 'reddit') emoji = '🟠';
+            else if (f.feedType === 'bluesky') emoji = '🦋';
+            else if (f.feedType === 'twitter') emoji = '🐦';
+            else if (f.category === 'deals' || f.category === 'gaming') emoji = '🎮';
+
+            return {
+                label,
+                description,
+                value: f.id,
+                emoji
+            };
+        });
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('autofeed:select_menu')
+            .setPlaceholder('Sélectionnez les flux à suivre...')
+            .setMinValues(1)
+            .setMaxValues(menuOptions.length)
+            .addOptions(menuOptions);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle('📬 Menu Interactif d\'Abonnements')
+            .setDescription(
+                'Sélectionnez ci-dessous les flux d\'actualités, créateurs ou notifications que vous souhaitez suivre personnellement sur ce serveur.\n\n' +
+                '✨ *Vos préférences seront instantanément enregistrées !*'
+            )
+            .setFooter({ text: 'Vous pouvez modifier vos abonnements à tout moment avec ce menu ou /feed unsubscribe.' });
+
+        return interaction.reply({
+            embeds: [embed],
+            components: [row],
+            ephemeral: true
+        });
+    }
+
     // ==========================================
     // POINT D'ENTRÉE DU ROUTEUR COMMANDES
     // ==========================================
@@ -364,6 +426,7 @@ class AutofeedCommands {
         switch (sub) {
             case 'add':              return this.executeAdd(interaction);
             case 'list':             return this.executeList(interaction);
+            case 'menu':             return this.executeMenu(interaction);
             case 'streamers':        return this.executeStreamers(interaction);
             case 'presets':          return this.executePresets(interaction);
             case 'delete':           return this.executeDelete(interaction);
@@ -397,6 +460,10 @@ const feedBuilder = new SlashCommandBuilder()
     .addSubcommand(sub =>
         sub.setName('list')
             .setDescription('Lister tous les flux configurés sur le serveur')
+    )
+    .addSubcommand(sub =>
+        sub.setName('menu')
+            .setDescription('Afficher le menu déroulant interactif d\'abonnements aux flux')
     )
     .addSubcommand(sub =>
         sub.setName('streamers')
@@ -462,6 +529,10 @@ const autofeedBuilder = new SlashCommandBuilder()
             .addIntegerOption(o => o.setName('intervalle_minutes').setDescription('Intervalle en minutes').setRequired(false))
     )
     .addSubcommand(sub => sub.setName('list').setDescription('Lister les flux'))
+    .addSubcommand(sub =>
+        sub.setName('menu')
+            .setDescription('Afficher le menu déroulant interactif d\'abonnements aux flux')
+    )
     .addSubcommand(sub =>
         sub.setName('delete')
             .setDescription('Supprimer un flux')

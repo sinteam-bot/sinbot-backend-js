@@ -78,25 +78,46 @@ class YouTubeFeedProvider extends BaseFeedProvider {
         return null;
     }
 
+    isShort(item) {
+        if (!item) return false;
+        if (item.extra?.isShort !== undefined) return Boolean(item.extra.isShort);
+        const title = (item.title || '').toLowerCase();
+        const content = (item.content || '').toLowerCase();
+        const link = (item.link || '').toLowerCase();
+        return title.includes('#shorts') || content.includes('#shorts') || link.includes('/shorts/');
+    }
+
     async fetchItems(feed) {
         const rawItems = await this.rssProvider.fetchItems(feed);
 
-        return rawItems.map(item => {
+        const items = rawItems.map(item => {
             const videoId = this.extractVideoId(item.link, item.id);
             const videoUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : item.link;
             const thumbnailUrl = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : item.imageUrl;
+            const isShort = (item.title || '').toLowerCase().includes('#shorts') ||
+                (item.content || '').toLowerCase().includes('#shorts') ||
+                (item.link || '').includes('/shorts/');
+
+            const tags = Array.from(new Set([...(item.tags || []), 'youtube', 'video', ...(isShort ? ['shorts'] : [])]));
 
             return {
                 ...item,
                 link: videoUrl,
                 imageUrl: thumbnailUrl,
-                tags: Array.from(new Set([...(item.tags || []), 'youtube', 'video'])),
+                tags,
                 extra: {
                     ...item.extra,
-                    videoId
+                    videoId,
+                    isShort
                 }
             };
         });
+
+        if (feed.ignoreShorts) {
+            return items.filter(i => !i.extra?.isShort);
+        }
+
+        return items;
     }
 }
 

@@ -10,6 +10,24 @@ const crypto = require('crypto');
 function newId() { return crypto.randomUUID(); }
 
 class StarboardRepository {
+    async initSchema() {
+        await db.pool.query(`
+            CREATE TABLE IF NOT EXISTS "starboard_entries" (
+                "id" text PRIMARY KEY NOT NULL,
+                "guild_id" text NOT NULL,
+                "source_channel_id" text NOT NULL,
+                "source_message_id" text NOT NULL,
+                "starboard_message_id" text,
+                "author_id" text NOT NULL,
+                "reaction_count" integer DEFAULT 0 NOT NULL,
+                "starred_users" text DEFAULT '[]' NOT NULL,
+                "created_at" bigint NOT NULL,
+                "updated_at" bigint NOT NULL,
+                CONSTRAINT "starboard_entries_guild_source_unique" UNIQUE("guild_id","source_message_id")
+            );
+        `);
+    }
+
     async getEntry(guildId, sourceMessageId) {
         const res = await db.pool.query(
             `SELECT * FROM starboard_entries WHERE guild_id = $1 AND source_message_id = $2 LIMIT 1`,
@@ -39,7 +57,7 @@ class StarboardRepository {
                 [
                     next.starboardMessageId || null,
                     next.reactionCount || 0,
-                    next.starredUsers ? JSON.stringify(next.starredUsers) : null,
+                    JSON.stringify(next.starredUsers || []),
                     now,
                     existing.id
                 ]
@@ -49,7 +67,7 @@ class StarboardRepository {
 
         const id = entry.id || newId();
         const reactionCount = entry.reactionCount || 0;
-        const starredUsers = entry.starredUsers ? JSON.stringify(entry.starredUsers) : null;
+        const starredUsers = JSON.stringify(entry.starredUsers || []);
 
         await db.pool.query(
             `INSERT INTO starboard_entries 

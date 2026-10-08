@@ -98,6 +98,11 @@ class AutofeedsController {
                 notificationDelivery: req.body?.notification_delivery || req.body?.notificationDelivery || 'channel',
                 createThread: req.body?.create_thread !== undefined ? Boolean(req.body.create_thread) : Boolean(req.body?.createThread),
                 threadAutoArchiveDuration: req.body?.thread_auto_archive_duration || req.body?.threadAutoArchiveDuration || 1440,
+                useWebhook: req.body?.use_webhook !== undefined ? Boolean(req.body.use_webhook) : (req.body?.useWebhook !== undefined ? Boolean(req.body.useWebhook) : true),
+                enableMediaProxy: req.body?.enable_media_proxy !== undefined ? Boolean(req.body.enable_media_proxy) : (req.body?.enableMediaProxy !== undefined ? Boolean(req.body.enableMediaProxy) : true),
+                ignoreShorts: req.body?.ignore_shorts !== undefined ? Boolean(req.body.ignore_shorts) : Boolean(req.body?.ignoreShorts),
+                aiSummary: req.body?.ai_summary !== undefined ? Boolean(req.body.ai_summary) : Boolean(req.body?.aiSummary),
+                aiTranslate: req.body?.ai_translate !== undefined ? req.body.ai_translate : (req.body?.aiTranslate || null),
                 intervalMinutes: intervalMinutes || interval_minutes || checkIntervalMinutes || check_interval_minutes,
                 enabled: enabled !== undefined ? Boolean(enabled) : (isActive !== undefined ? Boolean(isActive) : (is_active !== undefined ? Boolean(is_active) : true))
             });
@@ -275,6 +280,11 @@ class AutofeedsController {
                 notificationDelivery: patch.notification_delivery !== undefined ? patch.notification_delivery : patch.notificationDelivery,
                 createThread: patch.create_thread !== undefined ? Boolean(patch.create_thread) : (patch.createThread !== undefined ? Boolean(patch.createThread) : undefined),
                 threadAutoArchiveDuration: patch.thread_auto_archive_duration !== undefined ? Number(patch.thread_auto_archive_duration) : patch.threadAutoArchiveDuration,
+                useWebhook: patch.use_webhook !== undefined ? Boolean(patch.use_webhook) : (patch.useWebhook !== undefined ? Boolean(patch.useWebhook) : undefined),
+                enableMediaProxy: patch.enable_media_proxy !== undefined ? Boolean(patch.enable_media_proxy) : (patch.enableMediaProxy !== undefined ? Boolean(patch.enableMediaProxy) : undefined),
+                ignoreShorts: patch.ignore_shorts !== undefined ? Boolean(patch.ignore_shorts) : (patch.ignoreShorts !== undefined ? Boolean(patch.ignoreShorts) : undefined),
+                aiSummary: patch.ai_summary !== undefined ? Boolean(patch.ai_summary) : (patch.aiSummary !== undefined ? Boolean(patch.aiSummary) : undefined),
+                aiTranslate: patch.ai_translate !== undefined ? patch.ai_translate : patch.aiTranslate,
                 intervalMinutes: patch.interval_minutes || patch.intervalMinutes || patch.check_interval_minutes || patch.checkIntervalMinutes,
                 enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : (patch.isActive !== undefined ? Boolean(patch.isActive) : (patch.is_active !== undefined ? Boolean(patch.is_active) : undefined))
             });
@@ -373,6 +383,50 @@ class AutofeedsController {
     }
 
     /**
+     * POST /api/autofeeds/opml/import
+     */
+    async importOpml(req, res) {
+        try {
+            const guildId = req.body?.guild_id || req.body?.guildId || process.env.GUILD_ID || 'default';
+            const channelId = req.body?.channel_id || req.body?.channelId;
+            const opmlXml = req.body?.opmlXml || req.body?.opml || req.body?.xml || (typeof req.body === 'string' ? req.body : null);
+
+            if (!channelId || !opmlXml) {
+                const errResult = { success: false, ok: false, error: 'Salon Discord (channel_id) et contenu OPML requis.' };
+                if (res && typeof res.json === 'function') return res.json(errResult);
+                return errResult;
+            }
+
+            const importRes = await this.service.importOpml(guildId, channelId, opmlXml);
+            const okResult = { success: true, ok: true, data: importRes };
+            if (res && typeof res.json === 'function') return res.json(okResult);
+            return okResult;
+        } catch (err) {
+            const errResult = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') return res.json(errResult);
+            return errResult;
+        }
+    }
+
+    /**
+     * GET /api/autofeeds/opml/export
+     */
+    async exportOpml(req, res) {
+        try {
+            const guildId = req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const xml = await this.service.exportOpml(guildId);
+            if (res && typeof res.setHeader === 'function') {
+                res.setHeader('Content-Type', 'text/xml');
+                res.setHeader('Content-Disposition', 'attachment; filename="autofeeds.opml"');
+                return res.send ? res.send(xml) : xml;
+            }
+            return { success: true, ok: true, data: { xml } };
+        } catch (err) {
+            return { success: false, ok: false, error: err.message };
+        }
+    }
+
+    /**
      * POST /api/autofeeds/webhooks/youtube
      * YouTube WebSub Notification Ingestion
      */
@@ -394,6 +448,8 @@ Get('/providers')(AutofeedsController.prototype, 'getProviders');
 Get('/subscriptions')(AutofeedsController.prototype, 'listSubscriptions');
 Post('/subscriptions')(AutofeedsController.prototype, 'createSubscription');
 Delete('/subscriptions/:id')(AutofeedsController.prototype, 'deleteSubscription');
+Post('/opml/import')(AutofeedsController.prototype, 'importOpml');
+Get('/opml/export')(AutofeedsController.prototype, 'exportOpml');
 Get('')(AutofeedsController.prototype, 'list');
 Post('')(AutofeedsController.prototype, 'create');
 Get('/:id')(AutofeedsController.prototype, 'getById');

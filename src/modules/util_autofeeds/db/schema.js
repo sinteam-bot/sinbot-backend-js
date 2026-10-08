@@ -23,6 +23,11 @@ const autofeeds = pgTable('autofeeds', {
     notificationDelivery: text('notification_delivery').default('channel').notNull(), // 'channel' | 'dm' | 'both'
     createThread: boolean('create_thread').default(false).notNull(),
     threadAutoArchiveDuration: integer('thread_auto_archive_duration').default(1440).notNull(),
+    useWebhook: boolean('use_webhook').default(true).notNull(),
+    enableMediaProxy: boolean('enable_media_proxy').default(true).notNull(),
+    ignoreShorts: boolean('ignore_shorts').default(false).notNull(),
+    aiSummary: boolean('ai_summary').default(false).notNull(),
+    aiTranslate: text('ai_translate'),
     lastItemId: text('last_item_id'),
     lastItemPublishedAt: bigint('last_item_published_at', { mode: 'number' }).default(0).notNull(),
     intervalMinutes: integer('interval_minutes').default(15).notNull(),

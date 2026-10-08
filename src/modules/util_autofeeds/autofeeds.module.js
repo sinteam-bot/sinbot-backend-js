@@ -10,6 +10,9 @@ const { featureRegistry } = require('../../core/feature-registry.js');
 const defaults = require('./config/defaults.js');
 const { AutofeedsRepository } = require('./services/autofeeds.repository.js');
 const { AutofeedsSubscriptionService } = require('./services/autofeeds-subscription.service.js');
+const { AutofeedsWebhookService } = require('./services/autofeeds-webhook.service.js');
+const { AutofeedsAiService } = require('./services/autofeeds-ai.service.js');
+const { AutofeedsOpmlService } = require('./services/autofeeds-opml.service.js');
 const { AutofeedsService } = require('./services/autofeeds.service.js');
 const { AutofeedCommands } = require('./commands/autofeed.cmd.js');
 const { AutofeedsController, AutofeedsWebhooksController } = require('./controllers/autofeeds.controller.js');
@@ -47,6 +50,9 @@ Module({
     providers: [
         AutofeedsRepository,
         AutofeedsSubscriptionService,
+        AutofeedsWebhookService,
+        AutofeedsAiService,
+        AutofeedsOpmlService,
         AutofeedsService,
         AutofeedInteractionListener,
         AutofeedsModule

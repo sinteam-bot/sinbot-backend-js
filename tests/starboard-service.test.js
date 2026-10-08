@@ -19,6 +19,7 @@ describe('Feature G05: Starboard Module Tests', () => {
         service = container.resolve(StarboardService);
         controller = container.resolve(StarboardController);
 
+        await repo.initSchema();
         await db.pool.query(`DELETE FROM starboard_entries WHERE guild_id = $1`, [guildId]);
     });
 

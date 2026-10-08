@@ -58,6 +58,11 @@ class AutofeedsRepository {
                 { name: 'notification_delivery', type: "text DEFAULT 'channel' NOT NULL" },
                 { name: 'create_thread', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'thread_auto_archive_duration', type: "integer DEFAULT 1440 NOT NULL" },
+                { name: 'use_webhook', type: "boolean DEFAULT true NOT NULL" },
+                { name: 'enable_media_proxy', type: "boolean DEFAULT true NOT NULL" },
+                { name: 'ignore_shorts', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'ai_summary', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'ai_translate', type: "text" },
                 { name: 'last_checked_at', type: "bigint DEFAULT 0 NOT NULL" },
                 { name: 'last_status', type: "text DEFAULT 'ok' NOT NULL" },
                 { name: 'last_error', type: "text" },
@@ -170,6 +175,11 @@ class AutofeedsRepository {
         notificationDelivery = 'channel',
         createThread = false,
         threadAutoArchiveDuration = 1440,
+        useWebhook = true,
+        enableMediaProxy = true,
+        ignoreShorts = false,
+        aiSummary = false,
+        aiTranslate = null,
         intervalMinutes = 15
     }) {
         await this.initSchema();
@@ -184,8 +194,10 @@ class AutofeedsRepository {
                 category, tags, filters, custom_message, color,
                 ping_role_id, subscriber_role_id, notification_delivery,
                 create_thread, thread_auto_archive_duration,
+                use_webhook, enable_media_proxy, ignore_shorts,
+                ai_summary, ai_translate,
                 interval_minutes, enabled, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, true, $18, $18)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, true, $23, $23)`,
             [
                 id,
                 guildId,
@@ -203,6 +215,11 @@ class AutofeedsRepository {
                 notificationDelivery || 'channel',
                 Boolean(createThread),
                 Number(threadAutoArchiveDuration || 1440),
+                useWebhook !== false,
+                enableMediaProxy !== false,
+                Boolean(ignoreShorts),
+                Boolean(aiSummary),
+                aiTranslate || null,
                 intervalMinutes,
                 now
             ]
@@ -252,6 +269,11 @@ class AutofeedsRepository {
             notificationDelivery: patch.notificationDelivery !== undefined ? patch.notificationDelivery : current.notificationDelivery,
             createThread: patch.createThread !== undefined ? Boolean(patch.createThread) : current.createThread,
             threadAutoArchiveDuration: patch.threadAutoArchiveDuration !== undefined ? Number(patch.threadAutoArchiveDuration) : current.threadAutoArchiveDuration,
+            useWebhook: patch.useWebhook !== undefined ? Boolean(patch.useWebhook) : current.useWebhook,
+            enableMediaProxy: patch.enableMediaProxy !== undefined ? Boolean(patch.enableMediaProxy) : current.enableMediaProxy,
+            ignoreShorts: patch.ignoreShorts !== undefined ? Boolean(patch.ignoreShorts) : current.ignoreShorts,
+            aiSummary: patch.aiSummary !== undefined ? Boolean(patch.aiSummary) : current.aiSummary,
+            aiTranslate: patch.aiTranslate !== undefined ? patch.aiTranslate : current.aiTranslate,
             intervalMinutes: patch.intervalMinutes !== undefined ? patch.intervalMinutes : current.intervalMinutes,
             enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : current.enabled,
             updatedAt: Date.now()
@@ -273,9 +295,14 @@ class AutofeedsRepository {
                 notification_delivery = $13,
                 create_thread = $14,
                 thread_auto_archive_duration = $15,
-                interval_minutes = $16,
-                enabled = $17,
-                updated_at = $18
+                use_webhook = $16,
+                enable_media_proxy = $17,
+                ignore_shorts = $18,
+                ai_summary = $19,
+                ai_translate = $20,
+                interval_minutes = $21,
+                enabled = $22,
+                updated_at = $23
              WHERE id = $1`,
             [
                 id,
@@ -293,6 +320,11 @@ class AutofeedsRepository {
                 updated.notificationDelivery,
                 updated.createThread,
                 updated.threadAutoArchiveDuration,
+                updated.useWebhook,
+                updated.enableMediaProxy,
+                updated.ignoreShorts,
+                updated.aiSummary,
+                updated.aiTranslate,
                 updated.intervalMinutes,
                 updated.enabled,
                 updated.updatedAt
@@ -533,6 +565,11 @@ class AutofeedsRepository {
             notificationDelivery: row.notification_delivery || 'channel',
             createThread: Boolean(row.create_thread),
             threadAutoArchiveDuration: Number(row.thread_auto_archive_duration || 1440),
+            useWebhook: row.use_webhook !== false,
+            enableMediaProxy: row.enable_media_proxy !== false,
+            ignoreShorts: Boolean(row.ignore_shorts),
+            aiSummary: Boolean(row.ai_summary),
+            aiTranslate: row.ai_translate || null,
             lastItemId: row.last_item_id,
             lastItemPublishedAt: Number(row.last_item_published_at || 0),
             intervalMinutes: Number(row.interval_minutes || 15),

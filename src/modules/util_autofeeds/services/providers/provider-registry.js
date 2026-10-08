@@ -13,6 +13,7 @@ const { TwitchFeedProvider } = require('./twitch.provider.js');
 const { KickFeedProvider } = require('./kick.provider.js');
 const { TwitterFeedProvider } = require('./twitter.provider.js');
 const { TikTokFeedProvider } = require('./tiktok.provider.js');
+const { BlueskyFeedProvider } = require('./bluesky.provider.js');
 const {
     InstagramFeedProvider,
     FacebookFeedProvider,
@@ -23,7 +24,7 @@ class ProviderRegistry {
     constructor() {
         this.providers = new Map();
 
-        // Enregistrement des 12 fournisseurs actifs
+        // Enregistrement des 13 fournisseurs actifs
         this.register(new RssFeedProvider());
         this.register(new YouTubeFeedProvider());
         this.register(new YouTubeLiveFeedProvider());
@@ -33,6 +34,7 @@ class ProviderRegistry {
         this.register(new KickFeedProvider());
         this.register(new TwitterFeedProvider());
         this.register(new TikTokFeedProvider());
+        this.register(new BlueskyFeedProvider());
         this.register(new InstagramFeedProvider());
         this.register(new FacebookFeedProvider());
         this.register(new LinkedInFeedProvider());
@@ -78,6 +80,9 @@ class ProviderRegistry {
         }
         if (lower.includes('tiktok.com')) {
             return 'tiktok';
+        }
+        if (lower.includes('bsky.app') || lower.endsWith('.bsky.social') || lower.includes('bsky.social')) {
+            return 'bluesky';
         }
         if (lower.includes('instagram.com')) {
             return 'instagram';

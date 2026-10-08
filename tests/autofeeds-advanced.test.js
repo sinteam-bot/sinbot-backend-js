@@ -13,6 +13,10 @@ import { providerRegistry } from '../src/modules/util_autofeeds/services/provide
 import { PRESETS } from '../src/modules/util_autofeeds/config/presets.js';
 import { AutofeedsController, AutofeedsWebhooksController } from '../src/modules/util_autofeeds/controllers/autofeeds.controller.js';
 import { AutofeedCommands } from '../src/modules/util_autofeeds/commands/autofeed.cmd.js';
+import { AutofeedInteractionListener } from '../src/modules/util_autofeeds/events/autofeed-interaction.listener.js';
+import { AutofeedsAiService } from '../src/modules/util_autofeeds/services/autofeeds-ai.service.js';
+import { AutofeedsWebhookService } from '../src/modules/util_autofeeds/services/autofeeds-webhook.service.js';
+import { AutofeedsOpmlService } from '../src/modules/util_autofeeds/services/autofeeds-opml.service.js';
 
 describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => {
     let repo;
@@ -351,9 +355,9 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
     // 8. Social Feed Providers & Resolution
     // ---------------------------------------------------------------
     describe('Social Feed Providers (Twitter, TikTok, Twitch, Kick, Bridges)', () => {
-        it('registers all 12 providers in registry', () => {
+        it('registers all 13 providers in registry', () => {
             const list = providerRegistry.list();
-            expect(list.length).toBe(12);
+            expect(list.length).toBe(13);
             const names = list.map(p => p.name);
             expect(names).toContain('rss');
             expect(names).toContain('youtube');
@@ -367,6 +371,7 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
             expect(names).toContain('instagram');
             expect(names).toContain('facebook');
             expect(names).toContain('linkedin');
+            expect(names).toContain('bluesky');
         });
 
         it('resolves Twitter handles and URLs to Nitter RSS gateway', () => {
@@ -950,6 +955,322 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
 
             const resumedFeed = await repo.getFeedById(addRes.data.id);
             expect(resumedFeed.isActive).toBe(true);
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // 12. Améliorations Avancées : Bluesky, Shorts, Media Proxy, OPML, AI, Webhooks, /feed menu
+    // ---------------------------------------------------------------
+    describe('12. Améliorations Avancées (Bluesky, Shorts, Media Proxy, OPML, AI, Webhooks, Menu)', () => {
+        it('supports Bluesky AT Protocol handles and RSS endpoint resolution', () => {
+            const bskyProv = providerRegistry.get('bluesky');
+            expect(bskyProv).toBeDefined();
+
+            expect(providerRegistry.detectProvider('https://bsky.app/profile/jay.bsky.team')).toBe('bluesky');
+            expect(providerRegistry.detectProvider('bsky.app/profile/alice.bsky.social')).toBe('bluesky');
+
+            expect(bskyProv.extractUsername('https://bsky.app/profile/jay.bsky.team')).toBe('jay.bsky.team');
+            expect(bskyProv.extractUsername('@bob.bsky.social')).toBe('bob.bsky.social');
+
+            const resolved = bskyProv.resolveUrl('https://bsky.app/profile/jay.bsky.team');
+            expect(resolved).toBe('https://bsky.app/profile/jay.bsky.team/rss');
+        });
+
+        it('filters YouTube Shorts when ignoreShorts is enabled', async () => {
+            const ytProv = providerRegistry.get('youtube');
+
+            const regularVideo = {
+                id: 'yt:video1',
+                title: 'Guide complet Elden Ring',
+                link: 'https://www.youtube.com/watch?v=abc12345',
+                content: 'Voici un tutoriel complet de 30 minutes.'
+            };
+
+            const shortVideoHash = {
+                id: 'yt:video2',
+                title: 'Best combo #shorts #gaming',
+                link: 'https://www.youtube.com/watch?v=def67890',
+                content: 'Incroyable combo !'
+            };
+
+            const shortVideoUrl = {
+                id: 'yt:video3',
+                title: 'Quick reflex test',
+                link: 'https://www.youtube.com/shorts/ghi99999',
+                content: 'Trop rapide !'
+            };
+
+            expect(ytProv.isShort(regularVideo)).toBe(false);
+            expect(ytProv.isShort(shortVideoHash)).toBe(true);
+            expect(ytProv.isShort(shortVideoUrl)).toBe(true);
+
+            // Feed with ignoreShorts = true
+            const feedIgnoring = {
+                id: 'feed_yt_ignore',
+                guildId,
+                channelId,
+                feedType: 'youtube',
+                ignoreShorts: true
+            };
+
+            const filteredIgnoring = service._filterItems(feedIgnoring, [regularVideo, shortVideoHash, shortVideoUrl]);
+            expect(filteredIgnoring.length).toBe(1);
+            expect(filteredIgnoring[0].id).toBe('yt:video1');
+
+            // Feed with ignoreShorts = false
+            const feedKeeping = {
+                id: 'feed_yt_keep',
+                guildId,
+                channelId,
+                feedType: 'youtube',
+                ignoreShorts: false
+            };
+
+            const filteredKeeping = service._filterItems(feedKeeping, [regularVideo, shortVideoHash, shortVideoUrl]);
+            expect(filteredKeeping.length).toBe(3);
+        });
+
+        it('proxies Twitter/X and TikTok links for native Discord rich media embeds', () => {
+            expect(service.getProxiedMediaLink('https://twitter.com/PlayStation/status/123456789'))
+                .toBe('https://fxtwitter.com/PlayStation/status/123456789');
+
+            expect(service.getProxiedMediaLink('https://x.com/Nintendo/status/987654321'))
+                .toBe('https://fxtwitter.com/Nintendo/status/987654321');
+
+            expect(service.getProxiedMediaLink('https://www.tiktok.com/@creator/video/1122334455'))
+                .toBe('https://vxtiktok.com/@creator/video/1122334455');
+
+            expect(service.getProxiedMediaLink('https://vm.tiktok.com/ZM8abcde/'))
+                .toBe('https://vm.vxtiktok.com/ZM8abcde/');
+
+            // Other links remain untouched
+            expect(service.getProxiedMediaLink('https://store.steampowered.com/app/123/'))
+                .toBe('https://store.steampowered.com/app/123/');
+        });
+
+        it('generates and parses OPML XML with roundtrip import and export', async () => {
+            const opmlService = new AutofeedsOpmlService();
+
+            const testFeeds = [
+                {
+                    name: 'Steam News',
+                    feedUrl: 'https://store.steampowered.com/feeds/news.xml',
+                    category: 'gaming',
+                    channelId: 'chan_1'
+                },
+                {
+                    name: 'Elden Ring Subreddit',
+                    feedUrl: 'https://reddit.com/r/EldenRing/.rss',
+                    category: 'reddit',
+                    channelId: 'chan_2'
+                }
+            ];
+
+            const xml = opmlService.generateOpml(testFeeds, 'ChienneBot Subscriptions');
+            expect(xml).toContain('<opml version="2.0">');
+            expect(xml).toContain('ChienneBot Subscriptions');
+            expect(xml).toContain('xmlUrl="https://store.steampowered.com/feeds/news.xml"');
+            expect(xml).toContain('xmlUrl="https://reddit.com/r/EldenRing/.rss"');
+
+            const parsed = await opmlService.parseOpml(xml);
+            expect(parsed.length).toBe(2);
+            expect(parsed[0].title).toBe('Steam News');
+            expect(parsed[0].xmlUrl).toBe('https://store.steampowered.com/feeds/news.xml');
+            expect(parsed[0].category).toBe('gaming');
+
+            // Test import via service
+            const importRes = await service.importOpml({
+                opmlXml: xml,
+                channelId,
+                guildId
+            });
+            expect(importRes.importedCount).toBe(2);
+            expect(importRes.errors.length).toBe(0);
+
+            // Test export via service
+            const exportedXml = await service.exportOpml(guildId);
+            expect(exportedXml).toContain('https://store.steampowered.com/feeds/news.xml');
+            expect(exportedXml).toContain('https://reddit.com/r/EldenRing/.rss');
+
+            // Test controller endpoints
+            const mockReq = {
+                body: { opmlXml: xml, channelId, guildId },
+                headers: { 'x-guild-id': guildId },
+                query: {}
+            };
+            let jsonOutput = null;
+            const mockRes = {
+                json: (data) => { jsonOutput = data; return data; },
+                setHeader: () => {},
+                send: (data) => { jsonOutput = data; return data; }
+            };
+
+            const ctrlImport = await controller.importOpml(mockReq, mockRes);
+            expect((ctrlImport || jsonOutput).success).toBe(true);
+
+            await controller.exportOpml({ ...mockReq, query: { guild_id: guildId } }, mockRes);
+            expect(jsonOutput).toContain('<opml version="2.0">');
+        });
+
+        it('generates AI summaries and French translations with caching', async () => {
+            const mockCallAi = async (prompt) => {
+                if (prompt.includes('TL;DR')) {
+                    return '• Nouvelle mise à jour majeure déployée\n• Améliorations de performances et corrections de bugs';
+                }
+                if (prompt.includes('Traduire en français')) {
+                    return 'TITRE: Mise à jour majeure v2.0\nCONTENU: Voici les détails de la nouvelle mise à jour v2.0 disponible dès maintenant.';
+                }
+                return 'Mock AI response';
+            };
+
+            const aiService = new AutofeedsAiService(mockCallAi);
+
+            const item = {
+                title: 'Major Update v2.0 Released',
+                content: 'Here are all the patch notes for the big v2.0 release available today.'
+            };
+
+            const res = await aiService.generateSummaryAndTranslation(item);
+            expect(res.summary).toContain('mise à jour majeure');
+            expect(res.translatedTitle).toBe('Mise à jour majeure v2.0');
+            expect(res.translatedContent).toContain('Voici les détails');
+
+            // Cache check: calling again shouldn't re-trigger callAi if cache works
+            let aiCallCount = 0;
+            const countingAi = new AutofeedsAiService(async () => {
+                aiCallCount++;
+                return '• Point 1\n• Point 2';
+            });
+
+            await countingAi.generateSummaryAndTranslation({ title: 'Test 1', content: 'Text 1' });
+            expect(aiCallCount).toBeGreaterThan(0);
+            const countAfterFirst = aiCallCount;
+
+            await countingAi.generateSummaryAndTranslation({ title: 'Test 1', content: 'Text 1' });
+            expect(aiCallCount).toBe(countAfterFirst); // Cache hit!
+        });
+
+        it('creates/fetches Discord webhooks and sends messages with creator impersonation', async () => {
+            const webhookService = new AutofeedsWebhookService();
+
+            let createdWebhook = null;
+            let webhookSentPayload = null;
+
+            const mockCreatedWebhook = {
+                id: 'wh_test_123',
+                name: 'ChienneBot-Autofeeds',
+                send: async (payload) => {
+                    webhookSentPayload = payload;
+                    return { id: 'msg_wh_456' };
+                }
+            };
+
+            const mockChannel = {
+                id: 'chan_webhook_target',
+                fetchWebhooks: async () => new Map(), // No webhooks yet
+                createWebhook: async (options) => {
+                    createdWebhook = options;
+                    return mockCreatedWebhook;
+                }
+            };
+
+            const payload = {
+                content: 'Nouveau live en cours !',
+                embeds: [{ title: 'Stream en direct' }]
+            };
+
+            const impersonation = {
+                name: 'Gotaga',
+                avatar: 'https://images.example.com/gotaga.png'
+            };
+
+            const sent = await webhookService.sendViaWebhook(mockChannel, payload, impersonation);
+            expect(sent).not.toBeNull();
+            expect(createdWebhook.name).toBe('ChienneBot-Autofeeds');
+            expect(webhookSentPayload.username).toBe('Gotaga');
+            expect(webhookSentPayload.avatarURL).toBe('https://images.example.com/gotaga.png');
+            expect(webhookSentPayload.content).toBe('Nouveau live en cours !');
+
+            // Second call uses cached webhook without calling createWebhook again
+            createdWebhook = null;
+            await webhookService.sendViaWebhook(mockChannel, payload, impersonation);
+            expect(createdWebhook).toBeNull(); // Cache hit!
+        });
+
+        it('provides interactive /feed menu and handles StringSelectMenu subscriptions', async () => {
+            // Add two feeds for testing menu
+            const feed1 = await service.addFeed({
+                guildId,
+                channelId,
+                feedUrl: 'https://youtube.com/c/test',
+                name: 'YouTube Actu',
+                feedType: 'youtube',
+                subscriberRoleId: 'role_yt_fan'
+            });
+
+            const feed2 = await service.addFeed({
+                guildId,
+                channelId,
+                feedUrl: 'https://twitch.tv/test',
+                name: 'Twitch Live',
+                feedType: 'twitch'
+            });
+
+            const cmd = new AutofeedCommands(service, subService);
+
+            let menuReply = null;
+            const mockMenuInteraction = {
+                guild: { id: guildId },
+                reply: async (data) => {
+                    menuReply = data;
+                    return data;
+                }
+            };
+
+            await cmd.executeMenu(mockMenuInteraction);
+            expect(menuReply).toBeDefined();
+            expect(menuReply.embeds[0].data.title).toContain('Menu Interactif d\'Abonnements');
+            expect(menuReply.components.length).toBe(1);
+
+            const selectMenuComponent = menuReply.components[0].components[0];
+            expect(selectMenuComponent.data.custom_id).toBe('autofeed:select_menu');
+            expect(selectMenuComponent.options.length).toBe(2);
+
+            // Test interaction listener when user selects feed1 and feed2 in the select menu
+            const listener = new AutofeedInteractionListener(subService, service);
+
+            let assignedRole = null;
+            let interactionReply = null;
+
+            const mockSelectInteraction = {
+                isStringSelectMenu: () => true,
+                customId: 'autofeed:select_menu',
+                values: [feed1.data.id, feed2.data.id],
+                guildId,
+                user: { id: 'user_select_subscriber' },
+                member: {
+                    roles: {
+                        add: async (roleId) => {
+                            assignedRole = roleId;
+                        }
+                    }
+                },
+                reply: async (data) => {
+                    interactionReply = data;
+                    return data;
+                }
+            };
+
+            await listener.handle(mockSelectInteraction);
+            expect(interactionReply.content).toContain('Vous êtes désormais abonné à **2** flux');
+            expect(assignedRole).toBe('role_yt_fan');
+
+            // Verify subscriptions are saved in DB
+            const userSubs = await subService.listUserSubscriptions(guildId, 'user_select_subscriber');
+            expect(userSubs.length).toBe(2);
+            const targetValues = userSubs.map(s => s.targetValue);
+            expect(targetValues).toContain(feed1.data.id);
+            expect(targetValues).toContain(feed2.data.id);
         });
     });
 });
