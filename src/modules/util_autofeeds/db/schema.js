@@ -50,6 +50,13 @@ const autofeeds = pgTable('autofeeds', {
     autoSyncEvents: boolean('auto_sync_events').default(false).notNull(),
     goodVibesOnly: boolean('good_vibes_only').default(false).notNull(),
     enableSecurityScan: boolean('enable_security_scan').default(true).notNull(),
+    translateTitleToFr: boolean('translate_title_to_fr').default(false).notNull(),
+    antiClickbait: boolean('anti_clickbait').default(false).notNull(),
+    requireApproval: boolean('require_approval').default(false).notNull(),
+    moderationChannelId: text('moderation_channel_id'),
+    enableStoryClustering: boolean('enable_story_clustering').default(false).notNull(),
+    clusterMode: text('cluster_mode').default('merge').notNull(), // 'merge' | 'skip'
+    enableVideoSummary: boolean('enable_video_summary').default(false).notNull(),
     lastItemId: text('last_item_id'),
     lastItemPublishedAt: bigint('last_item_published_at', { mode: 'number' }).default(0).notNull(),
     intervalMinutes: integer('interval_minutes').default(15).notNull(),
@@ -97,8 +104,12 @@ const autofeedHistory = pgTable('autofeed_history', {
     clicksCount: integer('clicks_count').default(0).notNull(),
     isExpired: boolean('is_expired').default(false).notNull(),
     clusteredWithId: text('clustered_with_id'),
+    relatedSources: text('related_sources').default('[]').notNull(), // JSON: [{ name, url }]
     isBestOf: boolean('is_best_of').default(false).notNull(),
     sentimentScore: text('sentiment_score'),
+    isPendingApproval: boolean('is_pending_approval').default(false).notNull(),
+    approvedBy: text('approved_by'),
+    rejectedBy: text('rejected_by'),
     postedAt: bigint('posted_at', { mode: 'number' }).notNull()
 }, (table) => [
     index('idx_autofeed_hist_lookup').on(table.feedId, table.itemGuid),
@@ -155,11 +166,25 @@ const autofeedLiveSessions = pgTable('autofeed_live_sessions', {
     index('idx_live_session_status').on(table.feedId, table.status)
 ]);
 
+const autofeedUserDigests = pgTable('autofeed_user_digests', {
+    id: text('id').primaryKey(),
+    guildId: text('guild_id').notNull(),
+    userId: text('user_id').notNull(),
+    scheduleTime: text('schedule_time').default('08:00').notNull(), // 'HH:mm'
+    isEnabled: boolean('is_enabled').default(true).notNull(),
+    lastSentAt: bigint('last_sent_at', { mode: 'number' }).default(0).notNull(),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull()
+}, (table) => [
+    unique('autofeed_user_digest_unique').on(table.guildId, table.userId),
+    index('idx_user_digest_schedule').on(table.scheduleTime, table.isEnabled)
+]);
+
 module.exports = {
     autofeeds,
     autofeedSubscriptions,
     autofeedHistory,
     autofeedPriceHistory,
     autofeedClaims,
-    autofeedLiveSessions
+    autofeedLiveSessions,
+    autofeedUserDigests
 };

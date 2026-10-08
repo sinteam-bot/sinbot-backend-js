@@ -1,9 +1,15 @@
 /**
  * src/modules/util_autofeeds/events/autofeed-interaction.listener.js
  *
- * Listener d'interaction pour les boutons de souscription rapide sous les flux Discord.
+ * Listener d'interaction pour les boutons et modales des flux Discord :
+ * - Souscriptions rapides aux tags et auteurs
+ * - Salle d'attente de modération (Approuver / Rejeter)
+ * - Traduction éphémère (feed_trans)
+ * - Assistant IA Q&A dédié à l'article (feed_qa)
+ * - Résumé de vidéo YouTube (feed_vsum)
  */
 
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const { OnEvent } = require('../../../core/index.js');
 const { AutofeedsSubscriptionService } = require('../services/autofeeds-subscription.service.js');
 const { AutofeedsService } = require('../services/autofeeds.service.js');
@@ -17,8 +23,67 @@ class AutofeedInteractionListener {
         this.feedService = feedService;
     }
 
+    async _resolveHistoryOrEmbed(target, interaction) {
+        let title = '';
+        let url = '';
+        let content = '';
+
+        if (/^\d+$/.test(target)) {
+            const histItem = await this.feedService.repo.getHistoryItemById(Number(target));
+            if (histItem) {
+                title = histItem.title;
+                url = histItem.link;
+                content = histItem.itemContent || '';
+            }
+        }
+
+        if (!url && target.startsWith('http')) {
+            url = target;
+        }
+
+        if (!title && interaction.message?.embeds?.[0]) {
+            const emb = interaction.message.embeds[0];
+            title = emb.title || '';
+            url = url || emb.url || '';
+            content = content || emb.description || '';
+        }
+
+        return { title, url, content };
+    }
+
     async handle(interaction) {
-        // Cas 0 : Menu déroulant interactif de sélection d'abonnements
+        // Modal Submit : Assistant IA Q&A
+        if (interaction.isModalSubmit?.()) {
+            const customId = interaction.customId || '';
+            if (customId.startsWith('feed_qa_modal:')) {
+                const target = customId.replace('feed_qa_modal:', '').trim();
+                const question = interaction.fields.getTextInputValue('feed_qa_input');
+
+                await interaction.deferReply({ ephemeral: true });
+
+                try {
+                    const { title, url, content } = await this._resolveHistoryOrEmbed(target, interaction);
+                    const res = await this.feedService.answerArticleQuestion({
+                        url,
+                        question,
+                        articleTitle: title,
+                        articleContent: content
+                    });
+
+                    return interaction.editReply({
+                        content: `💬 **Question :** *${question}*\n\n🤖 **Réponse de l'IA (basée sur l'article) :**\n${res.answer}`
+                    });
+                } catch (err) {
+                    logger.warn(`[AutofeedInteraction] Erreur Q&A modal: ${err.message}`, 'AUTOFEEDS');
+                    return interaction.editReply({
+                        content: `❌ Impossible d'obtenir la réponse IA : ${err.message}`
+                    });
+                }
+            }
+            return;
+        }
+
+        // Menu déroulant interactif de sélection d'abonnements
         if (interaction.isStringSelectMenu?.()) {
             const customId = interaction.customId || '';
             if (customId === 'autofeed:select_menu') {
@@ -72,7 +137,7 @@ class AutofeedInteractionListener {
         if (!interaction.isButton()) return;
         const customId = interaction.customId || '';
 
-        // Cas 1 : Bouton de souscription rapide à un tag (autofeed:sub:tag:<tagName>)
+        // Bouton de souscription rapide à un tag
         if (customId.startsWith('autofeed:sub:tag:')) {
             const tag = customId.replace('autofeed:sub:tag:', '').trim().toLowerCase();
             const guildId = interaction.guildId || 'default';
@@ -97,7 +162,7 @@ class AutofeedInteractionListener {
             }
         }
 
-        // Cas 1b : Bouton de souscription rapide à un créateur/compte (autofeed:sub:author:<name>)
+        // Bouton de souscription rapide à un créateur/compte
         if (customId.startsWith('autofeed:sub:author:')) {
             const author = customId.replace('autofeed:sub:author:', '').trim().toLowerCase();
             const guildId = interaction.guildId || 'default';
@@ -122,7 +187,7 @@ class AutofeedInteractionListener {
             }
         }
 
-        // Cas 2 : Bouton de désinscription (autofeed:unsub:<id>)
+        // Bouton de désinscription
         if (customId.startsWith('autofeed:unsub:')) {
             const subId = customId.replace('autofeed:unsub:', '').trim();
             try {
@@ -136,7 +201,7 @@ class AutofeedInteractionListener {
             }
         }
 
-        // Cas 3 : Bouton d'installation rapide d'un preset (autofeed:install:<presetId>)
+        // Bouton d'installation rapide d'un preset
         if (customId.startsWith('autofeed:install:')) {
             if (!interaction.memberPermissions?.has('ManageGuild') && !interaction.memberPermissions?.has('Administrator')) {
                 return interaction.reply({ content: '❌ Permission requise : Gérer le serveur.', ephemeral: true });
@@ -161,7 +226,7 @@ class AutofeedInteractionListener {
             }
         }
 
-        // Cas 4 : Bouton Drop Hunter / Claim de bon plan (autofeed:claim:<feedId>:<itemId>)
+        // Bouton Drop Hunter / Claim de bon plan
         if (customId.startsWith('autofeed:claim:')) {
             const parts = customId.replace('autofeed:claim:', '').split(':');
             const feedId = parts[0];
@@ -169,6 +234,104 @@ class AutofeedInteractionListener {
 
             if (this.feedService?.gamificationService) {
                 return this.feedService.gamificationService.handleClaimInteraction(interaction, feedId, itemId);
+            }
+        }
+
+        // --- NOUVEAUTÉS LOT V6 ---
+
+        // 1. Modération : Validation manuelle (Approuver)
+        if (customId.startsWith('feed_mod:approve:')) {
+            if (!interaction.memberPermissions?.has('ManageMessages') && !interaction.memberPermissions?.has('ManageGuild') && !interaction.memberPermissions?.has('Administrator')) {
+                return interaction.reply({ content: '❌ Permission requise : Gérer les messages ou le serveur.', ephemeral: true });
+            }
+
+            const historyId = parseInt(customId.replace('feed_mod:approve:', '').trim(), 10);
+            await interaction.deferUpdate();
+
+            try {
+                const res = await this.feedService.approvePendingNews(historyId, interaction.user.id, interaction.client);
+                return interaction.editReply({
+                    content: `✅ **Actualité approuvée** par <@${interaction.user.id}> et publiée dans <#${res.channelId}> !`,
+                    components: []
+                });
+            } catch (err) {
+                return interaction.followUp({ content: `❌ Erreur lors de l'approbation : ${err.message}`, ephemeral: true });
+            }
+        }
+
+        // 2. Modération : Validation manuelle (Rejeter)
+        if (customId.startsWith('feed_mod:reject:')) {
+            if (!interaction.memberPermissions?.has('ManageMessages') && !interaction.memberPermissions?.has('ManageGuild') && !interaction.memberPermissions?.has('Administrator')) {
+                return interaction.reply({ content: '❌ Permission requise : Gérer les messages ou le serveur.', ephemeral: true });
+            }
+
+            const historyId = parseInt(customId.replace('feed_mod:reject:', '').trim(), 10);
+            await interaction.deferUpdate();
+
+            try {
+                await this.feedService.rejectPendingNews(historyId, interaction.user.id);
+                return interaction.editReply({
+                    content: `❌ **Actualité rejetée** par <@${interaction.user.id}>. Non publiée.`,
+                    components: []
+                });
+            } catch (err) {
+                return interaction.followUp({ content: `❌ Erreur lors du rejet : ${err.message}`, ephemeral: true });
+            }
+        }
+
+        // 3. Traduction éphémère du titre & extrait
+        if (customId.startsWith('feed_trans:')) {
+            const target = customId.replace('feed_trans:', '').trim();
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const { title, content } = await this._resolveHistoryOrEmbed(target, interaction);
+                const trans = await this.feedService.aiService.translateItem({ title, content }, 'fr');
+
+                const translatedTitle = trans?.title || title;
+                const translatedExcerpt = trans?.description || 'Traduction non disponible.';
+
+                return interaction.editReply({
+                    content: `🇫🇷 **Traduction en Français :**\n\n**${translatedTitle}**\n\n> ${translatedExcerpt}`
+                });
+            } catch (err) {
+                return interaction.editReply({ content: `❌ Impossible de traduire l'article : ${err.message}` });
+            }
+        }
+
+        // 4. Modal Q&A Assistant IA
+        if (customId.startsWith('feed_qa:')) {
+            const target = customId.replace('feed_qa:', '').trim();
+            const modal = new ModalBuilder()
+                .setCustomId(`feed_qa_modal:${target}`)
+                .setTitle(`Poser une question sur l'actu`);
+
+            const questionInput = new TextInputBuilder()
+                .setCustomId('feed_qa_input')
+                .setLabel("Votre question sur l'article :")
+                .setPlaceholder('Ex : Quels sont les points clés ou les dates annoncées ?')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+                .setMaxLength(500);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(questionInput));
+            return interaction.showModal(modal);
+        }
+
+        // 5. Résumé Vidéo YouTube
+        if (customId.startsWith('feed_vsum:')) {
+            const target = customId.replace('feed_vsum:', '').trim();
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const { title, url } = await this._resolveHistoryOrEmbed(target, interaction);
+                const res = await this.feedService.summarizeYouTubeVideo({ url, title });
+
+                return interaction.editReply({
+                    content: `🎥 **Synthèse Vidéo YouTube — ${res.title}**\n\n${res.summary}`
+                });
+            } catch (err) {
+                return interaction.editReply({ content: `❌ Échec de la synthèse vidéo : ${err.message}` });
             }
         }
     }

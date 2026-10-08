@@ -24,6 +24,9 @@ const { AutofeedsEventsService, autofeedsEventsService } = require('./autofeeds-
 const { AutofeedsSecurityService, autofeedsSecurityService } = require('./autofeeds-security.service.js');
 const { AutofeedsSentimentService, autofeedsSentimentService } = require('./autofeeds-sentiment.service.js');
 const { AutofeedsReaderService, autofeedsReaderService } = require('./autofeeds-reader.service.js');
+const { AutofeedsQaService, autofeedsQaService } = require('./autofeeds-qa.service.js');
+const { AutofeedsYouTubeSummaryService, autofeedsYouTubeSummaryService } = require('./autofeeds-youtube-summary.service.js');
+const { AutofeedsUserDigestService, autofeedsUserDigestService } = require('./autofeeds-user-digest.service.js');
 const { communityVotingService } = require('../../../services/community-voting.service.js');
 const { providerRegistry } = require('./providers/provider-registry.js');
 const { PRESETS } = require('../config/presets.js');
@@ -63,7 +66,10 @@ class AutofeedsService {
         securityService = autofeedsSecurityService,
         sentimentService = autofeedsSentimentService,
         readerService = autofeedsReaderService,
-        votingService = communityVotingService
+        votingService = communityVotingService,
+        qaService = autofeedsQaService,
+        ytSummaryService = autofeedsYouTubeSummaryService,
+        userDigestService = autofeedsUserDigestService
     ) {
         this.repo = repo;
         this.subService = subService;
@@ -83,6 +89,12 @@ class AutofeedsService {
         this.sentimentService = sentimentService;
         this.readerService = readerService;
         this.votingService = votingService;
+        this.qaService = qaService;
+        this.ytSummaryService = ytSummaryService;
+        this.userDigestService = userDigestService || new AutofeedsUserDigestService(this.repo);
+        if (this.userDigestService && (!this.userDigestService.repository || this.userDigestService.repository !== this.repo)) {
+            this.userDigestService.repository = this.repo || this.userDigestService.repository || autofeedsRepository;
+        }
         this._intervalTimer = null;
         this._client = null;
 
@@ -147,6 +159,13 @@ class AutofeedsService {
         autoSyncEvents = false,
         goodVibesOnly = false,
         enableSecurityScan = true,
+        translateTitleToFr = false,
+        antiClickbait = false,
+        requireApproval = false,
+        moderationChannelId = null,
+        enableStoryClustering = false,
+        clusterMode = 'merge',
+        enableVideoSummary = false,
         intervalMinutes = 15
     }) {
         if (!guildId || !channelId || !feedUrl) {
@@ -240,6 +259,13 @@ class AutofeedsService {
             autoSyncEvents,
             goodVibesOnly,
             enableSecurityScan,
+            translateTitleToFr,
+            antiClickbait,
+            requireApproval,
+            moderationChannelId,
+            enableStoryClustering,
+            clusterMode,
+            enableVideoSummary,
             intervalMinutes: resolvedInterval
         });
 
@@ -431,6 +457,23 @@ class AutofeedsService {
             fields.push({ name: '🎭 Ambiance', value: item.extra.sentiment.badgeText, inline: true });
         }
 
+        if (item.extra?.clickbaitClarification) {
+            fields.push({ name: '🔍 Titre clarifié (Anti-clickbait)', value: `Titre d'origine : *${item.extra.clickbaitClarification.slice(0, 500)}*`, inline: false });
+        }
+        if (item.extra?.videoSummary) {
+            fields.unshift({ name: '🎥 Résumé Vidéo IA', value: item.extra.videoSummary.slice(0, 1024), inline: false });
+        }
+        if (Array.isArray(item.extra?.relatedSources) && item.extra.relatedSources.length > 0) {
+            const sourcesList = item.extra.relatedSources
+                .slice(0, 4)
+                .map(s => `• [${s.feedName || 'Autre source'}](${s.link}) : ${s.title ? s.title.slice(0, 60) : 'Lire'}`)
+                .join('\n');
+            fields.push({ name: '🌐 Sources liées (Multi-flux)', value: sourcesList.slice(0, 1024), inline: false });
+        }
+        if (item.extra?.isPendingApproval) {
+            fields.unshift({ name: '🛡️ En attente de modération', value: 'Cette actualité doit être validée avant publication dans le salon public.', inline: false });
+        }
+
         if (fields.length > 0) {
             embed.addFields(fields);
         }
@@ -499,13 +542,45 @@ class AutofeedsService {
      * Génère l'ensemble des ActionRows pour un message, incluant les boutons d'action et de vote.
      * @param {object} feed
      * @param {object} item
+     * @param {string|number} [historyId]
      * @returns {ActionRowBuilder[]}
      */
-    buildComponentRows(feed, item) {
+    buildComponentRows(feed, item, historyId = null) {
         const rows = [];
         const actionRow = this.buildActionRow(feed, item);
         if (actionRow) {
             rows.push(actionRow);
+        }
+
+        // ActionRow d'interactions IA (Traduction, Q&A, Résumé Vidéo)
+        const aiRow = new ActionRowBuilder();
+        const itemId = historyId || item.id || item.link || 'item';
+
+        aiRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`feed_trans:${itemId}`)
+                .setLabel('Traduire')
+                .setEmoji('🌐')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId(`feed_qa:${itemId}`)
+                .setLabel('Poser une question')
+                .setEmoji('💬')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        if (feed.feedType === 'youtube' || feed.enableVideoSummary || (item.link && item.link.includes('youtu'))) {
+            aiRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`feed_vsum:${itemId}`)
+                    .setLabel('Résumé Vidéo')
+                    .setEmoji('📝')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+        }
+
+        if (aiRow.components.length > 0) {
+            rows.push(aiRow);
         }
 
         if (feed.enableVoting && this.votingService) {
@@ -721,9 +796,13 @@ class AutofeedsService {
                     // Déduplication & News Clustering Cross-Flux
                     if (this.clusteringService && !isBreaking) {
                         const recentItems = await this.repo.findRecentHistoryForClustering(feed.guildId, 6);
-                        const cluster = this.clusteringService.findClusterCandidate(item, recentItems, 0.75);
+                        const cluster = this.clusteringService.findClusterCandidate(item, recentItems, 0.70);
                         if (cluster) {
                             logger.info(`[Autofeeds] Article "${item.title}" clusterisé avec l'entrée ${cluster.candidate.id} (${cluster.reason})`, 'AUTOFEEDS');
+                            if (feed.enableStoryClustering && feed.clusterMode === 'merge') {
+                                const relEntry = this.clusteringService.createRelatedSourceEntry(feed, item);
+                                await this.repo.addRelatedSourceToHistory(cluster.candidate.id, relEntry);
+                            }
                             await this.repo.recordPostedItem(feed.id, item.id, item.link, item.title, {
                                 guildId: feed.guildId,
                                 channelId: targetChannelId,
@@ -741,6 +820,40 @@ class AutofeedsService {
                     }
 
                     if (channel.send || channel.threads?.create) {
+                        // Traduction du titre vers le français si activé
+                        if (feed.translateTitleToFr && this.aiService && item.title) {
+                            const translated = await this.aiService.translateTitle(item.title, 'fr');
+                            if (translated && translated !== item.title) {
+                                item.extra = { ...(item.extra || {}), originalForeignTitle: item.title };
+                                item.title = `🇫🇷 ${translated}`;
+                            }
+                        }
+
+                        // Anti-Clickbait & Titres Factuels
+                        if (feed.antiClickbait && this.aiService) {
+                            const cb = await this.aiService.sanitizeClickbaitTitle(item);
+                            if (cb && cb.isClickbait) {
+                                item.extra = { ...(item.extra || {}), clickbaitClarification: cb.originalTitle };
+                                item.title = `🔍 ${cb.sanitizedTitle}`;
+                            }
+                        }
+
+                        // Résumé Vidéo YouTube automatique
+                        if (feed.enableVideoSummary && this.ytSummaryService && item.link) {
+                            try {
+                                const vsum = await this.ytSummaryService.summarizeVideo({
+                                    url: item.link,
+                                    title: item.title,
+                                    description: item.contentSnippet || item.content
+                                });
+                                if (vsum?.summary) {
+                                    item.extra = { ...(item.extra || {}), videoSummary: vsum.summary };
+                                }
+                            } catch (vErr) {
+                                logger.warn(`[AutofeedsYouTube] Échec résumé auto: ${vErr.message}`, 'AUTOFEEDS');
+                            }
+                        }
+
                         // Enrichissement IA si configuré
                         if (feed.aiSummary && this.aiService) {
                             const summary = await this.aiService.generateSummary(item);
@@ -756,6 +869,50 @@ class AutofeedsService {
                             const proxied = this.getProxiedMediaLink(item.link);
                             if (proxied !== item.link) {
                                 item.extra = { ...(item.extra || {}), proxiedLink: proxied };
+                            }
+                        }
+
+                        // Salle d'attente de modération & Validation Manuelle
+                        if (feed.requireApproval && feed.moderationChannelId) {
+                            const modChan = client.channels.cache?.get(feed.moderationChannelId)
+                                || (client.channels.fetch ? await client.channels.fetch(feed.moderationChannelId).catch(() => null) : null);
+                            if (modChan && modChan.send) {
+                                item.extra = { ...(item.extra || {}), isPendingApproval: true };
+                                const modEmbed = this.buildDiscordEmbed(feed, item);
+                                const pendingHist = await this.repo.recordPostedItem(feed.id, item.id, item.link, item.title, {
+                                    guildId: feed.guildId,
+                                    channelId: targetChannelId,
+                                    messageId: null,
+                                    canonicalUrl: this.clusteringService ? this.clusteringService.normalizeUrl(item.link || item.url) : item.link,
+                                    itemAuthor: item.author,
+                                    itemContent: item.contentSnippet,
+                                    tags: item.tags,
+                                    isDigest: false,
+                                    isPendingApproval: true
+                                });
+
+                                const modRow = new ActionRowBuilder().addComponents(
+                                    new ButtonBuilder()
+                                        .setCustomId(`feed_mod:approve:${pendingHist.id}`)
+                                        .setLabel('Approuver & Publier')
+                                        .setEmoji('✅')
+                                        .setStyle(ButtonStyle.Success),
+                                    new ButtonBuilder()
+                                        .setCustomId(`feed_mod:reject:${pendingHist.id}`)
+                                        .setLabel('Rejeter')
+                                        .setEmoji('❌')
+                                        .setStyle(ButtonStyle.Danger)
+                                );
+
+                                await modChan.send({
+                                    content: `🛡️ **Nouvelle actualité en attente de validation** (Cible : <#${targetChannelId}>)`,
+                                    embeds: [modEmbed],
+                                    components: [modRow]
+                                }).catch(err => {
+                                    logger.warn(`[Autofeeds] Erreur envoi moderation ${feed.moderationChannelId}: ${err.message}`, 'AUTOFEEDS');
+                                });
+
+                                continue; // Stoppe ici : ne publie pas dans le salon public !
                             }
                         }
 
@@ -1482,6 +1639,88 @@ class AutofeedsService {
         return this.readerService.extractCleanArticle(url);
     }
 
+    /**
+     * Approuve manuellement une actualité en attente de modération et la publie.
+     */
+    async approvePendingNews(historyId, approvedByUserId, client) {
+        const item = await this.repo.getHistoryItemById(historyId);
+        if (!item || !item.isPendingApproval) {
+            throw new Error("Cette actualité n'est pas ou plus en attente de modération.");
+        }
+        const feed = await this.repo.getFeedById(item.feedId);
+        if (!feed) throw new Error("Flux source introuvable.");
+
+        const targetChannel = client?.channels?.cache?.get(item.channelId || feed.channelId)
+            || (client?.channels?.fetch ? await client.channels.fetch(item.channelId || feed.channelId).catch(() => null) : null);
+        if (!targetChannel) throw new Error("Salon cible de publication introuvable.");
+
+        const fakeItem = {
+            id: item.guid || item.link,
+            title: item.title,
+            link: item.link,
+            content: item.itemContent,
+            author: item.itemAuthor,
+            tags: item.tags,
+            extra: {
+                relatedSources: item.relatedSources
+            }
+        };
+
+        const embed = this.buildDiscordEmbed(feed, fakeItem);
+        const rows = this.buildComponentRows(feed, fakeItem, item.id);
+        const sentMsg = await targetChannel.send({
+            embeds: [embed],
+            components: rows
+        });
+
+        await this.repo.approvePendingItem(historyId, approvedByUserId, sentMsg.id, targetChannel.id);
+        return { ok: true, messageId: sentMsg.id, channelId: targetChannel.id };
+    }
+
+    /**
+     * Rejette manuellement une actualité en attente de modération.
+     */
+    async rejectPendingNews(historyId, rejectedByUserId) {
+        const item = await this.repo.getHistoryItemById(historyId);
+        if (!item || !item.isPendingApproval) {
+            throw new Error("Cette actualité n'est pas ou plus en attente de modération.");
+        }
+        await this.repo.rejectPendingItem(historyId, rejectedByUserId);
+        return { ok: true };
+    }
+
+    /**
+     * Planifie l'heure du briefing matinal en DM pour un membre.
+     */
+    async setUserDigestSchedule(guildId, userId, scheduleTime = '08:00', isEnabled = true) {
+        if (!this.userDigestService) throw new Error('Service User Digest indisponible.');
+        return this.userDigestService.setUserSchedule(guildId, userId, scheduleTime, isEnabled);
+    }
+
+    /**
+     * Récupère la planification du briefing matinal en DM pour un membre.
+     */
+    async getUserDigestSchedule(guildId, userId) {
+        if (!this.userDigestService) throw new Error('Service User Digest indisponible.');
+        return this.userDigestService.getUserSchedule(guildId, userId);
+    }
+
+    /**
+     * Répond à une question posée sur un article via l'IA dédiée.
+     */
+    async answerArticleQuestion({ url, question, articleTitle = null, articleContent = null }) {
+        if (!this.qaService) throw new Error('Service Q&A indisponible.');
+        return this.qaService.answerQuestion({ url, question, articleTitle, articleContent });
+    }
+
+    /**
+     * Synthétise une vidéo YouTube.
+     */
+    async summarizeYouTubeVideo({ url, videoId = null, title = null, description = null }) {
+        if (!this.ytSummaryService) throw new Error('Service YouTube Summary indisponible.');
+        return this.ytSummaryService.summarizeVideo({ url, videoId, title, description });
+    }
+
     start(client) {
         this._client = client;
         if (this.purgeService && typeof this.purgeService.setClient === 'function') {
@@ -1490,6 +1729,7 @@ class AutofeedsService {
         if (this._intervalTimer) return;
         this._intervalTimer = setInterval(() => {
             this.pollFeeds(client).catch(() => {});
+            this.userDigestService?.processDueDigests(client).catch(() => {});
         }, 60 * 1000); // Scrutation par minute avec contrôle des intervalles individuels
     }
 

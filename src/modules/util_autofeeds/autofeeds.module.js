@@ -20,6 +20,9 @@ const { AutofeedsPulseService } = require('./services/autofeeds-pulse.service.js
 const { AutofeedsClusteringService } = require('./services/autofeeds-clustering.service.js');
 const { AutofeedsPurgeService } = require('./services/autofeeds-purge.service.js');
 const { AutofeedsAudioService } = require('./services/autofeeds-audio.service.js');
+const { AutofeedsQaService } = require('./services/autofeeds-qa.service.js');
+const { AutofeedsYouTubeSummaryService } = require('./services/autofeeds-youtube-summary.service.js');
+const { AutofeedsUserDigestService } = require('./services/autofeeds-user-digest.service.js');
 const { AutofeedsService } = require('./services/autofeeds.service.js');
 const { AutofeedCommands } = require('./commands/autofeed.cmd.js');
 const { AutofeedsController, AutofeedsWebhooksController } = require('./controllers/autofeeds.controller.js');
@@ -67,6 +70,9 @@ Module({
         AutofeedsClusteringService,
         AutofeedsPurgeService,
         AutofeedsAudioService,
+        AutofeedsQaService,
+        AutofeedsYouTubeSummaryService,
+        AutofeedsUserDigestService,
         AutofeedsService,
         AutofeedInteractionListener,
         AutofeedsModule

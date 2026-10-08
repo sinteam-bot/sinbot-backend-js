@@ -2140,6 +2140,380 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
             expect(votesResJson.data).toHaveProperty('upvotes');
             expect(votesResJson.data).toHaveProperty('downvotes');
         });
+
+        describe('16. v6 Enhancements: Story Clustering, Morning Digest, Translation, Q&A, Anti-Clickbait, Moderation & YouTube Summary', () => {
+            const { AutofeedsClusteringService } = require('../src/modules/util_autofeeds/services/autofeeds-clustering.service.js');
+            const { AutofeedsQaService } = require('../src/modules/util_autofeeds/services/autofeeds-qa.service.js');
+            const { AutofeedsYouTubeSummaryService } = require('../src/modules/util_autofeeds/services/autofeeds-youtube-summary.service.js');
+            const { AutofeedsUserDigestService } = require('../src/modules/util_autofeeds/services/autofeeds-user-digest.service.js');
+            const { AutofeedInteractionListener } = require('../src/modules/util_autofeeds/events/autofeed-interaction.listener.js');
+
+            it('clusters cross-source stories and merges related sources into existing history entries', async () => {
+                const clusteringService = new AutofeedsClusteringService();
+
+                const originalStory = {
+                    id: 201,
+                    title: 'Nvidia annonce sa nouvelle carte graphique RTX 5090 au CES',
+                    url: 'https://techradar.com/rtx5090',
+                    canonicalUrl: 'https://techradar.com/rtx5090'
+                };
+
+                const secondarySource = {
+                    title: 'Nvidia annonce la carte graphique RTX 5090 au CES',
+                    link: 'https://lesnumeriques.com/gpu-rtx-5090',
+                    publishedAt: new Date().toISOString()
+                };
+
+                const match = clusteringService.findClusterCandidate(secondarySource, [originalStory], 0.50);
+                expect(match).not.toBeNull();
+                expect(match.candidate.id).toBe(201);
+
+                // Test repo addRelatedSourceToHistory
+                const relatedEntry = clusteringService.createRelatedSourceEntry({ id: 'feed_ln', name: 'Les Numériques' }, secondarySource);
+                expect(relatedEntry.feedName).toBe('Les Numériques');
+                expect(relatedEntry.title).toContain('RTX 5090');
+
+                // Embed with related sources
+                const feed = {
+                    id: 'feed_tech',
+                    name: 'TechRadar',
+                    feedType: 'rss',
+                    category: 'tech'
+                };
+                const itemWithRelated = {
+                    title: originalStory.title,
+                    link: originalStory.url,
+                    extra: {
+                        relatedSources: [relatedEntry]
+                    }
+                };
+                const embed = service.buildDiscordEmbed(feed, itemWithRelated);
+                const relatedField = embed.data.fields.find(f => f.name.includes('Sources liées'));
+                expect(relatedField).toBeDefined();
+                expect(relatedField.value).toContain('Les Numériques');
+            });
+
+            it('manages personal morning briefings (Mon Journal Privé) and processes due user digests', async () => {
+                const userDigestService = new AutofeedsUserDigestService(repo);
+
+                const schedule = await userDigestService.setUserSchedule('guild_v6', 'user_777', '08:30', true);
+                expect(schedule.userId).toBe('user_777');
+                expect(schedule.scheduleTime).toBe('08:30');
+                expect(schedule.isEnabled).toBe(true);
+
+                const fetched = await userDigestService.getUserSchedule('guild_v6', 'user_777');
+                expect(fetched.scheduleTime).toBe('08:30');
+
+                // Simulation due digests
+                const dueList = await repo.listDueUserDigests('08:30');
+                expect(dueList.length).toBeGreaterThanOrEqual(1);
+
+                // Mock user subscription & posted items for digest
+                await subService.subscribe({
+                    guildId: 'guild_v6',
+                    userId: 'user_777',
+                    targetType: 'tag',
+                    targetValue: 'tech'
+                });
+
+                await repo.recordPostedItem('feed_tech', 'item_digest_1', 'https://example.com/digest1', 'Nouveau processeur ultra rapide', {
+                    guildId: 'guild_v6',
+                    tags: ['tech']
+                });
+
+                let sentDm = null;
+                const mockClient = {
+                    users: {
+                        fetch: async (uid) => {
+                            if (uid === 'user_777') {
+                                return {
+                                    id: uid,
+                                    send: async (payload) => { sentDm = payload; return payload; }
+                                };
+                            }
+                            return null;
+                        }
+                    },
+                    guilds: {
+                        cache: new Map([['guild_v6', { name: 'Super Guilde' }]])
+                    }
+                };
+
+                const sentCount = await userDigestService.processDueDigests(mockClient, '08:30');
+                expect(sentCount).toBe(1);
+                expect(sentDm).not.toBeNull();
+                expect(sentDm.embeds[0].data.title).toContain('Ton Journal Privé');
+                expect(sentDm.embeds[0].data.fields[0].name).toContain('Nouveau processeur');
+
+                // Command /feed my-digest execution
+                const cmd = new AutofeedCommands(service, subService);
+                let commandReply = null;
+                const mockInteraction = {
+                    guild: { id: 'guild_v6' },
+                    user: { id: 'user_777' },
+                    options: {
+                        getString: (opt) => opt === 'heure' ? '09:00' : null,
+                        getBoolean: (opt) => opt === 'actif' ? true : null
+                    },
+                    reply: async (p) => { commandReply = p; }
+                };
+
+                await cmd.executeMyDigest(mockInteraction);
+                expect(commandReply.content).toContain('Mon Journal Privé configuré');
+                expect(commandReply.content).toContain('09:00');
+            });
+
+            it('translates foreign headlines into French when translateTitleToFr is enabled and provides ephemeral translation', async () => {
+                let callAiMock = async (prompt) => {
+                    if (prompt.includes('Traduis fidèlement ce titre')) {
+                        return 'Mise à jour majeure 2.0 disponible aujourd’hui';
+                    }
+                    if (prompt.includes('Traduire en français fidèlement')) {
+                        return JSON.stringify({
+                            title: 'Mise à jour majeure 2.0 disponible aujourd’hui',
+                            description: 'Nouveau contenu et correctifs majeurs de bugs.'
+                        });
+                    }
+                    return 'Traduction test';
+                };
+
+                const customAiService = new (require('../src/modules/util_autofeeds/services/autofeeds-ai.service.js').AutofeedsAiService)(callAiMock);
+                const translatedTitle = await customAiService.translateTitle('Major Update 2.0 Released Today');
+                expect(translatedTitle).toContain('Mise à jour majeure 2.0');
+
+                // Test interactive listener feed_trans
+                const mockTransInteraction = {
+                    customId: 'feed_trans:999',
+                    isButton: () => true,
+                    deferReply: async () => {},
+                    editReply: async (payload) => payload,
+                    message: {
+                        embeds: [{
+                            title: 'Major Update 2.0 Released Today',
+                            description: 'Lots of new exciting features released today.'
+                        }]
+                    }
+                };
+
+                const listener = new AutofeedInteractionListener(subService, service);
+                service.aiService = customAiService;
+
+                let transReply = null;
+                mockTransInteraction.editReply = async (p) => { transReply = p; };
+                await listener.handle(mockTransInteraction);
+                expect(transReply.content).toContain('Traduction en Français');
+                expect(transReply.content).toContain('Mise à jour majeure 2.0');
+            });
+
+            it('neutralizes sensationalist headlines with Anti-Clickbait AI Titling and badge', async () => {
+                let callAiMock = async (prompt) => {
+                    if (prompt.includes('clickbait')) {
+                        return JSON.stringify({
+                            isClickbait: true,
+                            sanitizedTitle: 'Patch 14.5 : Changements détaillés sur les héros et cartes'
+                        });
+                    }
+                    return '{}';
+                };
+
+                const customAiService = new (require('../src/modules/util_autofeeds/services/autofeeds-ai.service.js').AutofeedsAiService)(callAiMock);
+                const clickbaitItem = {
+                    title: 'VOUS NE DEVINEZ JAMAIS CE QUI VA CHANGER DANS LE JEU !!!',
+                    description: 'Le patch 14.5 arrive avec des buffs et nerfs sur les héros.'
+                };
+
+                const result = await customAiService.sanitizeClickbaitTitle(clickbaitItem);
+                expect(result.isClickbait).toBe(true);
+                expect(result.sanitizedTitle).toContain('Patch 14.5');
+
+                // Embed testing with clickbait badge
+                const feed = {
+                    id: 'feed_news',
+                    name: 'Gaming News',
+                    feedType: 'rss',
+                    category: 'gaming',
+                    antiClickbait: true
+                };
+                const item = {
+                    title: `🔍 ${result.sanitizedTitle}`,
+                    link: 'https://example.com/patch',
+                    extra: {
+                        clickbaitClarification: clickbaitItem.title
+                    }
+                };
+
+                const embed = service.buildDiscordEmbed(feed, item);
+                expect(embed.data.title).toContain('🔍 Patch 14.5');
+                const clarifField = embed.data.fields.find(f => f.name.includes('Anti-clickbait'));
+                expect(clarifField).toBeDefined();
+                expect(clarifField.value).toContain('VOUS NE DEVINEZ JAMAIS');
+            });
+
+            it('answers questions precisely with dedicated Article Q&A assistant and Modal interaction', async () => {
+                const qaService = new AutofeedsQaService(
+                    async (prompt) => 'La mise à jour sera déployée le 15 octobre 2026 à 14h00 UTC.',
+                    { extractCleanArticle: async () => ({ title: 'Article Test', textContent: 'La mise à jour sera déployée le 15 octobre 2026 à 14h00 UTC.', wordCount: 150 }) }
+                );
+
+                const answerRes = await qaService.answerQuestion({
+                    url: 'https://example.com/patch-notes',
+                    question: 'À quelle date sort la mise à jour ?'
+                });
+
+                expect(answerRes.answer).toContain('15 octobre 2026');
+                expect(answerRes.title).toBe('Article Test');
+
+                // Test command /feed ask
+                service.qaService = qaService;
+                const cmd = new AutofeedCommands(service, subService);
+                let askReply = null;
+                const mockAskInteraction = {
+                    deferReply: async () => {},
+                    editReply: async (p) => { askReply = p; },
+                    options: {
+                        getString: (opt) => opt === 'url' ? 'https://example.com/patch-notes' : 'À quelle date sort la mise à jour ?'
+                    }
+                };
+
+                await cmd.executeAsk(mockAskInteraction);
+                expect(askReply.content).toContain('15 octobre 2026');
+                expect(askReply.content).toContain('Réponse de l\'Assistant IA');
+            });
+
+            it('routes unapproved news to moderation waiting room and supports approval/rejection workflows', async () => {
+                const modFeed = await repo.addFeed({
+                    guildId: 'guild_mod',
+                    channelId: 'public_channel_1',
+                    feedUrl: 'https://untrusted.com/rss',
+                    name: 'Communauté Blog',
+                    requireApproval: true,
+                    moderationChannelId: 'mod_channel_99'
+                });
+
+                expect(modFeed.requireApproval).toBe(true);
+                expect(modFeed.moderationChannelId).toBe('mod_channel_99');
+
+                // Record a pending item
+                const histId = await repo.recordPostedItem(modFeed.id, 'item_unapproved_1', 'https://untrusted.com/article-1', 'Article soumis pour revue', {
+                    guildId: 'guild_mod',
+                    channelId: 'public_channel_1',
+                    isPendingApproval: true
+                });
+
+                const histItem = await repo.getHistoryItemById(histId);
+                expect(histItem.isPendingApproval).toBe(true);
+
+                // List pending
+                const pending = await repo.getPendingApprovals('guild_mod');
+                expect(pending.length).toBeGreaterThanOrEqual(1);
+
+                // Approve flow
+                let publicSentMsg = null;
+                const mockClient = {
+                    channels: {
+                        fetch: async (id) => ({
+                            id,
+                            send: async (p) => { publicSentMsg = p; return { id: 'msg_published_1' }; }
+                        }),
+                        cache: new Map([
+                            ['public_channel_1', {
+                                id: 'public_channel_1',
+                                send: async (p) => { publicSentMsg = p; return { id: 'msg_published_1' }; }
+                            }]
+                        ])
+                    }
+                };
+
+                const approveResult = await service.approvePendingNews(histId, 'admin_42', mockClient);
+                expect(approveResult.ok).toBe(true);
+                expect(approveResult.messageId).toBe('msg_published_1');
+                expect(publicSentMsg.embeds[0].data.title).toContain('Article soumis pour revue');
+
+                const refreshed = await repo.getHistoryItemById(histId);
+                expect(refreshed.isPendingApproval).toBe(false);
+                expect(refreshed.approvedBy).toBe('admin_42');
+
+                // Reject flow on second item
+                const histItem2Id = await repo.recordPostedItem(modFeed.id, 'item_unapproved_2', 'https://untrusted.com/article-2', 'Article spammé', {
+                    guildId: 'guild_mod',
+                    channelId: 'public_channel_1',
+                    isPendingApproval: true
+                });
+
+                await service.rejectPendingNews(histItem2Id, 'admin_99');
+                const rejected = await repo.getHistoryItemById(histItem2Id);
+                expect(rejected.isPendingApproval).toBe(false);
+                expect(rejected.rejectedBy).toBe('admin_99');
+            });
+
+            it('summarizes YouTube videos from subtitles/description with bullet points and action button', async () => {
+                const ytService = new AutofeedsYouTubeSummaryService(async () => `Cette vidéo détaille le nouveau gameplay du jeu.
+📌 Nouveau moteur graphique Unreal Engine 5.4.
+📌 Temps de chargement réduits à zéro.
+📌 Système de combat dynamique repensé.`);
+
+                const videoUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+                const videoId = ytService.extractVideoId(videoUrl);
+                expect(videoId).toBe('dQw4w9WgXcQ');
+
+                const shortUrl = 'https://youtu.be/abcdefghijk';
+                expect(ytService.extractVideoId(shortUrl)).toBe('abcdefghijk');
+
+                const summary = await ytService.summarizeVideo({
+                    url: videoUrl,
+                    title: 'Gameplay Reveal Trailer',
+                    description: 'Full trailer description'
+                });
+
+                expect(summary.videoId).toBe('dQw4w9WgXcQ');
+                expect(summary.summary).toContain('📌 Nouveau moteur graphique');
+
+                // Check action rows have YouTube summary button
+                const ytFeed = {
+                    id: 'feed_yt',
+                    feedType: 'youtube',
+                    enableVideoSummary: true
+                };
+                const rows = service.buildComponentRows(ytFeed, { link: videoUrl, id: 'v123' }, 501);
+                const aiRow = rows.find(r => r.components.some(c => c.data.custom_id?.includes('feed_vsum')));
+                expect(aiRow).toBeDefined();
+            });
+
+            it('exposes all v6 endpoints through the AutofeedsController', async () => {
+                // Mock user digest in service
+                service.getUserDigestSchedule = async (g, u) => ({ userId: u, scheduleTime: '08:00', isEnabled: true });
+                service.setUserDigestSchedule = async (g, u, t, e) => ({ userId: u, scheduleTime: t, isEnabled: e });
+                service.answerArticleQuestion = async ({ question }) => ({ answer: `Réponse à: ${question}` });
+                service.summarizeYouTubeVideo = async () => ({ summary: 'Points clés vidéo' });
+
+                // 1. GET & POST /user-digest
+                let jsonRes = null;
+                const mockRes = { json: (d) => { jsonRes = d; } };
+
+                await controller.getUserDigest({ query: { user_id: 'u1' } }, mockRes);
+                expect(jsonRes.success).toBe(true);
+                expect(jsonRes.data.scheduleTime).toBe('08:00');
+
+                await controller.setUserDigest({ body: { user_id: 'u1', schedule_time: '07:30', is_enabled: true } }, mockRes);
+                expect(jsonRes.success).toBe(true);
+                expect(jsonRes.data.scheduleTime).toBe('07:30');
+
+                // 2. POST /qa
+                await controller.answerQuestion({ body: { url: 'https://ex.com', question: 'Quelle est la date ?' } }, mockRes);
+                expect(jsonRes.success).toBe(true);
+                expect(jsonRes.data.answer).toContain('Quelle est la date ?');
+
+                // 3. POST /video-summary
+                await controller.summarizeVideo({ body: { url: 'https://youtube.com/watch?v=12345678901' } }, mockRes);
+                expect(jsonRes.success).toBe(true);
+                expect(jsonRes.data.summary).toContain('Points clés');
+
+                // 4. Moderation endpoints
+                await controller.listPendingModeration({ query: { guild_id: 'guild_mod' } }, mockRes);
+                expect(jsonRes.success).toBe(true);
+                expect(Array.isArray(jsonRes.data)).toBe(true);
+            });
+        });
     });
 });
 

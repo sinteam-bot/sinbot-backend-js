@@ -85,6 +85,13 @@ class AutofeedsRepository {
                 { name: 'auto_sync_events', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'good_vibes_only', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'enable_security_scan', type: "boolean DEFAULT true NOT NULL" },
+                { name: 'translate_title_to_fr', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'anti_clickbait', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'require_approval', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'moderation_channel_id', type: "text" },
+                { name: 'enable_story_clustering', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'cluster_mode', type: "text DEFAULT 'merge' NOT NULL" },
+                { name: 'enable_video_summary', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'last_checked_at', type: "bigint DEFAULT 0 NOT NULL" },
                 { name: 'last_status', type: "text DEFAULT 'ok' NOT NULL" },
                 { name: 'last_error', type: "text" },
@@ -163,8 +170,12 @@ class AutofeedsRepository {
                 { name: 'clicks_count', type: "integer DEFAULT 0 NOT NULL" },
                 { name: 'is_expired', type: "boolean DEFAULT false NOT NULL" },
                 { name: 'clustered_with_id', type: 'text' },
+                { name: 'related_sources', type: "text DEFAULT '[]' NOT NULL" },
                 { name: 'is_best_of', type: "boolean DEFAULT false NOT NULL" },
-                { name: 'sentiment_score', type: 'text' }
+                { name: 'sentiment_score', type: 'text' },
+                { name: 'is_pending_approval', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'approved_by', type: 'text' },
+                { name: 'rejected_by', type: 'text' }
             ];
             for (const col of histColsToAdd) {
                 await db.pool.query(`
@@ -249,6 +260,24 @@ class AutofeedsRepository {
                 CREATE INDEX IF NOT EXISTS "idx_live_session_status" ON "autofeed_live_sessions" ("feed_id", "status");
             `).catch(() => {});
 
+            // 6. Table des digests quotidiens individuels en DM
+            await db.pool.query(`
+                CREATE TABLE IF NOT EXISTS "autofeed_user_digests" (
+                    "id" text PRIMARY KEY NOT NULL,
+                    "guild_id" text NOT NULL,
+                    "user_id" text NOT NULL,
+                    "schedule_time" text DEFAULT '08:00' NOT NULL,
+                    "is_enabled" boolean DEFAULT true NOT NULL,
+                    "last_sent_at" bigint DEFAULT 0 NOT NULL,
+                    "created_at" bigint NOT NULL,
+                    CONSTRAINT "autofeed_user_digest_unique" UNIQUE("guild_id", "user_id")
+                );
+            `).catch(() => {});
+
+            await db.pool.query(`
+                CREATE INDEX IF NOT EXISTS "idx_user_digest_schedule" ON "autofeed_user_digests" ("schedule_time", "is_enabled");
+            `).catch(() => {});
+
             this._initialized = true;
         } catch (err) {
             console.warn('[AutofeedsRepository] Erreur initSchema:', err.message);
@@ -302,6 +331,13 @@ class AutofeedsRepository {
         autoSyncEvents = false,
         goodVibesOnly = false,
         enableSecurityScan = true,
+        translateTitleToFr = false,
+        antiClickbait = false,
+        requireApproval = false,
+        moderationChannelId = null,
+        enableStoryClustering = false,
+        clusterMode = 'merge',
+        enableVideoSummary = false,
         intervalMinutes = 15
     }) {
         await this.initSchema();
@@ -330,8 +366,10 @@ class AutofeedsRepository {
                 bypass_quiet_hours, breaking_role_id, auto_expire_days, enable_audio_briefing,
                 enable_voting, best_of_threshold, best_of_channel_id,
                 min_discount_percent, auto_sync_events, good_vibes_only, enable_security_scan,
+                translate_title_to_fr, anti_clickbait, require_approval, moderation_channel_id,
+                enable_story_clustering, cluster_mode, enable_video_summary,
                 interval_minutes, enabled, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, true, $45, $45)`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, true, $52, $52)`,
             [
                 id,
                 guildId,
@@ -376,6 +414,13 @@ class AutofeedsRepository {
                 Boolean(autoSyncEvents),
                 Boolean(goodVibesOnly),
                 enableSecurityScan !== false,
+                Boolean(translateTitleToFr),
+                Boolean(antiClickbait),
+                Boolean(requireApproval),
+                moderationChannelId || null,
+                Boolean(enableStoryClustering),
+                clusterMode || 'merge',
+                Boolean(enableVideoSummary),
                 intervalMinutes,
                 now
             ]
@@ -470,6 +515,13 @@ class AutofeedsRepository {
             autoSyncEvents: patch.autoSyncEvents !== undefined ? Boolean(patch.autoSyncEvents) : current.autoSyncEvents,
             goodVibesOnly: patch.goodVibesOnly !== undefined ? Boolean(patch.goodVibesOnly) : current.goodVibesOnly,
             enableSecurityScan: patch.enableSecurityScan !== undefined ? Boolean(patch.enableSecurityScan) : (current.enableSecurityScan !== false),
+            translateTitleToFr: patch.translateTitleToFr !== undefined ? Boolean(patch.translateTitleToFr) : current.translateTitleToFr,
+            antiClickbait: patch.antiClickbait !== undefined ? Boolean(patch.antiClickbait) : current.antiClickbait,
+            requireApproval: patch.requireApproval !== undefined ? Boolean(patch.requireApproval) : current.requireApproval,
+            moderationChannelId: patch.moderationChannelId !== undefined ? patch.moderationChannelId : current.moderationChannelId,
+            enableStoryClustering: patch.enableStoryClustering !== undefined ? Boolean(patch.enableStoryClustering) : current.enableStoryClustering,
+            clusterMode: patch.clusterMode !== undefined ? patch.clusterMode : current.clusterMode,
+            enableVideoSummary: patch.enableVideoSummary !== undefined ? Boolean(patch.enableVideoSummary) : current.enableVideoSummary,
             intervalMinutes: patch.intervalMinutes !== undefined ? patch.intervalMinutes : current.intervalMinutes,
             enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : current.enabled,
             updatedAt: Date.now()
@@ -518,9 +570,16 @@ class AutofeedsRepository {
                 auto_sync_events = $40,
                 good_vibes_only = $41,
                 enable_security_scan = $42,
-                interval_minutes = $43,
-                enabled = $44,
-                updated_at = $45
+                translate_title_to_fr = $43,
+                anti_clickbait = $44,
+                require_approval = $45,
+                moderation_channel_id = $46,
+                enable_story_clustering = $47,
+                cluster_mode = $48,
+                enable_video_summary = $49,
+                interval_minutes = $50,
+                enabled = $51,
+                updated_at = $52
              WHERE id = $1`,
             [
                 id,
@@ -565,6 +624,13 @@ class AutofeedsRepository {
                 updated.autoSyncEvents,
                 updated.goodVibesOnly,
                 updated.enableSecurityScan,
+                updated.translateTitleToFr,
+                updated.antiClickbait,
+                updated.requireApproval,
+                updated.moderationChannelId,
+                updated.enableStoryClustering,
+                updated.clusterMode,
+                updated.enableVideoSummary,
                 updated.intervalMinutes,
                 updated.enabled,
                 updated.updatedAt
@@ -723,8 +789,12 @@ class AutofeedsRepository {
             tags = [],
             isDigest = false,
             clusteredWithId = null,
+            relatedSources = [],
             isBestOf = false,
             sentimentScore = null,
+            isPendingApproval = false,
+            approvedBy = null,
+            rejectedBy = null,
             postedAt = null
         } = options;
 
@@ -737,14 +807,15 @@ class AutofeedsRepository {
         const id = newId();
         const now = postedAt ? Number(postedAt) : Date.now();
         const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
+        const sourcesJson = JSON.stringify(Array.isArray(relatedSources) ? relatedSources : []);
         await db.pool.query(
             `INSERT INTO autofeed_history (
                 id, feed_id, guild_id, channel_id, message_id,
                 item_guid, item_url, canonical_url, item_title,
                 item_author, item_content, tags, is_digest,
-                clicks_count, is_expired, clustered_with_id,
-                is_best_of, sentiment_score, posted_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, false, $14, $15, $16, $17)`,
+                clicks_count, is_expired, clustered_with_id, related_sources,
+                is_best_of, sentiment_score, is_pending_approval, approved_by, rejected_by, posted_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, false, $14, $15, $16, $17, $18, $19, $20, $21)`,
             [
                 id,
                 fId,
@@ -760,12 +831,251 @@ class AutofeedsRepository {
                 tagsJson,
                 Boolean(isDigest),
                 clusteredWithId || null,
+                sourcesJson,
                 Boolean(isBestOf),
                 sentimentScore ? String(sentimentScore) : null,
+                Boolean(isPendingApproval),
+                approvedBy || null,
+                rejectedBy || null,
                 now
             ]
         );
         return id;
+    }
+
+    _mapHistoryRow(row) {
+        if (!row) return null;
+        let relatedSources = [];
+        try {
+            relatedSources = typeof row.related_sources === 'string'
+                ? JSON.parse(row.related_sources)
+                : (row.related_sources || []);
+        } catch {
+            relatedSources = [];
+        }
+        let tags = [];
+        try {
+            tags = typeof row.tags === 'string'
+                ? JSON.parse(row.tags)
+                : (row.tags || []);
+        } catch {
+            tags = [];
+        }
+
+        return {
+            id: row.id,
+            feedId: row.feed_id || row.feedId,
+            guid: row.guid || row.item_guid,
+            link: row.link || row.item_url,
+            title: row.title || row.item_title,
+            guildId: row.guild_id || row.feed_guild_id || row.guildId,
+            channelId: row.channel_id || row.original_channel_id || row.channelId,
+            messageId: row.message_id || row.messageId,
+            canonicalUrl: row.canonical_url || row.canonicalUrl,
+            itemAuthor: row.item_author || row.itemAuthor,
+            itemContent: row.item_content || row.itemContent,
+            content: row.item_content || row.content,
+            summary: row.item_content || row.content,
+            tags,
+            isDigest: Boolean(row.is_digest),
+            clusteredWithId: row.clustered_with_id,
+            relatedSources,
+            isBestOf: Boolean(row.is_best_of),
+            sentimentScore: row.sentiment_score,
+            isPendingApproval: Boolean(row.is_pending_approval),
+            approvedBy: row.approved_by,
+            rejectedBy: row.rejected_by,
+            postedAt: Number(row.posted_at) || Date.now(),
+            feedName: row.feed_name
+        };
+    }
+
+    _mapUserDigestRow(row) {
+        if (!row) return null;
+        return {
+            id: row.id,
+            guildId: row.guild_id,
+            userId: row.user_id,
+            scheduleTime: row.schedule_time,
+            isEnabled: Boolean(row.is_enabled),
+            lastSentAt: Number(row.last_sent_at) || 0,
+            createdAt: Number(row.created_at) || Date.now()
+        };
+    }
+
+    // ==========================================
+    // CLUSTERING & SOURCES MULTIPLES
+    // ==========================================
+    async getRecentPostedItems(guildId, hoursWindow = 4) {
+        await this.initSchema();
+        const since = Date.now() - (hoursWindow * 3600 * 1000);
+        const res = await db.pool.query(
+            `SELECT h.*, f.name as feed_name, f.category as feed_category
+             FROM autofeed_history h
+             JOIN autofeeds f ON h.feed_id = f.id
+             WHERE h.guild_id = $1 AND h.posted_at >= $2
+             ORDER BY h.posted_at DESC`,
+            [guildId, since]
+        ).catch(() => ({ rows: [] }));
+        return (res.rows || []).map(r => this._mapHistoryRow(r));
+    }
+
+    async addRelatedSourceToHistory(historyId, source = {}) {
+        await this.initSchema();
+        const res = await db.pool.query(`SELECT related_sources FROM autofeed_history WHERE id = $1`, [historyId]);
+        if (!res.rows?.[0]) return false;
+        let sources = [];
+        try {
+            sources = typeof res.rows[0].related_sources === 'string'
+                ? JSON.parse(res.rows[0].related_sources)
+                : (res.rows[0].related_sources || []);
+        } catch { sources = []; }
+
+        const entryUrl = source.url || source.link || '#';
+        if (!sources.some(s => (s.url || s.link) === entryUrl)) {
+            sources.push({
+                feedId: source.feedId || null,
+                feedName: source.feedName || source.name || 'Autre source',
+                title: source.title || 'Article lié',
+                link: entryUrl,
+                url: entryUrl,
+                publishedAt: source.publishedAt || new Date().toISOString()
+            });
+            await db.pool.query(
+                `UPDATE autofeed_history SET related_sources = $2 WHERE id = $1`,
+                [historyId, JSON.stringify(sources)]
+            );
+            return true;
+        }
+        return false;
+    }
+
+    // ==========================================
+    // MODÉRATION & APPROBATION
+    // ==========================================
+    async getHistoryItemById(historyId) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT h.*, f.name as feed_name, f.channel_id as original_channel_id, f.guild_id as feed_guild_id
+             FROM autofeed_history h
+             LEFT JOIN autofeeds f ON h.feed_id = f.id
+             WHERE h.id = $1 LIMIT 1`,
+            [historyId]
+        );
+        return this._mapHistoryRow(res.rows?.[0]);
+    }
+
+    async getPendingApprovals(guildId) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT h.*, f.name as feed_name
+             FROM autofeed_history h
+             JOIN autofeeds f ON h.feed_id = f.id
+             WHERE h.guild_id = $1 AND h.is_pending_approval = true AND h.approved_by IS NULL AND h.rejected_by IS NULL
+             ORDER BY h.posted_at DESC`,
+            [guildId]
+        ).catch(() => ({ rows: [] }));
+        return (res.rows || []).map(r => this._mapHistoryRow(r));
+    }
+
+    async approvePendingItem(historyId, approvedBy, publicMessageId = null, publicChannelId = null) {
+        await this.initSchema();
+        await db.pool.query(
+            `UPDATE autofeed_history 
+             SET is_pending_approval = false, approved_by = $2, message_id = COALESCE($3, message_id), channel_id = COALESCE($4, channel_id)
+             WHERE id = $1`,
+            [historyId, approvedBy, publicMessageId, publicChannelId]
+        );
+        return true;
+    }
+
+    async rejectPendingItem(historyId, rejectedBy) {
+        await this.initSchema();
+        await db.pool.query(
+            `UPDATE autofeed_history 
+             SET is_pending_approval = false, rejected_by = $2
+             WHERE id = $1`,
+            [historyId, rejectedBy]
+        );
+        return true;
+    }
+
+    // ==========================================
+    // MON JOURNAL PRIVÉ (USER DIGEST EN DM)
+    // ==========================================
+    async setUserDigest(guildId, userId, scheduleTime = '08:00', isEnabled = true) {
+        await this.initSchema();
+        const id = newId();
+        const now = Date.now();
+        await db.pool.query(
+            `INSERT INTO autofeed_user_digests (id, guild_id, user_id, schedule_time, is_enabled, last_sent_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, 0, $6)
+             ON CONFLICT (guild_id, user_id)
+             DO UPDATE SET schedule_time = $4, is_enabled = $5`,
+            [id, guildId, userId, scheduleTime, Boolean(isEnabled), now]
+        );
+        return this.getUserDigest(guildId, userId);
+    }
+
+    async getUserDigest(guildId, userId) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT * FROM autofeed_user_digests WHERE guild_id = $1 AND user_id = $2 LIMIT 1`,
+            [guildId, userId]
+        );
+        return this._mapUserDigestRow(res.rows?.[0]);
+    }
+
+    async listDueUserDigests(currentTimeStr) {
+        await this.initSchema();
+        const res = await db.pool.query(
+            `SELECT * FROM autofeed_user_digests 
+             WHERE is_enabled = true AND schedule_time = $1`,
+            [currentTimeStr]
+        ).catch(() => ({ rows: [] }));
+        return (res.rows || []).map(r => this._mapUserDigestRow(r));
+    }
+
+    async updateUserDigestLastSent(id, timestamp = Date.now()) {
+        await this.initSchema();
+        await db.pool.query(
+            `UPDATE autofeed_user_digests SET last_sent_at = $2 WHERE id = $1`,
+            [id, timestamp]
+        );
+    }
+
+    async getRecentItemsForUserSubscriptions(guildId, userId, hoursWindow = 24) {
+        await this.initSchema();
+        const since = Date.now() - (hoursWindow * 3600 * 1000);
+        const subs = await this.listUserSubscriptions(guildId, userId);
+        if (!subs || subs.length === 0) return [];
+
+        const tags = subs.filter(s => s.targetType === 'tag').map(s => s.targetValue.toLowerCase());
+        const categories = subs.filter(s => s.targetType === 'category').map(s => s.targetValue.toLowerCase());
+        const feedIds = subs.filter(s => s.targetType === 'feed').map(s => s.targetValue);
+
+        const res = await db.pool.query(
+            `SELECT h.*, f.name as feed_name, f.category as feed_category
+             FROM autofeed_history h
+             LEFT JOIN autofeeds f ON h.feed_id = f.id
+             WHERE h.guild_id = $1 AND h.posted_at >= $2
+             ORDER BY h.posted_at DESC
+             LIMIT 50`,
+            [guildId, since]
+        ).catch(() => ({ rows: [] }));
+
+        const matched = (res.rows || []).filter(item => {
+            let itemTags = [];
+            try { itemTags = typeof item.tags === 'string' ? JSON.parse(item.tags) : (item.tags || []); } catch {}
+            itemTags = itemTags.map(t => String(t).toLowerCase());
+
+            if (feedIds.includes(item.feed_id)) return true;
+            if (item.feed_category && categories.includes(item.feed_category.toLowerCase())) return true;
+            if (tags.some(t => itemTags.includes(t))) return true;
+            return false;
+        });
+
+        return matched.map(r => this._mapHistoryRow(r));
     }
 
     async logHistory({
@@ -1331,6 +1641,13 @@ class AutofeedsRepository {
             autoSyncEvents: Boolean(row.auto_sync_events),
             goodVibesOnly: Boolean(row.good_vibes_only),
             enableSecurityScan: row.enable_security_scan !== false,
+            translateTitleToFr: Boolean(row.translate_title_to_fr),
+            antiClickbait: Boolean(row.anti_clickbait),
+            requireApproval: Boolean(row.require_approval),
+            moderationChannelId: row.moderation_channel_id || null,
+            enableStoryClustering: Boolean(row.enable_story_clustering),
+            clusterMode: row.cluster_mode || 'merge',
+            enableVideoSummary: Boolean(row.enable_video_summary),
             lastItemId: row.last_item_id,
             lastItemPublishedAt: Number(row.last_item_published_at || 0),
             intervalMinutes: Number(row.interval_minutes || 15),
@@ -1383,4 +1700,6 @@ class AutofeedsRepository {
     }
 }
 
-module.exports = { AutofeedsRepository };
+const autofeedsRepository = new AutofeedsRepository();
+
+module.exports = { AutofeedsRepository, autofeedsRepository };

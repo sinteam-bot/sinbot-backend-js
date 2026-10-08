@@ -125,6 +125,13 @@ class AutofeedsController {
                 autoSyncEvents: req.body?.auto_sync_events !== undefined ? Boolean(req.body.auto_sync_events) : Boolean(req.body?.autoSyncEvents),
                 goodVibesOnly: req.body?.good_vibes_only !== undefined ? Boolean(req.body.good_vibes_only) : Boolean(req.body?.goodVibesOnly),
                 enableSecurityScan: req.body?.enable_security_scan !== undefined ? Boolean(req.body.enable_security_scan) : (req.body?.enableSecurityScan !== undefined ? Boolean(req.body.enableSecurityScan) : true),
+                translateTitleToFr: req.body?.translate_title_to_fr !== undefined ? Boolean(req.body.translate_title_to_fr) : Boolean(req.body?.translateTitleToFr),
+                antiClickbait: req.body?.anti_clickbait !== undefined ? Boolean(req.body.anti_clickbait) : Boolean(req.body?.antiClickbait),
+                requireApproval: req.body?.require_approval !== undefined ? Boolean(req.body.require_approval) : Boolean(req.body?.requireApproval),
+                moderationChannelId: req.body?.moderation_channel_id || req.body?.moderationChannelId || null,
+                enableStoryClustering: req.body?.enable_story_clustering !== undefined ? Boolean(req.body.enable_story_clustering) : Boolean(req.body?.enableStoryClustering),
+                clusterMode: req.body?.cluster_mode || req.body?.clusterMode || 'merge',
+                enableVideoSummary: req.body?.enable_video_summary !== undefined ? Boolean(req.body.enable_video_summary) : Boolean(req.body?.enableVideoSummary),
                 intervalMinutes: intervalMinutes || interval_minutes || checkIntervalMinutes || check_interval_minutes,
                 enabled: enabled !== undefined ? Boolean(enabled) : (isActive !== undefined ? Boolean(isActive) : (is_active !== undefined ? Boolean(is_active) : true))
             });
@@ -329,6 +336,13 @@ class AutofeedsController {
                 autoSyncEvents: patch.auto_sync_events !== undefined ? Boolean(patch.auto_sync_events) : (patch.autoSyncEvents !== undefined ? Boolean(patch.autoSyncEvents) : undefined),
                 goodVibesOnly: patch.good_vibes_only !== undefined ? Boolean(patch.good_vibes_only) : (patch.goodVibesOnly !== undefined ? Boolean(patch.goodVibesOnly) : undefined),
                 enableSecurityScan: patch.enable_security_scan !== undefined ? Boolean(patch.enable_security_scan) : (patch.enableSecurityScan !== undefined ? Boolean(patch.enableSecurityScan) : undefined),
+                translateTitleToFr: patch.translate_title_to_fr !== undefined ? Boolean(patch.translate_title_to_fr) : (patch.translateTitleToFr !== undefined ? Boolean(patch.translateTitleToFr) : undefined),
+                antiClickbait: patch.anti_clickbait !== undefined ? Boolean(patch.anti_clickbait) : (patch.antiClickbait !== undefined ? Boolean(patch.antiClickbait) : undefined),
+                requireApproval: patch.require_approval !== undefined ? Boolean(patch.require_approval) : (patch.requireApproval !== undefined ? Boolean(patch.requireApproval) : undefined),
+                moderationChannelId: patch.moderation_channel_id !== undefined ? patch.moderation_channel_id : patch.moderationChannelId,
+                enableStoryClustering: patch.enable_story_clustering !== undefined ? Boolean(patch.enable_story_clustering) : (patch.enableStoryClustering !== undefined ? Boolean(patch.enableStoryClustering) : undefined),
+                clusterMode: patch.cluster_mode || patch.clusterMode,
+                enableVideoSummary: patch.enable_video_summary !== undefined ? Boolean(patch.enable_video_summary) : (patch.enableVideoSummary !== undefined ? Boolean(patch.enableVideoSummary) : undefined),
                 intervalMinutes: patch.interval_minutes || patch.intervalMinutes || patch.check_interval_minutes || patch.checkIntervalMinutes,
                 enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : (patch.isActive !== undefined ? Boolean(patch.isActive) : (patch.is_active !== undefined ? Boolean(patch.is_active) : undefined))
             });
@@ -658,6 +672,160 @@ class AutofeedsController {
             return result;
         }
     }
+
+    /**
+     * GET /api/autofeeds/user-digest
+     */
+    async getUserDigest(req, res) {
+        try {
+            const guildId = req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const userId = req.query?.user_id || req.user?.id;
+            if (!userId) {
+                const result = { success: false, ok: false, error: 'user_id parameter is required' };
+                if (res && typeof res.json === 'function') res.json(result);
+                return result;
+            }
+            const data = await this.service.getUserDigestSchedule(guildId, userId);
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/user-digest
+     */
+    async setUserDigest(req, res) {
+        try {
+            const guildId = req.body?.guild_id || process.env.GUILD_ID || 'default';
+            const userId = req.body?.user_id || req.user?.id;
+            const scheduleTime = req.body?.schedule_time || req.body?.scheduleTime || '08:00';
+            const isEnabled = req.body?.is_enabled !== undefined ? Boolean(req.body.is_enabled) : (req.body?.isEnabled !== undefined ? Boolean(req.body.isEnabled) : true);
+
+            if (!userId) {
+                const result = { success: false, ok: false, error: 'user_id is required' };
+                if (res && typeof res.json === 'function') res.json(result);
+                return result;
+            }
+
+            const data = await this.service.setUserDigestSchedule(guildId, userId, scheduleTime, isEnabled);
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/qa
+     */
+    async answerQuestion(req, res) {
+        try {
+            const { url, question, title, content } = req.body || {};
+            if (!question) {
+                const result = { success: false, ok: false, error: 'question parameter is required' };
+                if (res && typeof res.json === 'function') res.json(result);
+                return result;
+            }
+
+            const data = await this.service.answerArticleQuestion({
+                url,
+                question,
+                articleTitle: title,
+                articleContent: content
+            });
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/video-summary
+     */
+    async summarizeVideo(req, res) {
+        try {
+            const { url, videoId, title, description } = req.body || {};
+            if (!url && !videoId) {
+                const result = { success: false, ok: false, error: 'url or videoId is required' };
+                if (res && typeof res.json === 'function') res.json(result);
+                return result;
+            }
+
+            const data = await this.service.summarizeYouTubeVideo({ url, videoId, title, description });
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * GET /api/autofeeds/moderation/pending
+     */
+    async listPendingModeration(req, res) {
+        try {
+            const guildId = req.query?.guild_id || process.env.GUILD_ID || 'default';
+            const data = await this.service.repo.getPendingApprovals(guildId);
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/moderation/:id/approve
+     */
+    async approvePending(req, res) {
+        try {
+            const id = parseInt(req.params?.id, 10);
+            const userId = req.body?.user_id || req.user?.id || 'admin';
+            const data = await this.service.approvePendingNews(id, userId, this.service._client);
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
+
+    /**
+     * POST /api/autofeeds/moderation/:id/reject
+     */
+    async rejectPending(req, res) {
+        try {
+            const id = parseInt(req.params?.id, 10);
+            const userId = req.body?.user_id || req.user?.id || 'admin';
+            const data = await this.service.rejectPendingNews(id, userId);
+            const result = { success: true, ok: true, data };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        } catch (err) {
+            const result = { success: false, ok: false, error: err.message };
+            if (res && typeof res.json === 'function') res.json(result);
+            return result;
+        }
+    }
 }
 
 Controller('/api/autofeeds')(AutofeedsController);
@@ -665,6 +833,13 @@ Get('/stats')(AutofeedsController.prototype, 'getStats');
 Get('/search')(AutofeedsController.prototype, 'searchItems');
 Get('/reader')(AutofeedsController.prototype, 'getReaderArticle');
 Get('/votes')(AutofeedsController.prototype, 'getVotes');
+Get('/user-digest')(AutofeedsController.prototype, 'getUserDigest');
+Post('/user-digest')(AutofeedsController.prototype, 'setUserDigest');
+Post('/qa')(AutofeedsController.prototype, 'answerQuestion');
+Post('/video-summary')(AutofeedsController.prototype, 'summarizeVideo');
+Get('/moderation/pending')(AutofeedsController.prototype, 'listPendingModeration');
+Post('/moderation/:id/approve')(AutofeedsController.prototype, 'approvePending');
+Post('/moderation/:id/reject')(AutofeedsController.prototype, 'rejectPending');
 Post('/claims')(AutofeedsController.prototype, 'claimItem');
 Post('/purge')(AutofeedsController.prototype, 'purge');
 Get('/presets')(AutofeedsController.prototype, 'getPresets');

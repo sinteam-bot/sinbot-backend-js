@@ -145,6 +145,116 @@ Réponds strictement au format JSON suivant sans fioriture :
             translatedContent: trans?.description || null
         };
     }
+
+    /**
+     * Traduit uniquement le titre d'un article vers la langue cible (ex: 'fr').
+     * @param {string} title 
+     * @param {string} targetLang 
+     * @returns {Promise<string|null>}
+     */
+    async translateTitle(title, targetLang = 'fr') {
+        if (!title || typeof title !== 'string') return null;
+
+        const key = this._getCacheKey(`title_trans_${targetLang}`, { title });
+        if (this.cache.has(key)) {
+            return this.cache.get(key);
+        }
+
+        const prompt = `Traduis fidèlement ce titre d'actualité en français naturel et percutant. Ne réponds QUE par le titre traduit, aucun autre texte, pas de guillemets :
+"${title}"`;
+
+        try {
+            const res = await this.callAi(prompt, {
+                systemPrompt: "Tu es un traducteur de presse bilingue anglais-français.",
+                maxTokens: 80,
+                temperature: 0.2,
+                allowFallback: true
+            });
+
+            const translated = (typeof res === 'string' ? res : (res?.result || '')).trim().replace(/^["']|["']$/g, '');
+            if (translated && translated.length > 2) {
+                this._setCache(key, translated);
+                return translated;
+            }
+            return title;
+        } catch (err) {
+            logger.warn(`[AutofeedsAiService] Échec traduction titre: ${err.message}`, 'AUTOFEEDS_AI');
+            return title;
+        }
+    }
+
+    /**
+     * Détecte et reformule les titres clickbait/sensationnalistes en titres factuels.
+     * @param {Object} item { title, description, content }
+     * @returns {Promise<{ isClickbait: boolean, sanitizedTitle: string, originalTitle: string }>}
+     */
+    async sanitizeClickbaitTitle(item) {
+        if (!item || !item.title) {
+            return { isClickbait: false, sanitizedTitle: item?.title || '', originalTitle: item?.title || '' };
+        }
+
+        const title = item.title;
+        const key = this._getCacheKey('clickbait', item);
+        if (this.cache.has(key)) {
+            return this.cache.get(key);
+        }
+
+        // Heuristique rapide de détection clickbait
+        const clickbaitPatterns = [
+            /\b(vous ne devinerez jamais|incroyable|choc|hallucinant|voici pourquoi|cette astuce va|cette erreur que|tout le monde|va vous surprendre)\b/i,
+            /\b(won't believe|shocking|insane|this changes everything|wait until|everyone is talking about|secret revealed)\b/i,
+            /[!?]{2,}/,
+            /\b[A-Z]{4,}\b/ // Mot en majuscules crié
+        ];
+
+        const suspicious = clickbaitPatterns.some(p => p.test(title));
+        if (!suspicious) {
+            const result = { isClickbait: false, sanitizedTitle: title, originalTitle: title };
+            this._setCache(key, result);
+            return result;
+        }
+
+        const sample = (item.description || item.content || '').slice(0, 800);
+        const prompt = `Voici le titre potentiellement sensationnaliste ou "clickbait" d'un article et son contexte :
+Titre : "${title}"
+Extrait : "${sample}"
+
+Tâche :
+1. Détermine si le titre est racoleur ou sensationnaliste (clickbait).
+2. Si oui, reformule-le en un titre sobre, factuel, précis et neutre en français qui révèle directement l'information sans mystère artificiel.
+3. Si le titre était déjà sobre et informatif, conserve-le.
+
+Réponds STRICTEMENT au format JSON :
+{
+  "isClickbait": true/false,
+  "sanitizedTitle": "titre sobre et factuel"
+}`;
+
+        try {
+            const res = await this.callAi(prompt, {
+                systemPrompt: "Tu es un éditeur en chef anti-désinformation et anti-clickbait.",
+                maxTokens: 120,
+                temperature: 0.2,
+                allowFallback: true
+            });
+
+            const raw = (typeof res === 'string' ? res : (res?.result || '')).trim();
+            const cleanJson = raw.replace(/^```json/i, '').replace(/```$/i, '').trim();
+            const parsed = JSON.parse(cleanJson);
+
+            const result = {
+                isClickbait: Boolean(parsed.isClickbait),
+                sanitizedTitle: parsed.sanitizedTitle || title,
+                originalTitle: title
+            };
+
+            this._setCache(key, result);
+            return result;
+        } catch (err) {
+            logger.warn(`[AutofeedsAiService] Échec analyse anti-clickbait: ${err.message}`, 'AUTOFEEDS_AI');
+            return { isClickbait: false, sanitizedTitle: title, originalTitle: title };
+        }
+    }
 }
 
 Injectable()(AutofeedsAiService);

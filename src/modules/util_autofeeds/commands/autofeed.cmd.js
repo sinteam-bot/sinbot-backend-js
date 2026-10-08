@@ -596,6 +596,62 @@ class AutofeedCommands {
         return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
+    async executeMyDigest(interaction) {
+        const guildId = interaction.guild?.id || 'default';
+        const userId = interaction.user.id;
+        const timeInput = interaction.options.getString('heure');
+        const enabledInput = interaction.options.getBoolean('actif');
+
+        if (timeInput !== null || enabledInput !== null) {
+            const time = timeInput || '08:00';
+            const isEnabled = enabledInput !== null ? enabledInput : true;
+
+            try {
+                const updated = await this.service.setUserDigestSchedule(guildId, userId, time, isEnabled);
+                return interaction.reply({
+                    content: `🌅 **Mon Journal Privé configuré !**\n• Heure de réception en DM : **${updated.scheduleTime}** (UTC)\n• Statut : **${updated.isEnabled ? '🟢 Activé' : '🔴 Désactivé'}**\nVous recevrez un condensé IA de vos tags et flux abonnés directement en message privé.`,
+                    ephemeral: true
+                });
+            } catch (err) {
+                return interaction.reply({
+                    content: `❌ Impossible de configurer le digest : ${err.message}`,
+                    ephemeral: true
+                });
+            }
+        }
+
+        const current = await this.service.getUserDigestSchedule(guildId, userId);
+        if (!current) {
+            return interaction.reply({
+                content: `ℹ️ Vous n'avez pas encore configuré votre Journal Privé matinal.\nUtilisez \`/feed my-digest heure:08:30 actif:true\` pour l'activer !`,
+                ephemeral: true
+            });
+        }
+
+        return interaction.reply({
+            content: `🌅 **Votre Journal Privé actuel :**\n• Heure d'envoi en DM : **${current.scheduleTime}**\n• État : **${current.isEnabled ? '🟢 Activé' : '🔴 Désactivé'}**\n• Dernier envoi : ${current.lastSentAt ? new Date(current.lastSentAt).toLocaleString('fr-FR') : 'Jamais'}`,
+            ephemeral: true
+        });
+    }
+
+    async executeAsk(interaction) {
+        const url = interaction.options.getString('url');
+        const question = interaction.options.getString('question');
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const res = await this.service.answerArticleQuestion({ url, question });
+            return interaction.editReply({
+                content: `📰 **Article :** [${res.title || url}](${url})\n💬 **Question :** *${question}*\n\n🤖 **Réponse de l'Assistant IA :**\n${res.answer}`
+            });
+        } catch (err) {
+            return interaction.editReply({
+                content: `❌ Impossible d'analyser l'article : ${err.message}`
+            });
+        }
+    }
+
     // ==========================================
     // POINT D'ENTRÉE DU ROUTEUR COMMANDES
     // ==========================================
@@ -621,6 +677,8 @@ class AutofeedCommands {
             case 'audio':            return this.executeAudio(interaction);
             case 'read':             return this.executeRead(interaction);
             case 'bestof':           return this.executeBestOf(interaction);
+            case 'my-digest':        return this.executeMyDigest(interaction);
+            case 'ask':              return this.executeAsk(interaction);
             default:
                 return interaction.reply({ content: '❌ Sous-commande inconnue', ephemeral: true });
         }
@@ -736,6 +794,18 @@ const feedBuilder = new SlashCommandBuilder()
         sub.setName('bestof')
             .setDescription('Afficher les articles Best-Of plébiscités par la communauté')
             .addIntegerOption(o => o.setName('limite').setDescription('Nombre d\'articles (défaut: 5)').setRequired(false).setMinValue(1).setMaxValue(20))
+    )
+    .addSubcommand(sub =>
+        sub.setName('my-digest')
+            .setDescription('Planifier ou consulter votre Journal Privé matinal reçu en message privé (DM)')
+            .addStringOption(o => o.setName('heure').setDescription('Heure de réception quotidienne au format HH:mm (ex: 08:00)').setRequired(false))
+            .addBooleanOption(o => o.setName('actif').setDescription('Activer ou désactiver la réception du journal').setRequired(false))
+    )
+    .addSubcommand(sub =>
+        sub.setName('ask')
+            .setDescription('Poser une question spécifique à l\'IA sur un article')
+            .addStringOption(o => o.setName('url').setDescription('URL de l\'article').setRequired(true))
+            .addStringOption(o => o.setName('question').setDescription('Votre question').setRequired(true))
     );
 
 // Alias /autofeed pour compatibilité descendante
