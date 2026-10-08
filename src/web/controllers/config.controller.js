@@ -46,6 +46,7 @@ function createConfigRouter() {
                     countdown: fullConfig.countdown || {},
                     web: fullConfig.web || {},
                     scheduler: fullConfig.scheduler || {},
+                    autofeeds: fullConfig.autofeeds || {},
                     commands: fullConfig.discord?.commands || {},
                     discord: {
                         client_id: fullConfig.discord?.client_id || process.env.CLIENT_ID || '',

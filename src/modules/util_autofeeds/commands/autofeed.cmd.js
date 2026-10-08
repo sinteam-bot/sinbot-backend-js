@@ -210,7 +210,19 @@ class AutofeedCommands {
             return interaction.reply({ content: `❌ ${res.error}`, ephemeral: true });
         }
 
-        const modeStr = mode === 'dm' ? 'en message privé (DM)' : 'par mention dans le salon';
+        // Si le flux a un rôle de souscripteur dédié, l'attribuer au membre
+        if (targetType === 'feed' && interaction.member?.roles?.add) {
+            const feed = await this.service.getFeed(targetValue);
+            if (feed?.subscriberRoleId) {
+                await interaction.member.roles.add(feed.subscriberRoleId).catch(() => {});
+            }
+        }
+
+        let modeStr = 'par mention dans le salon';
+        if (mode === 'dm') modeStr = 'en message privé (DM)';
+        else if (mode === 'both') modeStr = 'dans le salon et en message privé (DM)';
+        else if (mode === 'role') modeStr = 'via l\'attribution du rôle dédié';
+
         return interaction.reply({
             content: `🔔 **Abonnement activé avec succès !**\nVous serez notifié ${modeStr} dès qu'un article correspond à **${targetType} : ${targetValue}**.`,
             ephemeral: true
@@ -246,6 +258,14 @@ class AutofeedCommands {
 
         const res = await this.subService.unsubscribe({ guildId, userId, targetType, targetValue });
         if (res.deleted) {
+            // Si le flux avait un rôle dédié, le retirer
+            if (targetType === 'feed' && interaction.member?.roles?.remove) {
+                const feed = await this.service.getFeed(targetValue);
+                if (feed?.subscriberRoleId) {
+                    await interaction.member.roles.remove(feed.subscriberRoleId).catch(() => {});
+                }
+            }
+
             return interaction.reply({
                 content: `✅ Vous avez été désabonné de **${targetType} : ${targetValue}**.`,
                 ephemeral: true
@@ -258,6 +278,54 @@ class AutofeedCommands {
         });
     }
 
+    async executeStreamers(interaction) {
+        const list = await this.service.listFeeds(interaction.guild.id);
+        const liveFeeds = list.filter(f => ['twitch', 'kick', 'youtube_live'].includes(f.feedType));
+        if (liveFeeds.length === 0) {
+            return interaction.reply({
+                content: 'ℹ️ Aucun streamer ou direct configuré sur ce serveur.',
+                ephemeral: true
+            });
+        }
+
+        const lines = [];
+        for (const f of liveFeeds) {
+            const active = await this.service.repo.getActiveLiveSession(f.id);
+            if (active) {
+                const gameStr = active.game ? ` sur **${active.game}**` : '';
+                lines.push(`🔴 **${active.streamerName}** — **EN DIRECT**${gameStr} !\n   └ [Regarder le direct](${active.url || f.feedUrl})`);
+            } else {
+                lines.push(`⚫ **${f.name || f.feedType.toUpperCase()}** — *Hors ligne*\n   └ [Chaîne](${f.feedUrl})`);
+            }
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x9146FF)
+            .setTitle(`📺 Statut des Streamers (${liveFeeds.length})`)
+            .setDescription(lines.join('\n\n'))
+            .setFooter({ text: 'Pour recevoir une alerte dès qu\'un streamer passe en direct : /feed subscribe' });
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    async executePause(interaction) {
+        if (!interaction.member?.permissions?.has?.(PermissionFlagsBits.ManageGuild) &&
+            !interaction.member?.permissions?.has?.(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: '❌ Réservé aux modérateurs/administrateurs.', ephemeral: true });
+        }
+        const id = interaction.options.getString('id');
+        const feed = await this.service.getFeed(id);
+        if (!feed) {
+            return interaction.reply({ content: `❌ Flux \`${id}\` introuvable.`, ephemeral: true });
+        }
+        const newStatus = !feed.enabled;
+        await this.service.updateFeed(id, { enabled: newStatus });
+        return interaction.reply({
+            content: `✅ Flux **${feed.name || id}** ${newStatus ? '🟢 réactivé' : '⏸️ mis en pause'}.`,
+            ephemeral: true
+        });
+    }
+
     async executeMySubscriptions(interaction) {
         const guildId = interaction.guild.id;
         const userId = interaction.user.id;
@@ -265,13 +333,16 @@ class AutofeedCommands {
         const subs = await this.subService.listUserSubscriptions(guildId, userId);
         if (subs.length === 0) {
             return interaction.reply({
-                content: 'ℹ️ Vous n\'avez actuellement aucun abonnement actif sur ce serveur.\nUtilisez `/feed subscribe` pour suivre un tag (ex: `/feed subscribe tag:steam` ou `tag:epic`) ou une catégorie !',
+                content: 'ℹ️ Vous n\'avez actuellement aucun abonnement actif sur ce serveur.\nUtilisez `/feed subscribe` pour suivre un créateur ou un tag (ex: `/feed subscribe tag:steam`) !',
                 ephemeral: true
             });
         }
 
         const lines = subs.map(s => {
-            const modeIcon = s.notifyMode === 'dm' ? '📩 DM' : '📢 Mention';
+            let modeIcon = '📢 Mention';
+            if (s.notifyMode === 'dm') modeIcon = '📩 DM';
+            else if (s.notifyMode === 'both') modeIcon = '🔔 Salon + DM';
+            else if (s.notifyMode === 'role') modeIcon = '🏷️ Rôle';
             return `• **${s.targetType.toUpperCase()}** : \`${s.targetValue}\` (${modeIcon}) [ID: \`${s.id.slice(0, 8)}\`]`;
         });
 
@@ -293,9 +364,11 @@ class AutofeedCommands {
         switch (sub) {
             case 'add':              return this.executeAdd(interaction);
             case 'list':             return this.executeList(interaction);
+            case 'streamers':        return this.executeStreamers(interaction);
             case 'presets':          return this.executePresets(interaction);
             case 'delete':           return this.executeDelete(interaction);
             case 'test':             return this.executeTest(interaction);
+            case 'pause':            return this.executePause(interaction);
             case 'subscribe':        return this.executeSubscribe(interaction);
             case 'unsubscribe':      return this.executeUnsubscribe(interaction);
             case 'my-subscriptions': return this.executeMySubscriptions(interaction);
@@ -310,20 +383,24 @@ class AutofeedCommands {
 // ----------------------------------------------------
 const feedBuilder = new SlashCommandBuilder()
     .setName('feed')
-    .setDescription('Flux RSS, LootScraper, alertes de jeux gratuits et souscriptions')
+    .setDescription('Flux RSS, alertes de streams et souscriptions')
     .addSubcommand(sub =>
         sub.setName('add')
-            .setDescription('Ajouter un flux RSS, YouTube, Reddit ou actualités (Admin)')
-            .addStringOption(o => o.setName('url').setDescription('URL du flux RSS, lien YouTube ou subreddit').setRequired(true))
+            .setDescription('Ajouter un flux RSS, YouTube, Twitch, Kick ou actualités (Admin)')
+            .addStringOption(o => o.setName('url').setDescription('URL du flux RSS, chaîne Twitch, Kick ou YouTube').setRequired(true))
             .addChannelOption(o => o.setName('salon').setDescription('Salon de publication').setRequired(true).addChannelTypes(ChannelType.GuildText))
             .addStringOption(o => o.setName('nom').setDescription('Nom d\'affichage du flux').setRequired(false))
-            .addStringOption(o => o.setName('categorie').setDescription('Catégorie (ex: gaming, deals, news, tech)').setRequired(false))
-            .addStringOption(o => o.setName('tags').setDescription('Tags séparés par virgules (ex: steam, epic, free)').setRequired(false))
-            .addIntegerOption(o => o.setName('intervalle_minutes').setDescription('Intervalle de vérification en minutes (défaut: 15)').setRequired(false).setMinValue(5).setMaxValue(1440))
+            .addStringOption(o => o.setName('categorie').setDescription('Catégorie (ex: gaming, stream, news, tech)').setRequired(false))
+            .addStringOption(o => o.setName('tags').setDescription('Tags séparés par virgules (ex: live, twitch, deal)').setRequired(false))
+            .addIntegerOption(o => o.setName('intervalle_minutes').setDescription('Intervalle de vérification en minutes').setRequired(false).setMinValue(2).setMaxValue(1440))
     )
     .addSubcommand(sub =>
         sub.setName('list')
-            .setDescription('Lister les flux configurés sur le serveur')
+            .setDescription('Lister tous les flux configurés sur le serveur')
+    )
+    .addSubcommand(sub =>
+        sub.setName('streamers')
+            .setDescription('Voir les streamers suivis et leur statut en direct')
     )
     .addSubcommand(sub =>
         sub.setName('presets')
@@ -340,23 +417,30 @@ const feedBuilder = new SlashCommandBuilder()
             .addStringOption(o => o.setName('id').setDescription('Identifiant du flux').setRequired(true))
     )
     .addSubcommand(sub =>
+        sub.setName('pause')
+            .setDescription('Activer ou mettre en pause un flux (Admin)')
+            .addStringOption(o => o.setName('id').setDescription('Identifiant du flux').setRequired(true))
+    )
+    .addSubcommand(sub =>
         sub.setName('subscribe')
-            .setDescription('S\'abonner à un tag, une catégorie, un compte ou un mot-clé pour recevoir des alertes')
-            .addStringOption(o => o.setName('tag').setDescription('Tag à suivre (ex: epic, steam, free, pc)').setRequired(false))
+            .setDescription('S\'abonner à un créateur, un tag, une catégorie ou un flux pour recevoir des alertes')
             .addStringOption(o => o.setName('compte').setDescription('Compte / créateur à suivre (ex: @PlayStation, zerator)').setRequired(false))
+            .addStringOption(o => o.setName('tag').setDescription('Tag à suivre (ex: live, epic, steam, free)').setRequired(false))
             .addStringOption(o => o.setName('categorie').setDescription('Catégorie à suivre (ex: gaming, deals, news)').setRequired(false))
             .addStringOption(o => o.setName('mot_cle').setDescription('Mot-clé spécifique dans le titre ou texte').setRequired(false))
             .addStringOption(o => o.setName('flux_id').setDescription('Identifiant d\'un flux spécifique').setRequired(false))
-            .addStringOption(o => o.setName('mode').setDescription('Mode de notification').setRequired(false).addChoices(
+            .addStringOption(o => o.setName('mode').setDescription('Mode de réception de la notification').setRequired(false).addChoices(
                 { name: '📢 Mention dans le salon', value: 'mention' },
-                { name: '📩 Message Privé (DM)', value: 'dm' }
+                { name: '📩 Message Privé (DM)', value: 'dm' },
+                { name: '🔔 Salon + DM', value: 'both' },
+                { name: '🏷️ Attribution du rôle dédié', value: 'role' }
             ))
     )
     .addSubcommand(sub =>
         sub.setName('unsubscribe')
-            .setDescription('Se désabonner d\'un tag, d\'une catégorie, d\'un compte ou d\'un mot-clé')
-            .addStringOption(o => o.setName('tag').setDescription('Tag à retirer').setRequired(false))
+            .setDescription('Se désabonner d\'un créateur, d\'un tag ou d\'un flux')
             .addStringOption(o => o.setName('compte').setDescription('Compte / créateur à retirer').setRequired(false))
+            .addStringOption(o => o.setName('tag').setDescription('Tag à retirer').setRequired(false))
             .addStringOption(o => o.setName('categorie').setDescription('Catégorie à retirer').setRequired(false))
             .addStringOption(o => o.setName('mot_cle').setDescription('Mot-clé à retirer').setRequired(false))
             .addStringOption(o => o.setName('flux_id').setDescription('Identifiant de flux à retirer').setRequired(false))

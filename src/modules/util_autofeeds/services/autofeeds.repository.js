@@ -54,6 +54,10 @@ class AutofeedsRepository {
                 { name: 'custom_message', type: 'text' },
                 { name: 'color', type: "text DEFAULT '#FF4500' NOT NULL" },
                 { name: 'ping_role_id', type: 'text' },
+                { name: 'subscriber_role_id', type: 'text' },
+                { name: 'notification_delivery', type: "text DEFAULT 'channel' NOT NULL" },
+                { name: 'create_thread', type: "boolean DEFAULT false NOT NULL" },
+                { name: 'thread_auto_archive_duration', type: "integer DEFAULT 1440 NOT NULL" },
                 { name: 'last_checked_at', type: "bigint DEFAULT 0 NOT NULL" },
                 { name: 'last_status', type: "text DEFAULT 'ok' NOT NULL" },
                 { name: 'last_error', type: "text" },
@@ -120,6 +124,7 @@ class AutofeedsRepository {
                     "streamer_name" text NOT NULL,
                     "channel_id" text NOT NULL,
                     "message_id" text NOT NULL,
+                    "thread_id" text,
                     "title" text,
                     "game" text,
                     "url" text,
@@ -129,6 +134,10 @@ class AutofeedsRepository {
                     "created_at" bigint NOT NULL
                 );
             `);
+
+            await db.pool.query(`
+                ALTER TABLE "autofeed_live_sessions" ADD COLUMN IF NOT EXISTS "thread_id" text;
+            `).catch(() => {});
 
             await db.pool.query(`
                 CREATE INDEX IF NOT EXISTS "idx_live_session_lookup" ON "autofeed_live_sessions" ("feed_id", "stream_id");
@@ -157,6 +166,10 @@ class AutofeedsRepository {
         customMessage = null,
         color = '#FF4500',
         pingRoleId = null,
+        subscriberRoleId = null,
+        notificationDelivery = 'channel',
+        createThread = false,
+        threadAutoArchiveDuration = 1440,
         intervalMinutes = 15
     }) {
         await this.initSchema();
@@ -169,8 +182,10 @@ class AutofeedsRepository {
             `INSERT INTO autofeeds (
                 id, guild_id, channel_id, feed_url, name, feed_type,
                 category, tags, filters, custom_message, color,
-                ping_role_id, interval_minutes, enabled, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, $14, $14)`,
+                ping_role_id, subscriber_role_id, notification_delivery,
+                create_thread, thread_auto_archive_duration,
+                interval_minutes, enabled, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, true, $18, $18)`,
             [
                 id,
                 guildId,
@@ -184,6 +199,10 @@ class AutofeedsRepository {
                 customMessage,
                 color || '#FF4500',
                 pingRoleId,
+                subscriberRoleId,
+                notificationDelivery || 'channel',
+                Boolean(createThread),
+                Number(threadAutoArchiveDuration || 1440),
                 intervalMinutes,
                 now
             ]
@@ -229,6 +248,10 @@ class AutofeedsRepository {
             customMessage: patch.customMessage !== undefined ? patch.customMessage : current.customMessage,
             color: patch.color !== undefined ? patch.color : current.color,
             pingRoleId: patch.pingRoleId !== undefined ? patch.pingRoleId : current.pingRoleId,
+            subscriberRoleId: patch.subscriberRoleId !== undefined ? patch.subscriberRoleId : current.subscriberRoleId,
+            notificationDelivery: patch.notificationDelivery !== undefined ? patch.notificationDelivery : current.notificationDelivery,
+            createThread: patch.createThread !== undefined ? Boolean(patch.createThread) : current.createThread,
+            threadAutoArchiveDuration: patch.threadAutoArchiveDuration !== undefined ? Number(patch.threadAutoArchiveDuration) : current.threadAutoArchiveDuration,
             intervalMinutes: patch.intervalMinutes !== undefined ? patch.intervalMinutes : current.intervalMinutes,
             enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : current.enabled,
             updatedAt: Date.now()
@@ -246,9 +269,13 @@ class AutofeedsRepository {
                 custom_message = $9,
                 color = $10,
                 ping_role_id = $11,
-                interval_minutes = $12,
-                enabled = $13,
-                updated_at = $14
+                subscriber_role_id = $12,
+                notification_delivery = $13,
+                create_thread = $14,
+                thread_auto_archive_duration = $15,
+                interval_minutes = $16,
+                enabled = $17,
+                updated_at = $18
              WHERE id = $1`,
             [
                 id,
@@ -262,6 +289,10 @@ class AutofeedsRepository {
                 updated.customMessage,
                 updated.color,
                 updated.pingRoleId,
+                updated.subscriberRoleId,
+                updated.notificationDelivery,
+                updated.createThread,
+                updated.threadAutoArchiveDuration,
                 updated.intervalMinutes,
                 updated.enabled,
                 updated.updatedAt
@@ -332,11 +363,17 @@ class AutofeedsRepository {
                     [id, now]
                 ).catch(() => {});
             }
+            return { status: 'ok', failCount: 0, autoDisabled: false };
         } else {
+            const current = await this.getFeedById(id);
+            const currentFails = current ? current.failCount : 0;
+            const newFails = currentFails + 1;
+            const autoDisable = newFails >= 10;
             await db.pool.query(
-                `UPDATE autofeeds SET last_checked_at = $2, last_status = 'error', last_error = $3, fail_count = fail_count + 1 WHERE id = $1`,
-                [id, now, String(error || 'Erreur').slice(0, 500)]
+                `UPDATE autofeeds SET last_checked_at = $2, last_status = 'error', last_error = $3, fail_count = fail_count + 1, enabled = CASE WHEN $4 = true THEN false ELSE enabled END WHERE id = $1`,
+                [id, now, String(error || 'Erreur').slice(0, 500), autoDisable]
             ).catch(() => {});
+            return { status: 'error', failCount: newFails, autoDisabled: autoDisable };
         }
     }
 
@@ -414,16 +451,16 @@ class AutofeedsRepository {
         return res.rows?.[0] ? this._mapLiveSessionRow(res.rows[0]) : null;
     }
 
-    async saveLiveSession({ feedId, streamId, streamerName, channelId, messageId, title, game, url, startedAt }) {
+    async saveLiveSession({ feedId, streamId, streamerName, channelId, messageId, threadId = null, title, game, url, startedAt }) {
         await this.initSchema();
         const id = newId();
         const now = Date.now();
         await db.pool.query(
             `INSERT INTO autofeed_live_sessions (
-                id, feed_id, stream_id, streamer_name, channel_id, message_id,
+                id, feed_id, stream_id, streamer_name, channel_id, message_id, thread_id,
                 title, game, url, started_at, status, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'live', $11)`,
-            [id, feedId, streamId, streamerName, channelId, messageId, title || null, game || null, url || null, Number(startedAt || now), now]
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'live', $12)`,
+            [id, feedId, streamId, streamerName, channelId, messageId, threadId || null, title || null, game || null, url || null, Number(startedAt || now), now]
         );
         return {
             id,
@@ -432,6 +469,7 @@ class AutofeedsRepository {
             streamerName,
             channelId,
             messageId,
+            threadId: threadId || null,
             title,
             game,
             url,
@@ -482,6 +520,7 @@ class AutofeedsRepository {
             guildId: row.guild_id,
             channelId: row.channel_id,
             feedUrl: row.feed_url,
+            url: row.feed_url,
             name: row.name || null,
             feedType: row.feed_type || 'rss',
             category: row.category || 'general',
@@ -490,10 +529,15 @@ class AutofeedsRepository {
             customMessage: row.custom_message || null,
             color: row.color || '#FF4500',
             pingRoleId: row.ping_role_id || null,
+            subscriberRoleId: row.subscriber_role_id || null,
+            notificationDelivery: row.notification_delivery || 'channel',
+            createThread: Boolean(row.create_thread),
+            threadAutoArchiveDuration: Number(row.thread_auto_archive_duration || 1440),
             lastItemId: row.last_item_id,
             lastItemPublishedAt: Number(row.last_item_published_at || 0),
             intervalMinutes: Number(row.interval_minutes || 15),
             enabled: Boolean(row.enabled),
+            isActive: Boolean(row.enabled),
             lastCheckedAt: Number(row.last_checked_at || 0),
             lastStatus: row.last_status || 'ok',
             lastError: row.last_error || null,
@@ -529,6 +573,7 @@ class AutofeedsRepository {
             streamerName: row.streamer_name,
             channelId: row.channel_id,
             messageId: row.message_id,
+            threadId: row.thread_id || null,
             title: row.title || null,
             game: row.game || null,
             url: row.url || null,

@@ -387,7 +387,7 @@ function initConfig() {
 /**
  * Sections globales autorisées dans les fichiers de configuration globale (base / env / local)
  */
-const GLOBAL_CONFIG_SECTIONS = ['database', 'web', 'openrouter', 'discord', 'logger', 'features', 'scheduler'];
+const GLOBAL_CONFIG_SECTIONS = ['database', 'web', 'openrouter', 'autofeeds', 'discord', 'logger', 'features', 'scheduler'];
 
 /**
  * Nettoie un objet de configuration globale pour ne conserver que les blocs d'infrastructure valides

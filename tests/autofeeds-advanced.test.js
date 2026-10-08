@@ -12,6 +12,7 @@ import { AutofeedsService } from '../src/modules/util_autofeeds/services/autofee
 import { providerRegistry } from '../src/modules/util_autofeeds/services/providers/provider-registry.js';
 import { PRESETS } from '../src/modules/util_autofeeds/config/presets.js';
 import { AutofeedsController, AutofeedsWebhooksController } from '../src/modules/util_autofeeds/controllers/autofeeds.controller.js';
+import { AutofeedCommands } from '../src/modules/util_autofeeds/commands/autofeed.cmd.js';
 
 describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => {
     let repo;
@@ -776,6 +777,179 @@ describe('Autofeeds Advanced: Multi-Source, LootScraper & Subscriptions', () => 
             const res = await controller.handleYouTubeNotification(req);
             expect(res.success).toBe(true);
             expect(processedXml).toContain('dQw4w9WgXcQ');
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // 11. Stream Options, Threads, Roles, Delivery & Health Circuit Breaker
+    // ---------------------------------------------------------------
+    describe('Stream Threads, Dedicated Roles, Delivery Modes & Health Check', () => {
+        it('saves and updates createThread, subscriberRoleId, and notificationDelivery', async () => {
+            const addRes = await service.addFeed({
+                guildId,
+                channelId,
+                feedUrl: 'https://twitch.tv/ninja',
+                name: 'Ninja Stream',
+                category: 'live',
+                createThread: true,
+                threadAutoArchiveDuration: 1440,
+                subscriberRoleId: 'role_ninja_sub',
+                notificationDelivery: 'both'
+            });
+
+            expect(addRes.ok).toBe(true);
+            expect(addRes.data.createThread).toBe(true);
+            expect(addRes.data.subscriberRoleId).toBe('role_ninja_sub');
+            expect(addRes.data.notificationDelivery).toBe('both');
+            expect(addRes.data.threadAutoArchiveDuration).toBe(1440);
+
+            // Fetch from repo
+            const fetched = await service.getFeed(addRes.data.id);
+            expect(fetched.createThread).toBe(true);
+            expect(fetched.subscriberRoleId).toBe('role_ninja_sub');
+            expect(fetched.notificationDelivery).toBe('both');
+
+            // Update
+            const updated = await service.updateFeed(addRes.data.id, {
+                createThread: false,
+                subscriberRoleId: 'role_ninja_updated',
+                notificationDelivery: 'role'
+            });
+
+            expect(updated.ok).toBe(true);
+            expect(updated.data.createThread).toBe(false);
+            expect(updated.data.subscriberRoleId).toBe('role_ninja_updated');
+            expect(updated.data.notificationDelivery).toBe('role');
+        });
+
+        it('supports both and role notificationDelivery subscription modes', async () => {
+            const addRes = await service.addFeed({
+                guildId,
+                channelId,
+                feedUrl: 'https://twitch.tv/shroud',
+                name: 'Shroud Stream',
+                category: 'live',
+                tags: ['fps', 'shroud']
+            });
+
+            const feedId = addRes.data.id;
+
+            const subRole = await subService.subscribe({
+                guildId,
+                userId: 'user_fan_1',
+                targetType: 'feed',
+                targetValue: feedId,
+                notifyMode: 'role'
+            });
+            expect(subRole.ok).toBe(true);
+            expect(subRole.data.notifyMode).toBe('role');
+
+            const subBoth = await subService.subscribe({
+                guildId,
+                userId: 'user_fan_2',
+                targetType: 'feed',
+                targetValue: feedId,
+                notifyMode: 'both'
+            });
+            expect(subBoth.ok).toBe(true);
+            expect(subBoth.data.notifyMode).toBe('both');
+
+            const item = {
+                title: 'Shroud is live playing Valorant',
+                content: 'Tune in!',
+                tags: ['fps']
+            };
+
+            const feed = await service.getFeed(feedId);
+            const matching = await subService.findMatchingSubscribers(guildId, feed, item);
+            expect(matching.mentionUserIds).toContain('user_fan_1');
+            expect(matching.mentionUserIds).toContain('user_fan_2');
+            expect(matching.dmUserIds).toContain('user_fan_2');
+        });
+
+        it('auto-disables feed after 10 consecutive check failures (circuit breaker)', async () => {
+            const addRes = await service.addFeed({
+                guildId,
+                channelId,
+                feedUrl: 'https://example.com/broken.xml',
+                name: 'Broken Feed'
+            });
+
+            const feedId = addRes.data.id;
+
+            // Fail 9 times: should remain active
+            for (let i = 1; i <= 9; i++) {
+                await repo.recordFeedCheckResult(feedId, { status: 'error', error: `Network error ${i}` });
+                const feed = await repo.getFeedById(feedId);
+                expect(feed.isActive).toBe(true);
+                expect(feed.failCount).toBe(i);
+            }
+
+            // 10th failure: should be auto-disabled
+            await repo.recordFeedCheckResult(feedId, { status: 'error', error: 'Fatal 10th error' });
+            const finalFeed = await repo.getFeedById(feedId);
+            expect(finalFeed.failCount).toBe(10);
+            expect(finalFeed.isActive).toBe(false);
+            expect(finalFeed.lastStatus).toBe('error');
+        });
+
+        it('handles /feed streamers and /feed pause commands', async () => {
+            const cmd = new AutofeedCommands(service, subService);
+
+            // executeStreamers when empty
+            let replyData = null;
+            const mockEmptyInteraction = {
+                guild: { id: guildId },
+                reply: async (data) => {
+                    replyData = data;
+                    return data;
+                }
+            };
+
+            await cmd.executeStreamers(mockEmptyInteraction);
+            expect(replyData.content).toContain('Aucun streamer ou direct configuré');
+
+            // Add a live stream feed
+            const addRes = await service.addFeed({
+                guildId,
+                channelId,
+                feedUrl: 'https://twitch.tv/kamet0',
+                name: 'Kameto Stream',
+                category: 'live'
+            });
+
+            await cmd.executeStreamers(mockEmptyInteraction);
+            expect(replyData.embeds).toBeDefined();
+            expect(replyData.embeds[0].data.title).toContain('Statut des Streamers');
+
+            // executePause toggles active state
+            let pauseReply = null;
+            const mockPauseInteraction = {
+                member: {
+                    permissions: {
+                        has: () => true
+                    }
+                },
+                options: {
+                    getString: (key) => key === 'id' ? addRes.data.id : null
+                },
+                reply: async (data) => {
+                    pauseReply = data;
+                    return data;
+                }
+            };
+
+            await cmd.executePause(mockPauseInteraction);
+            expect(pauseReply.content).toContain('mis en pause');
+
+            const pausedFeed = await repo.getFeedById(addRes.data.id);
+            expect(pausedFeed.isActive).toBe(false);
+
+            await cmd.executePause(mockPauseInteraction);
+            expect(pauseReply.content).toContain('réactivé');
+
+            const resumedFeed = await repo.getFeedById(addRes.data.id);
+            expect(resumedFeed.isActive).toBe(true);
         });
     });
 });

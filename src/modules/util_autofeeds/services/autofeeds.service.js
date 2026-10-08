@@ -46,6 +46,10 @@ class AutofeedsService {
         customMessage = null,
         color = '#FF4500',
         pingRoleId = null,
+        subscriberRoleId = null,
+        notificationDelivery = 'channel',
+        createThread = false,
+        threadAutoArchiveDuration = 1440,
         intervalMinutes = 15
     }) {
         if (!guildId || !channelId || !feedUrl) {
@@ -69,7 +73,7 @@ class AutofeedsService {
             parsedTags = tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
         }
 
-        // Résolution de l'intervalle selon le type de plateforme (Grill-me décision 1)
+        // Résolution de l'intervalle selon le type de plateforme
         let resolvedInterval = parseInt(intervalMinutes, 10);
         if (isNaN(resolvedInterval) || resolvedInterval <= 0) {
             if (provider?.isLive) {
@@ -104,6 +108,10 @@ class AutofeedsService {
             customMessage,
             color: resolvedColor,
             pingRoleId,
+            subscriberRoleId,
+            notificationDelivery,
+            createThread,
+            threadAutoArchiveDuration,
             intervalMinutes: resolvedInterval
         });
 
@@ -402,10 +410,73 @@ class AutofeedsService {
             });
         } catch (err) {
             logger.warn(`Erreur check feed ${feed.id}: ${err.message}`, 'AUTOFEEDS');
-            await this.repo.recordFeedCheckResult(feed.id, {
+            const checkRes = await this.repo.recordFeedCheckResult(feed.id, {
                 status: 'error',
                 error: err.message
             });
+            if (checkRes) {
+                if (checkRes.failCount === 3) {
+                    await this._sendAdminLogAlert(feed, client, {
+                        type: 'warning',
+                        failCount: 3,
+                        error: err.message
+                    });
+                } else if (checkRes.autoDisabled) {
+                    await this._sendAdminLogAlert(feed, client, {
+                        type: 'disabled',
+                        failCount: checkRes.failCount,
+                        error: err.message
+                    });
+                }
+            }
+        }
+    }
+
+    /**
+     * Envoie une alerte dans les logs Discord (3 échecs consécutifs ou désactivation auto à 10 échecs).
+     */
+    async _sendAdminLogAlert(feed, client, { type, failCount, error }) {
+        if (!client || !feed) return;
+        try {
+            const { getConfig } = require('../../../config/index.js');
+            const { getFeatureConfig } = require('../../../config/c12-loader.js');
+            const guildCfg = await getFeatureConfig(feed.guildId, 'autofeeds').catch(() => ({}));
+            const globalCfg = getConfig().autofeeds || {};
+            const logChannelId = guildCfg.log_channel_id || globalCfg.log_channel_id;
+
+            let logChannel = null;
+            if (logChannelId && client.channels) {
+                logChannel = client.channels.cache?.get(logChannelId)
+                    || (client.channels.fetch ? await client.channels.fetch(logChannelId).catch(() => null) : null);
+            }
+            if (!logChannel && client.guilds) {
+                const guild = client.guilds.cache?.get(feed.guildId)
+                    || (client.guilds.fetch ? await client.guilds.fetch(feed.guildId).catch(() => null) : null);
+                if (guild) {
+                    logChannel = guild.systemChannel || guild.publicUpdatesChannel || null;
+                }
+            }
+
+            if (logChannel && logChannel.send) {
+                const isDis = type === 'disabled';
+                const embed = new EmbedBuilder()
+                    .setColor(isDis ? 0xED4245 : 0xFEE75C)
+                    .setTitle(isDis ? `🛑 [Autofeeds] Flux désactivé (${feed.name || feed.id})` : `⚠️ [Autofeeds] Erreurs récurrentes (${feed.name || feed.id})`)
+                    .setDescription(
+                        isDis
+                            ? `Le flux **${feed.name || feed.feedUrl}** a rencontré **${failCount} échecs consécutifs** et a été désactivé automatiquement pour préserver les performances.`
+                            : `Le flux **${feed.name || feed.feedUrl}** a rencontré **${failCount} échecs consécutifs** lors des vérifications automatiques.`
+                    )
+                    .addFields(
+                        { name: 'URL du flux', value: `\`${feed.feedUrl}\``, inline: false },
+                        { name: 'Dernière erreur', value: `\`\`\`${String(error || 'Inconnue').slice(0, 500)}\`\`\``, inline: false }
+                    )
+                    .setTimestamp();
+
+                await logChannel.send({ embeds: [embed] }).catch(() => {});
+            }
+        } catch (alertErr) {
+            logger.warn(`[Autofeeds] Impossible d'envoyer l'alerte log: ${alertErr.message}`, 'AUTOFEEDS');
         }
     }
 
@@ -448,6 +519,9 @@ class AutofeedsService {
                 if (feed.pingRoleId) {
                     pings.push(`<@&${feed.pingRoleId}>`);
                 }
+                if (feed.subscriberRoleId && feed.subscriberRoleId !== feed.pingRoleId) {
+                    pings.push(`<@&${feed.subscriberRoleId}>`);
+                }
                 if (mentionUserIds.length > 0) {
                     pings.push(mentionUserIds.map(uid => `<@${uid}>`).join(' '));
                 }
@@ -482,13 +556,34 @@ class AutofeedsService {
                     return null;
                 });
 
+                let threadId = null;
                 if (sentMsg?.id) {
+                    if (feed.createThread && sentMsg.startThread) {
+                        try {
+                            const threadTitle = `🔴 Live • ${streamerName.slice(0, 30)} - ${(streamItem.title || 'Discussion').slice(0, 50)}`;
+                            const thread = await sentMsg.startThread({
+                                name: threadTitle,
+                                autoArchiveDuration: feed.threadAutoArchiveDuration || 1440,
+                                reason: `Fil de discussion pour le direct de ${streamerName}`
+                            }).catch(() => null);
+                            if (thread) {
+                                threadId = thread.id;
+                                if (thread.send) {
+                                    await thread.send(`👋 Bienvenue dans le fil de discussion pour le live de **${streamerName}** !`).catch(() => {});
+                                }
+                            }
+                        } catch (threadErr) {
+                            logger.warn(`[Autofeeds] Impossible de créer le thread live: ${threadErr.message}`, 'AUTOFEEDS');
+                        }
+                    }
+
                     await this.repo.saveLiveSession({
                         feedId: feed.id,
                         streamId: streamItem.id,
                         streamerName,
                         channelId: feed.channelId,
                         messageId: sentMsg.id,
+                        threadId,
                         title: streamItem.content || streamItem.title,
                         game: gameName,
                         url: streamItem.link,
@@ -571,6 +666,18 @@ class AutofeedsService {
                         }).catch(err => {
                             logger.warn(`[Autofeeds] Erreur edit message offline: ${err.message}`, 'AUTOFEEDS');
                         });
+                    }
+                }
+
+                // Clôture du thread live si existant
+                if (activeSession.threadId) {
+                    const thread = client.channels.cache?.get(activeSession.threadId)
+                        || (client.channels.fetch ? await client.channels.fetch(activeSession.threadId).catch(() => null) : null);
+                    if (thread && thread.send) {
+                        await thread.send(`⚫ Le direct de **${activeSession.streamerName}** est terminé. Merci à tous d'avoir suivi le live !`).catch(() => {});
+                        if (thread.setArchived) {
+                            await thread.setArchived(true).catch(() => {});
+                        }
                     }
                 }
             } catch (err) {

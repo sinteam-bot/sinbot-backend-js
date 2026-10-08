@@ -94,6 +94,10 @@ class AutofeedsController {
                 customMessage: customMessage || custom_message,
                 color: color || embedColor || embed_color,
                 pingRoleId: pingRoleId || ping_role_id,
+                subscriberRoleId: req.body?.subscriber_role_id || req.body?.subscriberRoleId,
+                notificationDelivery: req.body?.notification_delivery || req.body?.notificationDelivery || 'channel',
+                createThread: req.body?.create_thread !== undefined ? Boolean(req.body.create_thread) : Boolean(req.body?.createThread),
+                threadAutoArchiveDuration: req.body?.thread_auto_archive_duration || req.body?.threadAutoArchiveDuration || 1440,
                 intervalMinutes: intervalMinutes || interval_minutes || checkIntervalMinutes || check_interval_minutes,
                 enabled: enabled !== undefined ? Boolean(enabled) : (isActive !== undefined ? Boolean(isActive) : (is_active !== undefined ? Boolean(is_active) : true))
             });
@@ -267,6 +271,10 @@ class AutofeedsController {
                 customMessage: patch.custom_message || patch.customMessage,
                 color: patch.color || patch.embedColor || patch.embed_color,
                 pingRoleId: patch.ping_role_id || patch.pingRoleId,
+                subscriberRoleId: patch.subscriber_role_id !== undefined ? patch.subscriber_role_id : patch.subscriberRoleId,
+                notificationDelivery: patch.notification_delivery !== undefined ? patch.notification_delivery : patch.notificationDelivery,
+                createThread: patch.create_thread !== undefined ? Boolean(patch.create_thread) : (patch.createThread !== undefined ? Boolean(patch.createThread) : undefined),
+                threadAutoArchiveDuration: patch.thread_auto_archive_duration !== undefined ? Number(patch.thread_auto_archive_duration) : patch.threadAutoArchiveDuration,
                 intervalMinutes: patch.interval_minutes || patch.intervalMinutes || patch.check_interval_minutes || patch.checkIntervalMinutes,
                 enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : (patch.isActive !== undefined ? Boolean(patch.isActive) : (patch.is_active !== undefined ? Boolean(patch.is_active) : undefined))
             });

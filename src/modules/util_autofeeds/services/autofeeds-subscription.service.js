@@ -27,7 +27,7 @@ class AutofeedsSubscriptionService {
             return { ok: false, error: `Type de souscription invalide (${validTypes.join(', ')} attendus).` };
         }
 
-        const validModes = ['mention', 'dm'];
+        const validModes = ['mention', 'dm', 'both', 'role'];
         if (!validModes.includes(notifyMode)) {
             notifyMode = 'mention';
         }
@@ -173,6 +173,9 @@ class AutofeedsSubscriptionService {
             if (matched) {
                 if (sub.notifyMode === 'dm') {
                     dmUsers.add(sub.userId);
+                } else if (sub.notifyMode === 'both') {
+                    dmUsers.add(sub.userId);
+                    mentionUsers.add(sub.userId);
                 } else {
                     mentionUsers.add(sub.userId);
                 }

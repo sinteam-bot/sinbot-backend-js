@@ -19,6 +19,10 @@ const autofeeds = pgTable('autofeeds', {
     customMessage: text('custom_message'),
     color: text('color').default('#FF4500').notNull(),
     pingRoleId: text('ping_role_id'),
+    subscriberRoleId: text('subscriber_role_id'),
+    notificationDelivery: text('notification_delivery').default('channel').notNull(), // 'channel' | 'dm' | 'both'
+    createThread: boolean('create_thread').default(false).notNull(),
+    threadAutoArchiveDuration: integer('thread_auto_archive_duration').default(1440).notNull(),
     lastItemId: text('last_item_id'),
     lastItemPublishedAt: bigint('last_item_published_at', { mode: 'number' }).default(0).notNull(),
     intervalMinutes: integer('interval_minutes').default(15).notNull(),
@@ -40,7 +44,7 @@ const autofeedSubscriptions = pgTable('autofeed_subscriptions', {
     userId: text('user_id').notNull(),
     targetType: text('target_type').notNull(), // 'tag', 'category', 'feed', 'keyword', 'account', 'author'
     targetValue: text('target_value').notNull(), // 'steam', 'gaming', 'id_du_feed', 'PlayStation', 'zerator'
-    notifyMode: text('notify_mode').default('mention').notNull(), // 'mention', 'dm'
+    notifyMode: text('notify_mode').default('mention').notNull(), // 'mention', 'dm', 'both', 'role'
     filters: text('filters').default('{}').notNull(), // JSON: { includeKeywords: [], excludeKeywords: [], regexFilter: '' }
     createdAt: bigint('created_at', { mode: 'number' }).notNull()
 }, (table) => [
@@ -67,6 +71,7 @@ const autofeedLiveSessions = pgTable('autofeed_live_sessions', {
     streamerName: text('streamer_name').notNull(),
     channelId: text('channel_id').notNull(),
     messageId: text('message_id').notNull(),
+    threadId: text('thread_id'),
     title: text('title'),
     game: text('game'),
     url: text('url'),
